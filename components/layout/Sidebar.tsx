@@ -38,7 +38,7 @@ export function Sidebar() {
 
   return (
     <aside className="bg-sidebar border-r border-border flex flex-col sticky top-0 self-start h-screen overflow-auto p-3">
-      <div className="flex items-center gap-2.5 px-1.5 pt-1.5 pb-4">
+      <div className="shrink-0 flex items-center gap-2.5 px-1.5 pt-1.5 pb-4">
         <div className="w-[30px] h-[30px] rounded-[7px] bg-primary text-primary-foreground grid place-items-center font-bold text-[13px]">
           A
         </div>
@@ -50,7 +50,7 @@ export function Sidebar() {
 
       <Link
         href="/"
-        className={`flex items-center gap-2.5 w-full text-left border-0 border-b border-border bg-transparent rounded-none px-2 pt-2 pb-3 mb-2.5 cursor-pointer font-semibold text-[13.5px] ${
+        className={`shrink-0 flex items-center gap-2.5 w-full text-left border-0 border-b border-border bg-transparent rounded-none px-2 pt-2 pb-3 mb-2.5 cursor-pointer font-semibold text-[13.5px] ${
           isHome ? "text-foreground" : "text-foreground hover:opacity-70"
         }`}
       >
@@ -58,11 +58,11 @@ export function Sidebar() {
         All Projects
       </Link>
 
-      <div className="text-[13px] font-bold px-2 pt-2 pb-1.5 truncate" title={project.name}>
+      <div className="shrink-0 text-[13px] font-bold px-2 pt-2 pb-1.5 truncate" title={project.name}>
         {project.name}
       </div>
 
-      <nav className="flex flex-col gap-px">
+      <nav className="shrink-0 flex flex-col gap-px">
         {NAV_ITEMS.filter((it) => allowed.includes(it.key)).map((it) => {
           const on = activeKey === it.key;
           const badge =
@@ -125,7 +125,7 @@ export function Sidebar() {
       </nav>
 
       {role === "admin" && (
-        <>
+        <div className="shrink-0">
           <div className="text-[11px] font-semibold text-muted-foreground px-2 pt-3.5 pb-1.5 uppercase tracking-wider">
             Studio
           </div>
@@ -138,10 +138,10 @@ export function Sidebar() {
             <Icon name="users" className={`w-4 h-4 flex-none ${pathname === "/users" ? "text-foreground" : "text-muted-foreground"}`} />
             Users
           </Link>
-        </>
+        </div>
       )}
 
-      <div className="mt-auto flex items-center gap-2.5 pt-3 pb-1 px-2 border-t border-border">
+      <div className="shrink-0 mt-auto flex items-center gap-2.5 pt-3 pb-1 px-2 border-t border-border">
         <div className="w-[30px] h-[30px] rounded-full bg-muted grid place-items-center text-[11.5px] font-semibold">
           {initials(user.n)}
         </div>
