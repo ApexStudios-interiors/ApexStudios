@@ -1,26 +1,127 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --background: 0 0% 100%;
+  --foreground: 0 0% 9%;
+  --card: 0 0% 100%;
+  --sidebar: 0 0% 99%;
+  --muted: 0 0% 96%;
+  --muted-foreground: 0 0% 45%;
+  --border: 0 0% 90%;
+  --border-strong: 0 0% 78%;
+  --input: 0 0% 87%;
+  --ring: 0 0% 9%;
+  --primary: 0 0% 9%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 95%;
+  --secondary-foreground: 0 0% 9%;
+  --accent: 0 0% 95%;
+  --radius: 10px;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --background: 0 0% 7%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 9.5%;
+    --sidebar: 0 0% 6%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 63%;
+    --border: 0 0% 18%;
+    --border-strong: 0 0% 28%;
+    --input: 0 0% 22%;
+    --ring: 0 0% 90%;
+    --primary: 0 0% 96%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 16%;
+    --secondary-foreground: 0 0% 96%;
+    --accent: 0 0% 16%;
   }
 }
 
+:root[data-theme="dark"] {
+  --background: 0 0% 7%;
+  --foreground: 0 0% 96%;
+  --card: 0 0% 9.5%;
+  --sidebar: 0 0% 6%;
+  --muted: 0 0% 15%;
+  --muted-foreground: 0 0% 63%;
+  --border: 0 0% 18%;
+  --border-strong: 0 0% 28%;
+  --input: 0 0% 22%;
+  --ring: 0 0% 90%;
+  --primary: 0 0% 96%;
+  --primary-foreground: 0 0% 9%;
+  --secondary: 0 0% 16%;
+  --secondary-foreground: 0 0% 96%;
+  --accent: 0 0% 16%;
+}
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-sidebar: hsl(var(--sidebar));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-border: hsl(var(--border));
+  --color-border-strong: hsl(var(--border-strong));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-accent: hsl(var(--accent));
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius-md: var(--radius);
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+}
+
+.flag {
+  font-size: 9.5px;
+  font-weight: 700;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: 2px;
+  white-space: nowrap;
+}
+
+.progress-track {
+  height: 7px;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+  overflow: hidden;
+}
+.progress-track > i {
+  display: block;
+  height: 100%;
+  background: hsl(var(--primary));
+  border-radius: 999px;
+}
+.progress-track > i.over {
+  background: repeating-linear-gradient(
+    135deg,
+    hsl(var(--foreground)) 0 5px,
+    hsl(var(--muted-foreground)) 5px 10px
+  );
 }
