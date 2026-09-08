@@ -216,7 +216,7 @@ export function Sidebar() {
         )}
         <button
           onClick={() => setRoleMenuOpen((v) => !v)}
-          className="flex items-center gap-2.5 w-full text-left pt-3 pb-2 px-2 border-t border-border hover:bg-accent rounded-md outline-none focus-visible:bg-accent"
+          className="flex items-center gap-2.5 w-full text-left pt-3 pb-2 px-2 border-t border-border outline-none"
         >
           <div className="w-[30px] h-[30px] rounded-full bg-muted grid place-items-center text-[11.5px] font-semibold flex-none">
             {initials(user.n)}
