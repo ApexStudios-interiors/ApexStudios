@@ -5,6 +5,7 @@ import { useApp } from "@/context/AppContext";
 import { sectionFromPath } from "@/lib/nav";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { NotificationsMenu } from "@/components/layout/NotificationsMenu";
+import { SearchBar } from "@/components/layout/SearchBar";
 
 const SECTION_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
@@ -52,12 +53,13 @@ export function Header() {
   }
 
   return (
-    <div className="h-14 flex items-center gap-3 px-7 border-b border-border sticky top-0 bg-background z-[5]">
+    <div className="h-16 flex items-center gap-3 px-7 border-b border-border sticky top-0 bg-background z-[5]">
       <div className="flex items-center gap-2 text-[13.5px] text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
         {crumb}
       </div>
       <div className="flex-1" />
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
+        <SearchBar />
         <NotificationsMenu />
         <ThemeToggle />
       </div>
