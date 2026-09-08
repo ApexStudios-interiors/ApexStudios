@@ -13,6 +13,7 @@ export const ICONS = {
   archive: "M21 8v13H3V8M1 3h22v5H1zM10 12h4",
   sun: "M12 7a5 5 0 100 10 5 5 0 000-10zM12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41",
   moon: "M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z",
+  bell: "M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0",
 } as const;
 
 export type IconName = keyof typeof ICONS;

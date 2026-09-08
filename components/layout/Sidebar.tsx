@@ -98,6 +98,19 @@ export function Sidebar() {
         )}
       </div>
 
+      {role !== "client" && (
+        <Link
+          href="/inventory"
+          className={`shrink-0 flex items-center gap-2.5 w-full text-left border-0 rounded-md px-2 py-[7px] mb-2.5 cursor-pointer text-[13.5px] ${
+            pathname === "/inventory" ? "bg-accent font-semibold text-foreground" : "font-medium text-foreground hover:bg-accent"
+          }`}
+        >
+          <Icon name="archive" className={`w-4 h-4 flex-none ${pathname === "/inventory" ? "text-foreground" : "text-muted-foreground"}`} />
+          Inventory
+          <span className="ml-auto text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">All</span>
+        </Link>
+      )}
+
       {project && (
         <>
           <div className="shrink-0 text-[13px] font-bold px-2 pt-2 pb-1.5 truncate" title={project.name}>

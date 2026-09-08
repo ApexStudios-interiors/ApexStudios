@@ -4,6 +4,7 @@ import { usePathname, useParams } from "next/navigation";
 import { useApp } from "@/context/AppContext";
 import { sectionFromPath } from "@/lib/nav";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { NotificationsMenu } from "@/components/layout/NotificationsMenu";
 
 const SECTION_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
@@ -27,6 +28,8 @@ export function Header() {
     crumb = <b className="text-foreground font-semibold">All Projects</b>;
   } else if (pathname === "/users") {
     crumb = <b className="text-foreground font-semibold">Users</b>;
+  } else if (pathname === "/inventory") {
+    crumb = <b className="text-foreground font-semibold">Inventory</b>;
   } else if (params?.projectId) {
     const project = data.projects.find((p) => p.id === params.projectId);
     const section = sectionFromPath(pathname, params.projectId);
@@ -54,7 +57,10 @@ export function Header() {
         {crumb}
       </div>
       <div className="flex-1" />
-      <ThemeToggle />
+      <div className="flex items-center gap-2">
+        <NotificationsMenu />
+        <ThemeToggle />
+      </div>
     </div>
   );
 }
