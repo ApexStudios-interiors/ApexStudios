@@ -10,12 +10,9 @@ export interface Stat {
 
 export function StatBar({ stats, className = "" }: { stats: Stat[]; className?: string }) {
   return (
-    <Card className={`flex flex-wrap ${className}`}>
+    <div className={`grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-4 mb-5 ${className}`}>
       {stats.map((s, i) => (
-        <div
-          key={i}
-          className="flex-1 min-w-[170px] px-[22px] py-[18px] border-r border-b border-border last:border-r-0"
-        >
+        <Card key={i} className="px-[22px] py-[18px]">
           <div className="text-[11.5px] font-semibold text-muted-foreground uppercase tracking-wide">
             {s.label}
           </div>
@@ -23,8 +20,8 @@ export function StatBar({ stats, className = "" }: { stats: Stat[]; className?: 
             {s.value}
           </div>
           {s.sub != null && <div className="text-xs text-muted-foreground mt-1">{s.sub}</div>}
-        </div>
+        </Card>
       ))}
-    </Card>
+    </div>
   );
 }

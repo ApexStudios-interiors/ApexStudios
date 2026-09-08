@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
-import { Fragment, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { useApp } from "@/context/AppContext";
 import { Icon, IconName } from "@/components/ui/Icon";
 import { initials } from "@/lib/logic";
 import { ALLOWED_SECTIONS, Section, sectionFromPath } from "@/lib/nav";
+import { Role } from "@/lib/types";
+import { useClickOutside } from "@/hooks/useClickOutside";
 
 const NAV_ITEMS: { key: Section; label: string; icon: IconName; href: (id: string) => string }[] = [
   { key: "dashboard", label: "Dashboard", icon: "dash", href: (id) => `/projects/${id}` },
@@ -18,11 +20,24 @@ const NAV_ITEMS: { key: Section; label: string; icon: IconName; href: (id: strin
   { key: "billing", label: "Billing", icon: "bill", href: (id) => `/projects/${id}/billing` },
 ];
 
+const ROLE_OPTIONS: { value: Role; label: string }[] = [
+  { value: "admin", label: "Admin" },
+  { value: "site", label: "Site Supervisor" },
+  { value: "client", label: "Client" },
+];
+
 export function Sidebar() {
-  const { data, role } = useApp();
+  const { data, role, setRole } = useApp();
   const pathname = usePathname();
   const params = useParams<{ projectId?: string; moduleId?: string }>();
   const [modsOpen, setModsOpen] = useState(true);
+  const [projectsMenuOpen, setProjectsMenuOpen] = useState(false);
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const projectsMenuRef = useRef<HTMLDivElement>(null);
+  const roleMenuRef = useRef<HTMLDivElement>(null);
+
+  useClickOutside(projectsMenuRef, () => setProjectsMenuOpen(false), projectsMenuOpen);
+  useClickOutside(roleMenuRef, () => setRoleMenuOpen(false), roleMenuOpen);
 
   const isHome = pathname === "/";
   const project = params?.projectId ? data.projects.find((p) => p.id === params.projectId) ?? null : null;
@@ -42,15 +57,45 @@ export function Sidebar() {
         </div>
       </div>
 
-      <Link
-        href="/"
-        className={`shrink-0 flex items-center gap-2.5 w-full text-left border-0 border-b border-border bg-transparent rounded-none px-2 pt-2 pb-3 mb-2.5 cursor-pointer font-semibold text-[13.5px] ${
-          isHome ? "text-foreground" : "text-foreground hover:opacity-70"
-        }`}
-      >
-        <Icon name="folder" className="w-4 h-4" />
-        All Projects
-      </Link>
+      <div className="shrink-0 relative mb-2.5" ref={projectsMenuRef}>
+        <button
+          onClick={() => setProjectsMenuOpen((v) => !v)}
+          className={`flex items-center gap-2.5 w-full text-left border-0 border-b rounded-none px-2 pt-2 pb-3 cursor-pointer font-semibold text-[13.5px] text-foreground hover:opacity-70 ${
+            isHome ? "border-foreground" : "border-border"
+          }`}
+        >
+          <Icon name="folder" className="w-4 h-4" />
+          All Projects
+          <Icon
+            name="chevronRight"
+            className={`w-3.5 h-3.5 ml-auto text-muted-foreground transition-transform ${projectsMenuOpen ? "rotate-90" : ""}`}
+          />
+        </button>
+        {projectsMenuOpen && (
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 bg-card border border-border rounded-lg shadow-lg py-1 max-h-80 overflow-auto">
+            <Link
+              href="/"
+              onClick={() => setProjectsMenuOpen(false)}
+              className="flex items-center gap-2 px-3 py-2 text-[13px] font-semibold text-foreground hover:bg-accent"
+            >
+              <Icon name="folder" className="w-3.5 h-3.5" />
+              View all projects
+            </Link>
+            <div className="border-t border-border my-1" />
+            {data.projects.map((p) => (
+              <Link
+                key={p.id}
+                href={`/projects/${p.id}`}
+                onClick={() => setProjectsMenuOpen(false)}
+                className={`flex flex-col px-3 py-2 text-[13px] hover:bg-accent ${project?.id === p.id ? "bg-accent" : ""}`}
+              >
+                <span className="font-medium text-foreground truncate">{p.name}</span>
+                <span className="text-xs text-muted-foreground truncate">{p.client}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
 
       {project && (
         <>
@@ -147,14 +192,40 @@ export function Sidebar() {
         </div>
       )}
 
-      <div className="shrink-0 mt-auto flex items-center gap-2.5 pt-3 pb-1 px-2 border-t border-border">
-        <div className="w-[30px] h-[30px] rounded-full bg-muted grid place-items-center text-[11.5px] font-semibold">
-          {initials(user.n)}
-        </div>
-        <div>
-          <div className="font-semibold text-[13px] leading-tight">{user.n}</div>
-          <div className="text-[11.5px] text-muted-foreground">{user.t}</div>
-        </div>
+      <div className="shrink-0 relative mt-auto" ref={roleMenuRef}>
+        {roleMenuOpen && (
+          <div className="absolute left-2 right-2 bottom-full mb-2 z-20 bg-card border border-border rounded-lg shadow-lg py-1">
+            <div className="px-3 pt-1.5 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Switch role
+            </div>
+            {ROLE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => {
+                  setRole(opt.value);
+                  setRoleMenuOpen(false);
+                }}
+                className="flex items-center justify-between gap-2 w-full text-left px-3 py-2 text-[13px] text-foreground hover:bg-accent"
+              >
+                <span className={role === opt.value ? "font-semibold" : ""}>{opt.label}</span>
+                {role === opt.value && <Icon name="check" className="w-3.5 h-3.5" />}
+              </button>
+            ))}
+          </div>
+        )}
+        <button
+          onClick={() => setRoleMenuOpen((v) => !v)}
+          className="flex items-center gap-2.5 w-full text-left pt-3 pb-2 px-2 border-t border-border hover:bg-accent rounded-md"
+        >
+          <div className="w-[30px] h-[30px] rounded-full bg-muted grid place-items-center text-[11.5px] font-semibold flex-none">
+            {initials(user.n)}
+          </div>
+          <div className="min-w-0">
+            <div className="font-semibold text-[13px] leading-tight truncate">{user.n}</div>
+            <div className="text-[11.5px] text-muted-foreground">{user.t}</div>
+          </div>
+          <Icon name="chevronRight" className="w-3.5 h-3.5 ml-auto text-muted-foreground -rotate-90 flex-none" />
+        </button>
       </div>
     </aside>
   );

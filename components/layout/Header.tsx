@@ -2,7 +2,6 @@
 
 import { usePathname, useParams } from "next/navigation";
 import { useApp } from "@/context/AppContext";
-import { Role } from "@/lib/types";
 import { sectionFromPath } from "@/lib/nav";
 
 const SECTION_LABELS: Record<string, string> = {
@@ -16,7 +15,7 @@ const SECTION_LABELS: Record<string, string> = {
 };
 
 export function Header() {
-  const { data, role, setRole } = useApp();
+  const { data, role } = useApp();
   const pathname = usePathname();
   const params = useParams<{ projectId?: string; moduleId?: string }>();
 
@@ -52,16 +51,6 @@ export function Header() {
       <div className="flex items-center gap-2 text-[13.5px] text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
         {crumb}
       </div>
-      <div className="flex-1" />
-      <select
-        value={role}
-        onChange={(e) => setRole(e.target.value as Role)}
-        className="h-8 border border-input rounded-lg bg-background px-2 text-[13px]"
-      >
-        <option value="admin">Admin</option>
-        <option value="site">Site Supervisor</option>
-        <option value="client">Client</option>
-      </select>
     </div>
   );
 }
