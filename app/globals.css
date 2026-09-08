@@ -17,6 +17,13 @@
   --secondary-foreground: 0 0% 9%;
   --accent: 0 0% 95%;
   --radius: 10px;
+
+  --status-success: 142 71% 35%;
+  --status-success-bg: 142 76% 94%;
+  --status-warning: 32 95% 38%;
+  --status-warning-bg: 48 96% 92%;
+  --status-destructive: 0 84% 60%;
+  --status-destructive-foreground: 0 0% 100%;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -36,6 +43,13 @@
     --secondary: 0 0% 16%;
     --secondary-foreground: 0 0% 96%;
     --accent: 0 0% 16%;
+
+    --status-success: 142 69% 58%;
+    --status-success-bg: 142 40% 14%;
+    --status-warning: 38 92% 60%;
+    --status-warning-bg: 38 40% 14%;
+    --status-destructive: 0 72% 51%;
+    --status-destructive-foreground: 0 0% 100%;
   }
 }
 
@@ -55,6 +69,13 @@
   --secondary: 0 0% 16%;
   --secondary-foreground: 0 0% 96%;
   --accent: 0 0% 16%;
+
+  --status-success: 142 69% 58%;
+  --status-success-bg: 142 40% 14%;
+  --status-warning: 38 92% 60%;
+  --status-warning-bg: 38 40% 14%;
+  --status-destructive: 0 72% 51%;
+  --status-destructive-foreground: 0 0% 100%;
 }
 
 @theme inline {
@@ -73,6 +94,12 @@
   --color-secondary: hsl(var(--secondary));
   --color-secondary-foreground: hsl(var(--secondary-foreground));
   --color-accent: hsl(var(--accent));
+  --color-status-success: hsl(var(--status-success));
+  --color-status-success-bg: hsl(var(--status-success-bg));
+  --color-status-warning: hsl(var(--status-warning));
+  --color-status-warning-bg: hsl(var(--status-warning-bg));
+  --color-status-destructive: hsl(var(--status-destructive));
+  --color-status-destructive-foreground: hsl(var(--status-destructive-foreground));
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --radius-md: var(--radius);
 }

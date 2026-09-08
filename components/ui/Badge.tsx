@@ -1,11 +1,14 @@
 import { ReactNode } from "react";
 
-type Variant = "default" | "secondary" | "outline";
+type Variant = "default" | "secondary" | "outline" | "success" | "warning" | "destructive";
 
 const variants: Record<Variant, string> = {
   default: "bg-primary text-primary-foreground border-transparent",
   secondary: "bg-secondary text-secondary-foreground border-transparent",
   outline: "bg-transparent text-foreground border-border-strong",
+  success: "bg-status-success-bg text-status-success border-transparent",
+  warning: "bg-status-warning-bg text-status-warning border-transparent",
+  destructive: "bg-status-destructive text-status-destructive-foreground border-transparent",
 };
 
 export function Badge({

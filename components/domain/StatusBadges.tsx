@@ -33,11 +33,11 @@ export function BillStatusBadge({ status }: { status: BillStatus }) {
     case "Draft":
       return <Badge variant="secondary">Draft</Badge>;
     case "Submitted":
-      return <Badge variant="outline">● Submitted</Badge>;
+      return <Badge variant="warning">Submitted</Badge>;
     case "Certified":
-      return <Badge variant="outline">✓ Certified</Badge>;
+      return <Badge variant="default">Certified</Badge>;
     case "Paid":
-      return <Badge variant="default">✓ Paid</Badge>;
+      return <Badge variant="success">Paid</Badge>;
   }
 }
 
@@ -46,17 +46,17 @@ export function PhaseStatusBadge({ status }: { status: PhaseStatus }) {
     case "Pending":
       return <Badge variant="secondary">In progress</Badge>;
     case "Billable":
-      return <Badge variant="outline">● Billable</Badge>;
+      return <Badge variant="warning">Billable</Badge>;
     case "Billed":
-      return <Badge variant="outline">→ Billed</Badge>;
+      return <Badge variant="default">Billed</Badge>;
     case "Paid":
-      return <Badge variant="default">✓ Paid</Badge>;
+      return <Badge variant="success">Paid</Badge>;
   }
 }
 
 export function ModuleStatusBadge({ data, projId, m }: { data: AppData; projId: string; m: ModuleT }) {
   const c = committed(data, projId, m);
-  if (m.internal && c > m.internal) return <Badge variant="outline">▲ Over budget</Badge>;
-  if (m.status === "In progress") return <Badge variant="default">● In progress</Badge>;
+  if (m.internal && c > m.internal) return <Badge variant="destructive">Over budget</Badge>;
+  if (m.status === "In progress") return <Badge variant="default">In progress</Badge>;
   return <Badge variant="secondary">{m.status}</Badge>;
 }
