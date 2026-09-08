@@ -1,4 +1,4 @@
-import { AppData, Approval, Bill, BillLine, BillableItem, ModuleT, Package, Project, Role, StockRequest } from "./types";
+import { AppData, Approval, Bill, BillLine, BillableItem, InventoryItem, ModuleT, Package, Project, Role, StockRequest } from "./types";
 import { CR, GST, L, MAS, RET } from "./data";
 
 export const isMoney = (role: Role) => role === "admin";
@@ -171,4 +171,20 @@ export function initials(name: string): string {
     .map((x) => x[0])
     .slice(0, 2)
     .join("");
+}
+
+export type InventoryStatus = "OK" | "Low" | "Critical";
+
+export function inventoryStatus(item: InventoryItem): InventoryStatus {
+  if (item.qty <= 0) return "Critical";
+  if (item.qty < item.reorderLevel) return "Low";
+  return "OK";
+}
+
+export function inventoryValue(item: InventoryItem): number {
+  return item.qty * item.unitCost;
+}
+
+export function inventoryFor(data: AppData, projId: string): InventoryItem[] {
+  return data.inventory.filter((i) => i.proj === projId);
 }

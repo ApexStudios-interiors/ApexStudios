@@ -10,6 +10,9 @@ export const ICONS = {
   users: "M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75",
   plus: "M12 5v14M5 12h14",
   chevronRight: "m9 18 6-6-6-6",
+  archive: "M21 8v13H3V8M1 3h22v5H1zM10 12h4",
+  sun: "M12 7a5 5 0 100 10 5 5 0 000-10zM12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41",
+  moon: "M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z",
 } as const;
 
 export type IconName = keyof typeof ICONS;

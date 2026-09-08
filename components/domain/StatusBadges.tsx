@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/Badge";
 import { AppData, ApprovalStatus, BillStatus, ModuleT, RequestStatus } from "@/lib/types";
-import { PhaseStatus, committed } from "@/lib/logic";
+import { InventoryStatus, PhaseStatus, committed } from "@/lib/logic";
 
 export function RequestStatusBadge({ status }: { status: RequestStatus }) {
   switch (status) {
@@ -59,4 +59,15 @@ export function ModuleStatusBadge({ data, projId, m }: { data: AppData; projId: 
   if (m.internal && c > m.internal) return <Badge variant="destructive">Over budget</Badge>;
   if (m.status === "In progress") return <Badge variant="default">In progress</Badge>;
   return <Badge variant="secondary">{m.status}</Badge>;
+}
+
+export function InventoryStatusBadge({ status }: { status: InventoryStatus }) {
+  switch (status) {
+    case "OK":
+      return <Badge variant="success">OK</Badge>;
+    case "Low":
+      return <Badge variant="warning">Low</Badge>;
+    case "Critical":
+      return <Badge variant="destructive">Critical</Badge>;
+  }
 }

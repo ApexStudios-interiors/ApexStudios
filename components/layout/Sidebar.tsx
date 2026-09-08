@@ -15,6 +15,7 @@ const NAV_ITEMS: { key: Section; label: string; icon: IconName; href: (id: strin
   { key: "packages", label: "Packages", icon: "mod", href: (id) => `/projects/${id}/packages` },
   { key: "schedule", label: "Schedule", icon: "cal", href: (id) => `/projects/${id}/schedule` },
   { key: "updates", label: "Daily Updates", icon: "note", href: (id) => `/projects/${id}/updates` },
+  { key: "inventory", label: "Inventory", icon: "archive", href: (id) => `/projects/${id}/inventory` },
   { key: "stock", label: "Stock Requests", icon: "box", href: (id) => `/projects/${id}/stock` },
   { key: "approvals", label: "Approvals", icon: "check", href: (id) => `/projects/${id}/approvals` },
   { key: "billing", label: "Billing", icon: "bill", href: (id) => `/projects/${id}/billing` },
@@ -215,7 +216,7 @@ export function Sidebar() {
         )}
         <button
           onClick={() => setRoleMenuOpen((v) => !v)}
-          className="flex items-center gap-2.5 w-full text-left pt-3 pb-2 px-2 border-t border-border hover:bg-accent rounded-md"
+          className="flex items-center gap-2.5 w-full text-left pt-3 pb-2 px-2 border-t border-border hover:bg-accent rounded-md outline-none focus-visible:bg-accent"
         >
           <div className="w-[30px] h-[30px] rounded-full bg-muted grid place-items-center text-[11.5px] font-semibold flex-none">
             {initials(user.n)}

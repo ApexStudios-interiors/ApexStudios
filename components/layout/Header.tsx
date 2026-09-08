@@ -3,12 +3,14 @@
 import { usePathname, useParams } from "next/navigation";
 import { useApp } from "@/context/AppContext";
 import { sectionFromPath } from "@/lib/nav";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 const SECTION_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
   packages: "Packages",
   schedule: "Schedule",
   updates: "Daily Updates",
+  inventory: "Inventory",
   stock: "Stock Requests",
   approvals: "Approvals",
   billing: "Billing",
@@ -51,6 +53,8 @@ export function Header() {
       <div className="flex items-center gap-2 text-[13.5px] text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
         {crumb}
       </div>
+      <div className="flex-1" />
+      <ThemeToggle />
     </div>
   );
 }

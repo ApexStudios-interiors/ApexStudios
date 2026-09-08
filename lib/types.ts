@@ -126,6 +126,18 @@ export interface TeamMember {
   e: string;
 }
 
+export interface InventoryItem {
+  id: string;
+  proj: string;
+  name: string;
+  category: string;
+  qty: number;
+  unit: string;
+  reorderLevel: number;
+  unitCost: number;
+  location: string;
+}
+
 export interface AppData {
   projects: Project[];
   requests: StockRequest[];
@@ -133,6 +145,7 @@ export interface AppData {
   updates: Update[];
   approvals: Approval[];
   team: TeamMember[];
+  inventory: InventoryItem[];
 }
 
 export interface BillableItem {

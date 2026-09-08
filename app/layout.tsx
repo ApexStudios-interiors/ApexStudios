@@ -18,9 +18,19 @@ export const metadata: Metadata = {
   description: "Apex Projects dashboard",
 };
 
+const THEME_INIT_SCRIPT = `
+  try {
+    var t = localStorage.getItem('theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="font-sans text-sm leading-relaxed">
         <AppProvider>
           <div className="grid grid-cols-[250px_1fr] min-h-screen">

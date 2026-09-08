@@ -233,6 +233,16 @@ export const seedData: AppData = {
     { n: "Meena D", r: "admin", t: "Admin", e: "meena@beapex.in" },
     { n: "T V Rao", r: "client", t: "Client", e: "T V Rao Housing Pvt Ltd" },
   ],
+  inventory: [
+    { id: "INV-01", proj: "bhel", name: "Ultratech 53 grade cement, 50 kg", category: "Cement & Aggregates", qty: 40, unit: "bag", reorderLevel: 50, unitCost: 395, location: "Site store" },
+    { id: "INV-02", proj: "bhel", name: "Dr. Fixit Pidifin 2K, 20 kg kit", category: "Waterproofing", qty: 5, unit: "kit", reorderLevel: 10, unitCost: 4050, location: "Site store" },
+    { id: "INV-03", proj: "bhel", name: "Pool-grade vitrified tile 300x300", category: "Tiling", qty: 0, unit: "sft", reorderLevel: 500, unitCost: 165, location: "Site store" },
+    { id: "INV-04", proj: "bhel", name: "uPVC pipe 63 mm SCH 80, 3 m", category: "Plumbing", qty: 45, unit: "len", reorderLevel: 20, unitCost: 640, location: "Site store" },
+    { id: "INV-05", proj: "bhel", name: "Bonding agent, SBR latex 20 L", category: "Waterproofing", qty: 3, unit: "can", reorderLevel: 5, unitCost: 2100, location: "Site store" },
+    { id: "INV-06", proj: "bhel", name: "Cup-lock scaffolding", category: "Scaffolding", qty: 1100, unit: "sqm", reorderLevel: 500, unitCost: 150, location: "Facade yard" },
+    { id: "INV-07", proj: "bhel", name: "Aluminium window profile", category: "Facade", qty: 0, unit: "rft", reorderLevel: 200, unitCost: 850, location: "Warehouse" },
+    { id: "INV-08", proj: "bhel", name: "Tile adhesive, pool grade, 20 kg", category: "Tiling", qty: 60, unit: "bag", reorderLevel: 40, unitCost: 380, location: "Site store" },
+  ],
 };
 
 export const FLOW = ["Pending", "Approved", "Ordered", "Delivered"] as const;
