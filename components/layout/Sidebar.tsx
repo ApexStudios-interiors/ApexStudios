@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useApp } from "@/context/AppContext";
 import { Icon, IconName } from "@/components/ui/Icon";
 import { initials } from "@/lib/logic";
@@ -75,53 +75,54 @@ export function Sidebar() {
               : 0;
           const label = it.key === "billing" ? (role === "client" ? "Bills" : "Billing") : it.label;
           return (
-            <Link
-              key={it.key}
-              href={it.href(project.id)}
-              className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md px-2 py-[7px] cursor-pointer text-[13.5px] ${
-                on ? "bg-accent font-semibold text-foreground" : "font-medium text-foreground hover:bg-accent"
-              }`}
-            >
-              <Icon name={it.icon} className={`w-4 h-4 flex-none ${on ? "text-foreground" : "text-muted-foreground"}`} />
-              {label}
-              {badge ? (
-                <span className="ml-auto text-[11px] font-semibold bg-primary text-primary-foreground rounded-full min-w-[18px] h-[18px] px-1.5 grid place-items-center">
-                  {badge}
-                </span>
-              ) : null}
-              {it.key === "packages" ? (
-                <span
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setModsOpen((v) => !v);
-                  }}
-                  className="ml-auto w-[26px] h-[26px] grid place-items-center rounded hover:bg-border text-muted-foreground"
-                >
-                  <Icon name="chevronRight" className={`w-3.5 h-3.5 transition-transform ${modsOpen ? "rotate-90" : ""}`} />
-                </span>
-              ) : null}
-            </Link>
+            <Fragment key={it.key}>
+              <Link
+                href={it.href(project.id)}
+                className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md px-2 py-[7px] cursor-pointer text-[13.5px] ${
+                  on ? "bg-accent font-semibold text-foreground" : "font-medium text-foreground hover:bg-accent"
+                }`}
+              >
+                <Icon name={it.icon} className={`w-4 h-4 flex-none ${on ? "text-foreground" : "text-muted-foreground"}`} />
+                {label}
+                {badge ? (
+                  <span className="ml-auto text-[11px] font-semibold bg-primary text-primary-foreground rounded-full min-w-[18px] h-[18px] px-1.5 grid place-items-center">
+                    {badge}
+                  </span>
+                ) : null}
+                {it.key === "packages" ? (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setModsOpen((v) => !v);
+                    }}
+                    className="ml-auto w-[26px] h-[26px] grid place-items-center rounded hover:bg-border text-muted-foreground"
+                  >
+                    <Icon name="chevronRight" className={`w-3.5 h-3.5 transition-transform ${modsOpen ? "rotate-90" : ""}`} />
+                  </span>
+                ) : null}
+              </Link>
+              {it.key === "packages" &&
+                modsOpen &&
+                project.modules.map((m, i) => (
+                  <Link
+                    key={m.id}
+                    href={`/projects/${project.id}/packages/${m.id}`}
+                    className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md pl-[34px] pr-2 py-[7px] cursor-pointer text-[13.5px] ${
+                      params?.moduleId === m.id ? "text-foreground font-medium bg-accent" : "text-muted-foreground font-normal hover:bg-accent"
+                    }`}
+                  >
+                    <span className="inline-block min-w-[22px] text-muted-foreground tabular-nums font-medium">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    {m.name}
+                  </Link>
+                ))}
+            </Fragment>
           );
         })}
-        {modsOpen &&
-          allowed.includes("packages") &&
-          project.modules.map((m, i) => (
-            <Link
-              key={m.id}
-              href={`/projects/${project.id}/packages/${m.id}`}
-              className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md pl-[34px] pr-2 py-[7px] cursor-pointer text-[13.5px] ${
-                params?.moduleId === m.id ? "text-foreground font-medium bg-accent" : "text-muted-foreground font-normal hover:bg-accent"
-              }`}
-            >
-              <span className="inline-block min-w-[22px] text-muted-foreground tabular-nums font-medium">
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              {m.name}
-            </Link>
-          ))}
       </nav>
 
       {role === "admin" && (
