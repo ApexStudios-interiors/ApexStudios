@@ -5,26 +5,26 @@ import { PhaseStatus, committed } from "@/lib/logic";
 export function RequestStatusBadge({ status }: { status: RequestStatus }) {
   switch (status) {
     case "Pending":
-      return <Badge variant="outline">● Pending</Badge>;
+      return <Badge variant="warning">Pending</Badge>;
     case "Approved":
-      return <Badge variant="outline">✓ Approved</Badge>;
+      return <Badge variant="default">Approved</Badge>;
     case "Ordered":
-      return <Badge variant="outline">→ Ordered</Badge>;
+      return <Badge variant="outline">Ordered</Badge>;
     case "Delivered":
-      return <Badge variant="default">✓ Delivered</Badge>;
+      return <Badge variant="success">Delivered</Badge>;
     case "Rejected":
-      return <Badge variant="secondary">✕ Rejected</Badge>;
+      return <Badge variant="destructive">Rejected</Badge>;
   }
 }
 
 export function ApprovalStatusBadge({ status }: { status: ApprovalStatus }) {
   switch (status) {
     case "Pending":
-      return <Badge variant="outline">● Pending</Badge>;
+      return <Badge variant="warning">Pending</Badge>;
     case "Approved":
-      return <Badge variant="default">✓ Approved</Badge>;
+      return <Badge variant="success">Approved</Badge>;
     case "Rejected":
-      return <Badge variant="secondary">✕ Rejected</Badge>;
+      return <Badge variant="destructive">Rejected</Badge>;
   }
 }
 

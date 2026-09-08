@@ -96,7 +96,9 @@ export function Gantt({ project, module }: { project: Project; module: ModuleT }
             >
               {start ? (
                 <>
-                  <span className="block text-sm font-bold leading-tight text-foreground">{wkDate(start, wk).getDate()}</span>
+                  <span className={`block text-sm font-bold leading-tight ${isNow ? "text-status-destructive" : "text-foreground"}`}>
+                    {wkDate(start, wk).getDate()}
+                  </span>
                   <span className="block text-[11px] text-muted-foreground">W{wk}</span>
                 </>
               ) : (
