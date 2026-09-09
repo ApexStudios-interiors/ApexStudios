@@ -75,7 +75,8 @@ Write a throwaway migration and a throwaway pgTAP test that proves the behaviour
    - `select * from v_spike_client` → **must return the row**
    - `select secret_val from spike_costs` → **must error or return nothing**
 
-Record the result in `docs/decisions.md` as **D14**.
+Record the result in `docs/decisions.md` as **D15**.
+(Amended: D14 was taken by the Docker decision in Build 01.)
 
 - **If the view returns rows:** proceed exactly as the LLD specifies.
 - **If the view returns nothing:** the LLD's design needs one of these amendments, in order of
@@ -414,7 +415,7 @@ pnpm dev                         # UI still renders identically — it is still 
 ```
 
 Manual checks:
-- [ ] The §2 spike result is recorded as D14 in `docs/decisions.md`, and if it forced a design
+- [ ] The §2 spike result is recorded as D15 in `docs/decisions.md`, and if it forced a design
       change, `02-lld.md` §4.3 has been amended and the amendment is called out in the PR.
 - [ ] Sign in to the local Supabase Studio **as a client user** (not the SQL editor) and try to
       read `packages`. Confirm with your own eyes that it fails.
@@ -448,7 +449,7 @@ Manual checks:
 ## 8. Deliverables
 
 - [ ] Migrations 0001–0016, each self-contained, each with RLS and policies inline
-- [ ] The §2 spike run, resolved, recorded as D14, and its migration deleted
+- [ ] The §2 spike run, resolved, recorded as D15, and its migration deleted
 - [ ] Helper functions with `search_path = ''`
 - [ ] Rollup, role-scoped, Billable Now and notification views, each with an omission comment
 - [ ] Progress rollup trigger

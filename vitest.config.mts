@@ -10,9 +10,11 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
-    include: ["{lib,features,db,app,components,context,hooks}/**/*.{test,spec}.{ts,tsx}"],
+    include: ["{lib,features,db,app,components,context,hooks,tests}/**/*.{test,spec}.{ts,tsx}"],
     // Playwright owns e2e/. Running it under Vitest would start two runners.
-    exclude: ["node_modules/**", "e2e/**", ".next/**", "docs/**"],
+    // tests/integration/ needs a real database and has its own config, so that
+    // its absence is a hard error there rather than noise here.
+    exclude: ["node_modules/**", "e2e/**", ".next/**", "docs/**", "tests/integration/**"],
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],

@@ -82,8 +82,48 @@ Branch `build/01-foundations`, open as **PR #1**, CI green. Baseline tag `proto-
 
 ---
 
+---
+
 ## Build 02 — Database
-Not started. Unblocked on decisions. **Blocked on the `apex-dev` Supabase project existing** — D14 removed the local stack, so there is no way to run a migration or a pgTAP test without it.
+
+Branch `build/02-database`. **Drafted, not verified.** Nothing has been applied to any
+database, because `apex-dev` does not exist yet and D14 removed the local alternative.
+Every SQL statement below is unrun.
+
+| Step | Status | Notes |
+|---|---|---|
+| 2 Spike (definer view under `force` RLS) | ⛔ | Written and runnable as `pnpm spike:d15`. **Cannot run without a database.** Recorded as **D15**, not D14 — that number was taken by the Docker decision. Gates migration 0014. |
+| 3 / 4.1–4.7 Migrations 0001–0016 | 🟡 | All sixteen written, ~1,750 lines. Each table-creating file enables RLS, forces it, adds policies and indexes every policy column, in the same file — checked mechanically. No floating-point type anywhere. **Unapplied and unrun.** |
+| 4.8 Drizzle schema and types | 🟡 | `db/schema/*` mirrors the migrations; `db/index.ts` carries the D11 rule. `db:types` needs a database. |
+| 4.9 Seed | 🟡 | `supabase/seed.sql`, fixed UUIDs, idempotent. Five stock-request statuses, four bill statuses, three approval outcomes, three inventory states, one fully complete phase. **Org legal identity is a placeholder and `pnpm test` fails until it is real.** |
+| 4.10 CI database stages | 🟡 | Added: migrations, seed, pgTAP, integration, drift. Fails loudly when `SUPABASE_DB_URL` is absent rather than skipping — a quietly absent RLS stage looks green. |
+| 5.1 pgTAP policy suite | 🟡 | 14 assertions over the policy matrix and the role-scoped views. Unrun. |
+| 5.2 Structural pgTAP | 🟡 | 6 catalogue assertions: RLS enabled and forced, every table has a policy, every definer function pins `search_path`, no floating point, append-only tables have no write policy. Unrun. |
+| 5.3 Integration tests | 🟡 | T-16, T-21, T-24, backoff, and the constraint set. Separate suite (`pnpm test:integration`) that errors without a database rather than skipping. Unrun. |
+| 5.4 Seed invariants | ✅ / 🟡 | The placeholder guard runs today and **fails, by design**. The data invariants are pgTAP and unrun. |
+
+### What was found while drafting
+
+| Finding | Where |
+|---|---|
+| **RA-001's transcribed total was wrong.** The prototype's two lines sum to ₹89,877.75, not the ₹1,19,837 first written. Caught by recomputing rather than trusting the transcription; the corrected net matches the prototype's own displayed ₹1,01,562. | `supabase/seed.sql` |
+| **The prototype's margin uses a magic number.** `billTotals()` computes cost as `Σ lineCost − round(recovery × 0.6)`. That 0.6 appears nowhere in the HLD or LLD, and it is why the prototype shows RA-002's margin as ₹2,28,210 where `taxable − internal_cost` gives ₹1,56,308. Build 09 has to decide what recovery does to margin. | `lib/logic.ts`, seed comment |
+| **`projects.start_date` is NOT NULL, but a quoted project has no start date.** The prototype's second project has `start: null`. Seeded with the quote date and flagged for Build 04. | `02-lld.md` §3.2 |
+| **Two prototype tasks belong to no phase**, but `tasks.phase_id` is NOT NULL. Attached to the phase they obviously belong to, with a comment. | `supabase/seed.sql` |
+| **The prototype has only three of five stock-request statuses** and three of four bill statuses. Two requests and two bills added so Builds 07 and 09 have every state to develop against. | `supabase/seed.sql` |
+| **ESLint flat config caught my own violations**: 25 non-null assertions in the tests I wrote, and the D11 rule blocked the drift test's legitimate schema import. Fixed properly rather than exempted, apart from one narrow, reasoned exemption for `tests/integration/**`. | — |
+
+### Blocked on
+
+Everything in Build 02 §0 that has not been supplied:
+
+| Needed | Blocks |
+|---|---|
+| **`apex-dev` Supabase project** and `DATABASE_URL` | The spike, migrations, pgTAP, integration tests, drift check — all of it |
+| **Apex Studios' legal identity**: legal name, GSTIN, PAN, registered address | The `orgs` seed row. Placeholders here print on a tax invoice, so `pnpm test` fails until they are real |
+| **Project code convention** confirmed (`BHEL-NCH` assumed) | Bill numbers, permanently. `projects.code` is unique per org |
+| **Real inventory unit list** | Seed realism and the Build 07 unit dropdown. The prototype's units are used meanwhile |
+| Default billing constants confirmed as defaults (18 / 5 / 75 / 0 assumed) | New-project defaults only |
 
 ## Build 03 — Auth and RBAC
 Not started. Needs the transactional email provider for client magic links.

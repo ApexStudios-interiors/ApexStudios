@@ -278,10 +278,63 @@ that is authentication, not notification.
 
 ---
 
+### D15 — Does a definer view read through `force row level security`?
+
+> **Numbering note.** `build/02-database.md` §2 says to record this as D14. D14
+> was already taken by the Docker decision during Build 01, so the spike is D15.
+> The build file has been amended to match.
+
+**Question:** `02-lld.md` §6 requires `alter table … force row level security` on
+every table, and §4.3 implements column isolation as `security definer` views
+(`security_invoker = off`) reading those same tables. `force` makes RLS apply to
+the table's **owner** as well, and a definer view executes as the view's owner.
+If the owner is subject to the base table's admin-only policy, then
+`v_package_client` — which must return rows to a *client* session — is evaluated
+against `packages_select_admin` (`using (is_admin())`) and returns **zero rows**.
+The client's Packages table would render silently empty. Nothing would error.
+**Answered:** PENDING — the spike cannot run without a database
+**Answer:** Not yet known.
+**Consequence:** This gates migration 0014 and the whole column-isolation design.
+The migrations are written as though the answer is yes, because that is what
+`02-lld.md` §4.3 specifies, and because nothing is applied yet an unapplied
+migration can be edited freely if the answer turns out to be no.
+
+Run it with `pnpm spike:d15` the moment `apex-dev` exists. It creates a
+throwaway table, a throwaway client user and a real signed-in session, asks the
+two questions, and tears everything down. It refuses to run against production.
+
+Three possible outcomes:
+
+- **PASS** — the view returns rows and the base table stays closed. Proceed
+  exactly as `02-lld.md` §4.3 specifies. Nothing changes.
+- **FAIL** — the view returns nothing. Pick one of these, write it into
+  `02-lld.md` §4.3, and say so in the PR:
+  1. Grant the view owner `bypassrls`, or own the views with a role that has it.
+     Smallest change; no migration edits to the tables.
+  2. Drop `force row level security` on the six cost-bearing tables only
+     (`packages`, `phases`, `bills`, `bill_lines`, `inventory_items`,
+     `stock_requests`), keeping it everywhere else. What that gives up: RLS stops
+     applying to the table owner, which matters only for a direct owner-role
+     connection — and under D11 the application never opens one.
+  3. Replace definer views with column-level `GRANT`s, which makes
+     `select internal_amount` a hard permission error rather than an empty
+     result. Its limitation is that grants are per database role and every app
+     user shares `authenticated`, so it cannot tell client from site; views would
+     still be needed on top for that.
+- **LEAK** — the base table returns rows to a client session. Stop everything.
+  The admin-only policy is not being applied at all, and nothing else matters
+  until that is understood.
+
+**Blocks:** trusting migration 0014, and therefore every non-admin surface in
+Builds 04–09.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |
 |---|---|---|---|
+| **D15 spike — definer views under `force row level security`.** Cannot run without a database. Gates migration 0014 and every non-admin surface. | Claude, on `apex-dev` | Builds 04–09 | 2026-09-09 |
 | CA confirmation: material-at-site as secured advance (D4) | Voola → CA | First real bill | 2026-09-09 |
 | CA confirmation: statutory retention period (A-5) | Voola → CA | Build 10 R2 lifecycle rules | 2026-09-09 |
 | CA sign-off: the five tax questions in `01-hld.md` §8.4 | Voola → CA | Build 09 go-live | 2026-09-09 |

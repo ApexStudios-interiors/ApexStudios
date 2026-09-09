@@ -109,3 +109,68 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # docs/architecture.md §6.5: high and critical are a build failure.
       - run: pnpm audit --audit-level=high
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # DATABASE, RLS AND INTEGRATION
+  #
+  # D14: no Docker. The database for this job is the Supabase preview branch
+  # created for this pull request (D10), reached over SUPABASE_DB_URL.
+  #
+  # ┌──────────────────────────────────────────────────────────────────────────┐
+  # │ THE RLS STAGE IS BLOCKING BY POLICY (architecture.md §10.1).             │
+  # │                                                                          │
+  # │ It must never be given `continue-on-error`, never be marked optional and  │
+  # │ never be skipped to get a release out. It is the suite that protects the  │
+  # │ product's core promise: a client cannot read internal cost or margin.     │
+  # │                                                                          │
+  # │ Note what this job does NOT do: it does not silently skip when the        │
+  # │ database secret is missing. A quietly absent RLS stage is the same as a   │
+  # │ disabled one, and it looks green. It fails instead, and says why.         │
+  # └──────────────────────────────────────────────────────────────────────────┘
+  database:
+    name: migrations · seed · RLS · drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Require a database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::SUPABASE_DB_URL is not set, so migrations, the RLS suite and the"
+            echo "::error::integration tests cannot run. Build 02 is NOT verified."
+            echo "::error::Create the apex-dev Supabase project, enable preview branching (D10),"
+            echo "::error::and add SUPABASE_DB_URL to the repository secrets."
+            exit 1
+          fi
+
+      - name: Apply migrations and seed
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          pnpm exec supabase db push --db-url "$SUPABASE_DB_URL"
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/seed.sql
+
+      - name: RLS and structural tests (pgTAP)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_PROD_PROJECT_REF: ${{ secrets.SUPABASE_PROD_PROJECT_REF }}
+        run: pnpm test:rls
+
+      - name: Integration tests
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: pnpm test:integration
+
+      - name: Drizzle drift check
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: pnpm db:check-drift

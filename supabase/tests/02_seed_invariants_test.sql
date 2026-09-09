@@ -1,0 +1,63 @@
+-- Invariants the seed must hold, because Builds 04–09 develop against them.
+--
+-- docs/build/02-database.md §5.4. A seed that quietly loses its "one complete
+-- phase" makes Build 09 look broken for a day before anyone thinks to check the
+-- data rather than the code.
+
+begin;
+create extension if not exists pgtap with schema extensions;
+select plan(7);
+
+select is(
+  (select count(distinct status)::int from public.stock_requests),
+  5, 'the seed covers all five stock request statuses'
+);
+
+select is(
+  (select count(distinct status)::int from public.bills where status <> 'cancelled'),
+  4, 'the seed covers draft, submitted, certified and paid'
+);
+
+select is(
+  (select count(distinct status)::int from public.approvals),
+  3, 'the seed covers pending, approved and rejected approvals'
+);
+
+-- Without at least one fully complete phase, Billable Now is empty and Build 09
+-- has nothing to develop against.
+select cmp_ok(
+  (select count(*)::int from public.v_phase_billing where is_complete),
+  '>=', 1, 'at least one phase is complete, so Billable Now is non-empty'
+);
+
+select is(
+  (select count(distinct
+     case when qty_on_hand = 0 then 'critical'
+          when qty_on_hand < reorder_level then 'low'
+          else 'ok' end)::int
+     from public.inventory_items),
+  3, 'inventory covers all three derived stock states'
+);
+
+-- The org legal identity prints on every tax invoice. Build 02 §0 asks for it.
+select is_empty(
+  $$ select o.name::text from public.orgs o
+      where o.legal_name like 'PLACEHOLDER%'
+         or o.gstin like 'PLACEHOLDER%'
+         or o.pan like 'PLACEHOLDER%'
+         or o.address like 'PLACEHOLDER%' $$,
+  'no org row still carries placeholder legal details'
+);
+
+-- next_bill_seq must lead the seeded bills or the first real rpc_create_bill
+-- collides on bills_seq_uq.
+select is_empty(
+  $$ select p.code::text from public.projects p
+      where p.next_bill_seq <= (
+        select coalesce(max(b.seq_no), 0) from public.bills b where b.project_id = p.id
+      ) $$,
+  'next_bill_seq leads the highest seeded bill on every project'
+);
+
+select * from finish();
+rollback;

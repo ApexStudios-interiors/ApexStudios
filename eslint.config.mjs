@@ -87,6 +87,17 @@ const eslintConfig = defineConfig([
       // there is nothing for RLS to protect. It is listed here rather than
       // silenced inline, so the exemption is visible next to the rule.
       "app/api/health/route.ts",
+      // Integration tests connect directly ON PURPOSE. They exercise
+      // constraints, triggers and RPC concurrency, which are properties of the
+      // database itself and are invisible from a user session. The drift test
+      // additionally has to import db/schema, because comparing the schema to
+      // the database is the whole point of it.
+      //
+      // This exemption does NOT cover RLS testing. AGENTS.md database rule 8
+      // stands: policies are tested from a real client SDK session, never from a
+      // privileged connection, because a privileged connection reports a broken
+      // policy as working. Those live in supabase/tests (pgTAP).
+      "tests/integration/**",
     ],
     rules: { "no-restricted-imports": ["error", { patterns: [...RLS_BYPASS] }] },
   },
