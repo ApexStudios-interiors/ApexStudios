@@ -35,7 +35,12 @@ export function AddProjectDialog() {
       <div className="grid grid-cols-2 gap-3.5">
         <div className="col-span-2">
           <Field label="Project Name">
-            <input className={inputClass} placeholder="Model Villas Interiors" value={name} onChange={(e) => setName(e.target.value)} />
+            <input
+              className={inputClass}
+              placeholder="Model Villas Interiors"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </Field>
         </div>
         <Field label="Client">
@@ -45,10 +50,20 @@ export function AddProjectDialog() {
           <input className={inputClass} value={location} onChange={(e) => setLocation(e.target.value)} />
         </Field>
         <Field label="Start Date">
-          <input type="date" className={inputClass} value={start} onChange={(e) => setStart(e.target.value)} />
+          <input
+            type="date"
+            className={inputClass}
+            value={start}
+            onChange={(e) => setStart(e.target.value)}
+          />
         </Field>
         <Field label="Packages" hint="Comma separated">
-          <input className={inputClass} placeholder="Interiors, MEP, Facade" value={packages} onChange={(e) => setPackages(e.target.value)} />
+          <input
+            className={inputClass}
+            placeholder="Interiors, MEP, Facade"
+            value={packages}
+            onChange={(e) => setPackages(e.target.value)}
+          />
         </Field>
       </div>
     </DialogShell>

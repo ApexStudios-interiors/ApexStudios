@@ -5,21 +5,25 @@ import { useRouter } from "next/navigation";
 import { useApp } from "@/context/AppContext";
 import { DialogShell, Field, inputClass, textareaClass } from "@/components/ui/DialogShell";
 
-const TYPES = ["Material sample", "Material", "Drawing", "Design", "Variation"];
+const TYPES = ["Material sample", "Material", "Drawing", "Design", "Variation"] as const;
 
 export function NewApprovalDialog({ projectId, moduleId }: { projectId: string; moduleId?: string }) {
   const { data, closeDialog, addApproval, toast } = useApp();
   const router = useRouter();
-  const project = data.projects.find((p) => p.id === projectId)!;
+  const project = data.projects.find((p) => p.id === projectId);
 
-  const [mod, setMod] = useState(moduleId ?? project.modules[0]?.id ?? "");
-  const modObj = useMemo(() => project.modules.find((m) => m.id === mod), [project, mod]);
+  const [mod, setMod] = useState(moduleId ?? project?.modules[0]?.id ?? "");
+  const modObj = useMemo(() => project?.modules.find((m) => m.id === mod), [project, mod]);
   const [pkg, setPkg] = useState(modObj?.packages[0]?.id ?? "");
-  const [type, setType] = useState(TYPES[0]);
+  const [type, setType] = useState<string>(TYPES[0]);
   const [need, setNeed] = useState("2026-09-14");
   const [item, setItem] = useState("");
   const [note, setNote] = useState("");
   const [photoCount, setPhotoCount] = useState(0);
+
+  // The dialog is always opened from inside a project, so this cannot fire.
+  // Stated as a guard rather than a `!` — ../AGENTS.md forbids the assertion.
+  if (!project) return null;
 
   const onModChange = (id: string) => {
     setMod(id);
@@ -85,7 +89,12 @@ export function NewApprovalDialog({ projectId, moduleId }: { projectId: string; 
         </div>
         <div className="col-span-2">
           <Field label="Note">
-            <textarea className={textareaClass} placeholder="Optional" value={note} onChange={(e) => setNote(e.target.value)} />
+            <textarea
+              className={textareaClass}
+              placeholder="Optional"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
           </Field>
         </div>
         <div className="col-span-2">

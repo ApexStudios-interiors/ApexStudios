@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useApp } from "@/context/AppContext";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
 
-const STATUSES = ["Not started", "Design", "In progress", "Completed"];
+const STATUSES = ["Not started", "Design", "In progress", "Completed"] as const;
 
 export function EditModuleDialog({ projectId, moduleId }: { projectId: string; moduleId: string }) {
   const { data, closeDialog, editModule, toast } = useApp();

@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 
 type Variant = "default" | "secondary" | "outline" | "success" | "warning" | "destructive";
 

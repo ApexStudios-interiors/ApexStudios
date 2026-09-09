@@ -8,12 +8,16 @@ import { DialogShell, Field, inputClass, textareaClass } from "@/components/ui/D
 export function PostUpdateDialog({ projectId, moduleId }: { projectId: string; moduleId?: string }) {
   const { data, closeDialog, addUpdate, toast } = useApp();
   const router = useRouter();
-  const project = data.projects.find((p) => p.id === projectId)!;
+  const project = data.projects.find((p) => p.id === projectId);
 
-  const [mod, setMod] = useState(moduleId ?? project.modules[0]?.id ?? "");
+  const [mod, setMod] = useState(moduleId ?? project?.modules[0]?.id ?? "");
   const [date, setDate] = useState("2026-09-07");
   const [text, setText] = useState("");
   const [photoCount, setPhotoCount] = useState(0);
+
+  // The dialog is always opened from inside a project, so this cannot fire.
+  // Stated as a guard rather than a `!` — ../AGENTS.md forbids the assertion.
+  if (!project) return null;
 
   return (
     <DialogShell
@@ -52,7 +56,12 @@ export function PostUpdateDialog({ projectId, moduleId }: { projectId: string; m
         </div>
         <div className="col-span-2">
           <Field label="Photos">
-            <input type="file" multiple className="px-1.5 py-1.5" onChange={(e) => setPhotoCount(e.target.files?.length ?? 0)} />
+            <input
+              type="file"
+              multiple
+              className="px-1.5 py-1.5"
+              onChange={(e) => setPhotoCount(e.target.files?.length ?? 0)}
+            />
           </Field>
         </div>
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
-import { useParams } from "next/navigation";
 import { useApp } from "@/context/AppContext";
+import { useProject } from "@/hooks/useProject";
 import { isMoney } from "@/lib/logic";
 import { ModuleTable } from "@/components/domain/ModuleTable";
 import { Card } from "@/components/ui/Card";
@@ -9,9 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 
 export default function PackagesPage() {
-  const params = useParams<{ projectId: string }>();
-  const { data, role, openDialog } = useApp();
-  const project = data.projects.find((p) => p.id === params.projectId)!;
+  const { role, openDialog } = useApp();
+  const project = useProject();
 
   return (
     <div>
@@ -22,7 +21,10 @@ export default function PackagesPage() {
         </div>
         <div className="ml-auto flex gap-2">
           {isMoney(role) && (
-            <Button variant="primary" onClick={() => openDialog({ kind: "addModule", projectId: project.id })}>
+            <Button
+              variant="primary"
+              onClick={() => openDialog({ kind: "addModule", projectId: project.id })}
+            >
               <Icon name="plus" className="w-[15px] h-[15px]" />
               Add Package
             </Button>

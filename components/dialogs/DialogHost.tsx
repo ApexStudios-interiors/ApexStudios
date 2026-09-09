@@ -28,7 +28,13 @@ export function DialogHost() {
     case "addTask":
       return <AddTaskDialog projectId={dialog.projectId} moduleId={dialog.moduleId} />;
     case "taskDetail":
-      return <TaskDetailDialog projectId={dialog.projectId} moduleId={dialog.moduleId} taskIndex={dialog.taskIndex} />;
+      return (
+        <TaskDetailDialog
+          projectId={dialog.projectId}
+          moduleId={dialog.moduleId}
+          taskIndex={dialog.taskIndex}
+        />
+      );
     case "newRequest":
       return <NewRequestDialog projectId={dialog.projectId} moduleId={dialog.moduleId} />;
     case "newApproval":

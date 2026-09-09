@@ -1,4 +1,4 @@
-import { ButtonHTMLAttributes, forwardRef } from "react";
+import { type ButtonHTMLAttributes, forwardRef } from "react";
 
 type Variant = "default" | "primary" | "ghost" | "destructive";
 type Size = "md" | "sm";

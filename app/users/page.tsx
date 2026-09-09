@@ -2,7 +2,7 @@
 
 import { useApp } from "@/context/AppContext";
 import { initials } from "@/lib/logic";
-import { Role } from "@/lib/types";
+import type { Role } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Card } from "@/components/ui/Card";

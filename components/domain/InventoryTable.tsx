@@ -1,4 +1,4 @@
-import { InventoryItem, Project } from "@/lib/types";
+import type { InventoryItem, Project } from "@/lib/types";
 import { fmt, inventoryStatus, inventoryValue } from "@/lib/logic";
 import { InventoryStatusBadge } from "@/components/domain/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";

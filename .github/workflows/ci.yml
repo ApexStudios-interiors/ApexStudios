@@ -1,0 +1,101 @@
+name: CI
+
+# docs/architecture.md §10.1. The full pipeline is:
+#
+#   install → typecheck → lint → secret scan → unit tests → build
+#   → db (supabase start, migrations, seed)
+#   → RLS tests (pgTAP)          ◄── BLOCKING BY POLICY
+#   → integration tests → deploy preview → e2e → production
+#
+# The database, RLS, integration and e2e stages are added in Build 02 and
+# Build 10, when they have content.
+#
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │ THE RLS STAGE IS BLOCKING BY POLICY.                                     │
+# │                                                                          │
+# │ It must never be given `continue-on-error`, never be marked optional,    │
+# │ and never be skipped to get a release out. It is the test suite that     │
+# │ protects the product's core promise: a client cannot read internal cost  │
+# │ or margin. If it is red, the change does not ship.                       │
+# │ docs/architecture.md §10.1, docs/ai-workflow-rules.md §8.                │
+# └──────────────────────────────────────────────────────────────────────────┘
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: typecheck · lint · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks needs history to scan the commits in the PR, not just the tip.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Unit tests
+        run: pnpm test:coverage
+
+      - name: Build
+        # No secrets in CI, and none are needed to compile. lib/env.ts still
+        # validates at runtime; this only skips the build-time parse.
+        env:
+          SKIP_ENV_VALIDATION: "1"
+        run: pnpm build
+
+  secret-scan:
+    name: secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  audit:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # docs/architecture.md §6.5: high and critical are a build failure.
+      - run: pnpm audit --audit-level=high

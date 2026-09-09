@@ -26,7 +26,10 @@ export default function HomePage() {
   const apPendAll = data.approvals.filter((a) => a.status === "Pending").length;
   const billsPendAll = data.bills.filter((b) => b.status === "Submitted").length;
   const stockPendAll = data.requests.filter((r) => r.status === "Pending").length;
-  const inProgAll = data.projects.reduce((a, p) => a + p.modules.filter((m) => m.status === "In progress").length, 0);
+  const inProgAll = data.projects.reduce(
+    (a, p) => a + p.modules.filter((m) => m.status === "In progress").length,
+    0
+  );
 
   return (
     <div>
@@ -48,7 +51,11 @@ export default function HomePage() {
       {money ? (
         <StatBar
           stats={[
-            { label: "Total Allocated", value: fmtS(t0.alloc), sub: `Across ${data.projects.length} projects` },
+            {
+              label: "Total Allocated",
+              value: fmtS(t0.alloc),
+              sub: `Across ${data.projects.length} projects`,
+            },
             { label: "Total Internal", value: fmtS(t0.int), sub: `Margin ${fmtS(t0.alloc - t0.int)}` },
             { label: "Committed", value: fmtS(t0.c), sub: `${pct(t0.c, t0.int)}% of internal` },
             { label: "Active Projects", value: active, sub: `of ${data.projects.length}` },
@@ -57,9 +64,17 @@ export default function HomePage() {
       ) : client ? (
         <StatBar
           stats={[
-            { label: "Total Contract Value", value: fmtS(t0.alloc), sub: `Across ${data.projects.length} projects` },
+            {
+              label: "Total Contract Value",
+              value: fmtS(t0.alloc),
+              sub: `Across ${data.projects.length} projects`,
+            },
             { label: "Active Projects", value: active, sub: `of ${data.projects.length}` },
-            { label: "Awaiting Your Approval", value: apPendAll + billsPendAll, sub: `${apPendAll} samples · ${billsPendAll} bills` },
+            {
+              label: "Awaiting Your Approval",
+              value: apPendAll + billsPendAll,
+              sub: `${apPendAll} samples · ${billsPendAll} bills`,
+            },
           ]}
         />
       ) : (

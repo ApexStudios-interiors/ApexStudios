@@ -1,6 +1,6 @@
 "use client";
 
-import { BillFile } from "@/lib/types";
+import type { BillFile } from "@/lib/types";
 import { Icon } from "@/components/ui/Icon";
 import { useApp } from "@/context/AppContext";
 

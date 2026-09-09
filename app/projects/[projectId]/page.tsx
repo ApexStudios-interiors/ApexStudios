@@ -1,8 +1,19 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useApp } from "@/context/AppContext";
-import { bills, billTotals, dmy, fmtS, isClientRole, isMoney, isSiteRole, projProgress, totals } from "@/lib/logic";
+import { useProject } from "@/hooks/useProject";
+import {
+  bills,
+  billTotals,
+  dmy,
+  fmtS,
+  isClientRole,
+  isMoney,
+  isSiteRole,
+  projProgress,
+  totals,
+} from "@/lib/logic";
 import { BudgetStatBar } from "@/components/domain/BudgetStatBar";
 import { StatBar } from "@/components/ui/StatBar";
 import { ModuleTable } from "@/components/domain/ModuleTable";
@@ -14,10 +25,9 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 
 export default function ProjectDashboardPage() {
-  const params = useParams<{ projectId: string }>();
   const router = useRouter();
   const { data, role, openDialog } = useApp();
-  const project = data.projects.find((p) => p.id === params.projectId)!;
+  const project = useProject();
 
   const t = totals(data, project);
   const pending = data.requests.filter((r) => r.proj === project.id && r.status === "Pending");
@@ -49,7 +59,10 @@ export default function ProjectDashboardPage() {
             </Button>
           )}
           {!client && (
-            <Button variant="primary" onClick={() => openDialog({ kind: "newRequest", projectId: project.id })}>
+            <Button
+              variant="primary"
+              onClick={() => openDialog({ kind: "newRequest", projectId: project.id })}
+            >
               <Icon name="plus" className="w-[15px] h-[15px]" />
               Stock Request
             </Button>
@@ -76,7 +89,11 @@ export default function ProjectDashboardPage() {
       ) : (
         <StatBar
           stats={[
-            { label: "Packages in Progress", value: project.modules.filter((m) => m.status === "In progress").length, sub: `of ${project.modules.length}` },
+            {
+              label: "Packages in Progress",
+              value: project.modules.filter((m) => m.status === "In progress").length,
+              sub: `of ${project.modules.length}`,
+            },
             { label: "Pending Requests", value: pending.length, sub: "awaiting approval" },
             {
               label: "To Receive",
@@ -99,7 +116,11 @@ export default function ProjectDashboardPage() {
           <CardHeader>
             <h3>Pending Approvals</h3>
             <div className="ml-auto flex gap-2 items-center">
-              <Button variant="ghost" size="sm" onClick={() => router.push(`/projects/${project.id}/approvals`)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push(`/projects/${project.id}/approvals`)}
+              >
                 View all
               </Button>
             </div>
@@ -127,7 +148,11 @@ export default function ProjectDashboardPage() {
           <CardHeader>
             <h3>Latest Updates</h3>
             <div className="ml-auto flex gap-2 items-center">
-              <Button variant="ghost" size="sm" onClick={() => router.push(`/projects/${project.id}/updates`)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push(`/projects/${project.id}/updates`)}
+              >
                 View all
               </Button>
             </div>

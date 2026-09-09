@@ -1,4 +1,4 @@
-import { RefObject, useEffect } from "react";
+import { type RefObject, useEffect } from "react";
 
 /** Calls onOutside when a mousedown happens outside `ref`, or Escape is pressed. Only listens while `active`. */
 export function useClickOutside(ref: RefObject<HTMLElement | null>, onOutside: () => void, active: boolean) {

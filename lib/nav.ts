@@ -1,6 +1,7 @@
-import { Role } from "./types";
+import type { Role } from "./types";
 
-export type Section = "dashboard" | "packages" | "schedule" | "updates" | "inventory" | "stock" | "approvals" | "billing";
+export type Section =
+  "dashboard" | "packages" | "schedule" | "updates" | "inventory" | "stock" | "approvals" | "billing";
 
 export const ALLOWED_SECTIONS: Record<Role, Section[]> = {
   admin: ["dashboard", "packages", "schedule", "updates", "inventory", "stock", "approvals", "billing"],

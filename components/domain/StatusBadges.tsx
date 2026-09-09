@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/Badge";
-import { AppData, ApprovalStatus, BillStatus, ModuleT, RequestStatus } from "@/lib/types";
-import { InventoryStatus, PhaseStatus, committed } from "@/lib/logic";
+import type { AppData, ApprovalStatus, BillStatus, ModuleT, RequestStatus } from "@/lib/types";
+import { type InventoryStatus, type PhaseStatus, committed } from "@/lib/logic";
 
 export function RequestStatusBadge({ status }: { status: RequestStatus }) {
   switch (status) {

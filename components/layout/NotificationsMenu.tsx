@@ -47,7 +47,9 @@ export function NotificationsMenu() {
               </Link>
             ))
           ) : (
-            <div className="px-3 py-6 text-center text-muted-foreground text-[13px]">You&apos;re all caught up.</div>
+            <div className="px-3 py-6 text-center text-muted-foreground text-[13px]">
+              You&apos;re all caught up.
+            </div>
           )}
         </div>
       )}

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useApp } from "@/context/AppContext";
-import { Project } from "@/lib/types";
+import type { Project } from "@/lib/types";
 import { billableItems, bills, billTotals, dmy, fmt, fmtS, lineCost, lineVal, mno, pct } from "@/lib/logic";
 import { MAS } from "@/lib/data";
 import { StatBar } from "@/components/ui/StatBar";
@@ -24,7 +24,8 @@ export function BillingAdmin({ project }: { project: Project }) {
   const items = billableItems(data, project);
   const sel = selKeysState ?? new Set(items.map((i) => i.key));
 
-  const sum = (f: (b: (typeof bs)[number]) => boolean) => bs.filter(f).reduce((a, b) => a + billTotals(b).net, 0);
+  const sum = (f: (b: (typeof bs)[number]) => boolean) =>
+    bs.filter(f).reduce((a, b) => a + billTotals(b).net, 0);
   const billed = sum((b) => b.status !== "Draft");
   const received = sum((b) => b.status === "Paid");
   const outstanding = sum((b) => b.status === "Submitted" || b.status === "Certified");
@@ -58,8 +59,16 @@ export function BillingAdmin({ project }: { project: Project }) {
 
       <StatBar
         stats={[
-          { label: "Billed to Date", value: fmtS(billed), sub: `${bs.filter((b) => b.status !== "Draft").length} bills, incl. GST` },
-          { label: "Received", value: fmtS(received), sub: `${bs.filter((b) => b.status === "Paid").length} paid` },
+          {
+            label: "Billed to Date",
+            value: fmtS(billed),
+            sub: `${bs.filter((b) => b.status !== "Draft").length} bills, incl. GST`,
+          },
+          {
+            label: "Received",
+            value: fmtS(received),
+            sub: `${bs.filter((b) => b.status === "Paid").length} paid`,
+          },
           { label: "Outstanding", value: fmtS(outstanding), sub: "Submitted or certified, not paid" },
           { label: "Billable Now", value: fmtS(billableNow), sub: `${items.length} items ready` },
         ]}
@@ -100,7 +109,9 @@ export function BillingAdmin({ project }: { project: Project }) {
                       <input type="checkbox" checked={sel.has(i.key)} onChange={() => toggle(i.key)} />
                     </td>
                     <td className={td}>{i.desc}</td>
-                    <td className={td + " text-muted-foreground"}>{m ? `${mno(project, m)} ${m.name}` : ""}</td>
+                    <td className={td + " text-muted-foreground"}>
+                      {m ? `${mno(project, m)} ${m.name}` : ""}
+                    </td>
                     <td className={td}>
                       {i.type === "material" ? (
                         <Badge variant="outline">Material at site · {MAS}%</Badge>
@@ -117,7 +128,10 @@ export function BillingAdmin({ project }: { project: Project }) {
             ) : (
               <tr>
                 <td className={td} colSpan={7}>
-                  <Empty>Nothing billable yet. Items appear here when materials are delivered or milestones complete.</Empty>
+                  <Empty>
+                    Nothing billable yet. Items appear here when materials are delivered or milestones
+                    complete.
+                  </Empty>
                 </td>
               </tr>
             )}
@@ -176,7 +190,13 @@ export function BillingAdmin({ project }: { project: Project }) {
                     <td className={td}>
                       {b.id}
                       <span className={sub}>
-                        {b.paid ? `Paid ${dmy(b.paid)}` : b.certified ? `Certified ${dmy(b.certified)}` : b.submitted ? `Submitted ${dmy(b.submitted)}` : "Draft"}
+                        {b.paid
+                          ? `Paid ${dmy(b.paid)}`
+                          : b.certified
+                            ? `Certified ${dmy(b.certified)}`
+                            : b.submitted
+                              ? `Submitted ${dmy(b.submitted)}`
+                              : "Draft"}
                       </span>
                       <BillFiles files={b.files} />
                     </td>
@@ -192,10 +212,18 @@ export function BillingAdmin({ project }: { project: Project }) {
                     </td>
                     <td className={td}>
                       <div className="flex gap-1.5 flex-wrap justify-end">
-                        <Button variant="ghost" size="sm" onClick={() => openDialog({ kind: "billView", billId: b.id })}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openDialog({ kind: "billView", billId: b.id })}
+                        >
                           View
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => openDialog({ kind: "billUpload", billId: b.id })}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openDialog({ kind: "billUpload", billId: b.id })}
+                        >
                           Upload
                         </Button>
                         {action}

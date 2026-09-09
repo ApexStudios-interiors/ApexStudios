@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useParams } from "next/navigation";
 import { useApp } from "@/context/AppContext";
+import { useProject } from "@/hooks/useProject";
 import { mno } from "@/lib/logic";
 import { FLOW } from "@/lib/data";
 import { ReqTable } from "@/components/domain/ReqTable";
@@ -14,13 +14,14 @@ import { Icon } from "@/components/ui/Icon";
 const FILTERS = ["All", ...FLOW, "Rejected"];
 
 export default function StockPage() {
-  const params = useParams<{ projectId: string }>();
   const { data, openDialog } = useApp();
-  const project = data.projects.find((p) => p.id === params.projectId)!;
+  const project = useProject();
   const [filter, setFilter] = useState("All");
   const [modFilter, setModFilter] = useState("all");
 
-  const all = data.requests.filter((r) => r.proj === project.id && (modFilter === "all" || r.mod === modFilter));
+  const all = data.requests.filter(
+    (r) => r.proj === project.id && (modFilter === "all" || r.mod === modFilter)
+  );
   const reqs = filter === "All" ? all : all.filter((r) => r.status === filter);
 
   return (
@@ -28,7 +29,9 @@ export default function StockPage() {
       <div className="flex items-start gap-4 flex-wrap mb-[22px]">
         <div>
           <h1 className="text-[26px] font-bold tracking-tight">Stock Requests</h1>
-          <p className="mt-1 text-muted-foreground text-[13.5px]">{all.filter((r) => r.status === "Pending").length} pending</p>
+          <p className="mt-1 text-muted-foreground text-[13.5px]">
+            {all.filter((r) => r.status === "Pending").length} pending
+          </p>
         </div>
         <div className="ml-auto flex gap-2">
           <Button variant="primary" onClick={() => openDialog({ kind: "newRequest", projectId: project.id })}>

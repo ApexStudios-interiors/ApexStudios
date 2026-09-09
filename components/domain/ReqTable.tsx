@@ -1,7 +1,7 @@
 "use client";
 
 import { useApp } from "@/context/AppContext";
-import { Project, StockRequest } from "@/lib/types";
+import type { Project, StockRequest } from "@/lib/types";
 import { amt, canApprove, dmy, fmt, isMoney, mno } from "@/lib/logic";
 import { RequestStatusBadge } from "@/components/domain/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";
@@ -9,7 +9,15 @@ import { td, tdNum, th, thNum, sub } from "@/components/ui/table";
 import { Button } from "@/components/ui/Button";
 import { Empty } from "@/components/ui/Empty";
 
-export function ReqTable({ project, reqs, moduleContext }: { project: Project; reqs: StockRequest[]; moduleContext?: boolean }) {
+export function ReqTable({
+  project,
+  reqs,
+  moduleContext,
+}: {
+  project: Project;
+  reqs: StockRequest[];
+  moduleContext?: boolean;
+}) {
   const { role, setRequestStatus } = useApp();
   const money = isMoney(role);
 
@@ -98,7 +106,11 @@ export function ReqTable({ project, reqs, moduleContext }: { project: Project; r
               <td className={tdNum}>
                 {r.qty.toLocaleString("en-IN")} {r.unit}
               </td>
-              {money && <td className={tdNum}>{amt(r) ? fmt(amt(r)) : <span className="text-muted-foreground">–</span>}</td>}
+              {money && (
+                <td className={tdNum}>
+                  {amt(r) ? fmt(amt(r)) : <span className="text-muted-foreground">–</span>}
+                </td>
+              )}
               <td className={td}>{dmy(r.need)}</td>
               <td className={td}>
                 <RequestStatusBadge status={r.status} />

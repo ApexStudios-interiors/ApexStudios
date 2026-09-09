@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useApp } from "@/context/AppContext";
-import { Project } from "@/lib/types";
+import type { Project } from "@/lib/types";
 import { dmy, fmtS, isMoney, pct, projProgress, totals } from "@/lib/logic";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -22,7 +22,10 @@ export function ProjectCard({ project }: { project: Project }) {
             <h3 className="text-base font-bold tracking-tight">{project.name}</h3>
             <div className="text-muted-foreground text-sm">{project.client}</div>
           </div>
-          <Badge variant={project.status === "Active" ? "default" : "secondary"} className="ml-auto flex-none">
+          <Badge
+            variant={project.status === "Active" ? "default" : "secondary"}
+            className="ml-auto flex-none"
+          >
             {project.status}
           </Badge>
         </div>
