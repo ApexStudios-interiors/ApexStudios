@@ -9,7 +9,7 @@ Legend: ✅ done and verified · 🟡 done, but something is unverified or defer
 
 ## Build 01 — Foundations
 
-Branch `build/01-foundations`. Baseline tag `proto-v1` at commit `e52d6cc`.
+Branch `build/01-foundations`, open as **PR #1**, CI green. Baseline tag `proto-v1` at commit `e52d6cc`.
 
 | Step | Status | Notes |
 |---|---|---|
@@ -27,7 +27,7 @@ Branch `build/01-foundations`. Baseline tag `proto-v1` at commit `e52d6cc`.
 | 3.12 Test harness | ✅ | Vitest with 100% branch gate on `features/billing/**` and `lib/money/**`; Playwright with three role projects. `pnpm test:rls` exits non-zero on an empty suite. 20 tests pass. |
 | 3.13 Sentry | 🟡 | Config written by hand (the wizard needs a DSN that does not exist). **Redaction filter and its 11 tests are done and passing.** Inert until the Sentry org exists. |
 | 3.14 Health endpoint | ✅ | `GET /api/health`. Returns 503 `{db:false,r2:false}` on placeholder credentials, which is correct. Leaks no configuration. |
-| 3.15 CI pipeline | 🟡 | `.github/workflows/ci.yml` written: install, typecheck, lint, format, unit tests, build, gitleaks, `pnpm audit`. Dependabot weekly. **No green run yet — nothing has been pushed.** |
+| 3.15 CI pipeline | ✅ | `.github/workflows/ci.yml`: install, typecheck, lint, format, unit tests, build, gitleaks, `pnpm audit`. Dependabot weekly. **Green on PR #1** (run 34372991215, all three jobs). First run failed on a gitleaks 403, not a finding — the job needed `pull-requests: read`; fixed and re-run. |
 | 3.16 Vercel project | ⛔ | `vercel.json` pins `bom1`, no `crons` array (Build 06 adds it). **Linking and env vars need a Vercel account.** |
 | 3.17 Freeze the prototype | ✅ | Tag `proto-v1`; `docs/reference/prototype-dataset.ts`; **60 baseline screenshots** in `e2e/__screenshots__/proto-v1/`, three roles × two themes, captured against a production build. |
 | 3.18 Progress tracker | ✅ | This file. |
@@ -48,7 +48,8 @@ Branch `build/01-foundations`. Baseline tag `proto-v1` at commit `e52d6cc`.
 | Lint catches a deliberate violation | ✅ `next/*` in a service, Drizzle in a service, `queries` in a component, `toLocaleString`, `localStorage`, `service_role` in a component — all six fire |
 | `pnpm db:link && pnpm db:push` | ⛔ no Supabase project to link (D14 removed the Docker alternative) |
 | `curl /api/health` → 200 | 🟡 returns 503, correctly, on placeholder credentials |
-| Green CI run and Vercel preview | ⛔ nothing pushed; no Vercel account |
+| Green CI run | ✅ PR #1, run 34372991215 |
+| Vercel preview | ⛔ no Vercel account |
 
 ---
 
@@ -57,6 +58,7 @@ Branch `build/01-foundations`. Baseline tag `proto-v1` at commit `e52d6cc`.
 | Was blocking | Resolved |
 |---|---|
 | Repository was public | Now **private**. Branch protection on `main` still to configure. |
+| Nothing pushed, no CI evidence | Branch and tag `proto-v1` pushed; **PR #1 open with CI green**. |
 | Git identity unset | Set to Kiranmai Duggirala &lt;app.voola@gmail.com&gt;. |
 | Docker Desktop not running | No longer relevant — **D14 removed Docker entirely**. |
 
