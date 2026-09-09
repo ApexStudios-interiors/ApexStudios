@@ -16,7 +16,9 @@ export default {
   out: "./supabase/migrations",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+    // No default. D14 removed the local stack, so a fallback would silently
+    // point at a database that does not exist instead of saying so.
+    url: process.env.DATABASE_URL ?? "",
   },
   verbose: true,
   strict: true,

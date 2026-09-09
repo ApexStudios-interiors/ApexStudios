@@ -18,12 +18,16 @@ Three roles see genuinely different data: **Admin**, **Site Supervisor**, **Clie
 pnpm install
 cp .env.example .env.local   # fill in Supabase + R2 credentials
 pnpm env:check               # confirms every key is present and well-formed
-pnpm db:start                # local Postgres + Auth (needs Docker)
-pnpm db:reset                # applies migrations + seed.sql
+pnpm db:link                 # link the hosted apex-dev project (ap-south-1)
+pnpm db:push                 # apply migrations to it
 pnpm dev                     # http://localhost:3000
 ```
 
-Requires Node >= 20, pnpm (via `corepack enable`) and Docker Desktop.
+Requires Node >= 20 and pnpm (via `corepack enable`). **No Docker** — there is no
+local database. Development runs against the hosted `apex-dev` project, so you
+need a network connection, and `apex-dev` is shared with everyone else on the
+team. Destructive experiments belong on a pull request's preview branch. See
+`docs/decisions.md` D14.
 
 ## Commands
 

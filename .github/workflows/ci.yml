@@ -3,9 +3,13 @@ name: CI
 # docs/architecture.md §10.1. The full pipeline is:
 #
 #   install → typecheck → lint → secret scan → unit tests → build
-#   → db (supabase start, migrations, seed)
-#   → RLS tests (pgTAP)          ◄── BLOCKING BY POLICY
+#   → db (Supabase preview branch for this PR: migrations, seed)
+#   → RLS tests (pgTAP, against that branch)   ◄── BLOCKING BY POLICY
 #   → integration tests → deploy preview → e2e → production
+#
+# D14: no Docker anywhere. There is no `supabase start` stage. The database
+# for the db, RLS and integration stages is the pull request's Supabase preview
+# branch (D10), reached over SUPABASE_DB_URL.
 #
 # The database, RLS, integration and e2e stages are added in Build 02 and
 # Build 10, when they have content.

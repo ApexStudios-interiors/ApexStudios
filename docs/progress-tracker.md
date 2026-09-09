@@ -21,7 +21,7 @@ Branch `build/01-foundations`. Baseline tag `proto-v1` at commit `e52d6cc`.
 | 3.6 Dependency set | ✅ | All groups installed. **`next-safe-action` 8.7.3 works on Next 16** — verified by a real browser round-trip, not a typecheck. **`sharp` 0.35.4 loads and renders locally** (libvips 8.18.6). |
 | 3.7 Strict TypeScript | ✅ | `noUncheckedIndexedAccess`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, `verbatimModuleSyntax`. 58 errors fixed. **All 16 non-null assertions removed** — no `!`, no `any` anywhere. |
 | 3.8 Validated environment | ✅ | `lib/env.ts`, `lib/env.client.ts`, `.env.example`, `pnpm env:check`. `.gitignore` no longer swallows `.env.example`. |
-| 3.9 Supabase local | 🟡 | `supabase init` done; `config.toml` committed with `jwt_expiry = 1800` and `enable_signup = false`. **`pnpm db:reset` unverified — Docker Desktop is not running.** |
+| 3.9 Supabase | 🟡 | `supabase init` done; `config.toml` committed with `jwt_expiry = 1800` and `enable_signup = false`, ready for `supabase config push`. **D14 removed Docker and the local stack**: scripts now target the linked hosted project. `pnpm db:link` / `db:push` unverified — the Supabase projects do not exist yet. |
 | 3.10 Drizzle | ✅ | `drizzle.config.ts` + `pnpm db:check-drift`. Passes as a no-op until Build 02 adds `db/schema`. |
 | 3.11 Architecture lint rules | ✅ | Six rule groups, each commented with its source rule. **Proved by deliberate violation, then reverted.** Patterns are composed so a narrower block cannot silently disable the D11 rule. |
 | 3.12 Test harness | ✅ | Vitest with 100% branch gate on `features/billing/**` and `lib/money/**`; Playwright with three role projects. `pnpm test:rls` exits non-zero on an empty suite. 20 tests pass. |
@@ -31,6 +31,7 @@ Branch `build/01-foundations`. Baseline tag `proto-v1` at commit `e52d6cc`.
 | 3.16 Vercel project | ⛔ | `vercel.json` pins `bom1`, no `crons` array (Build 06 adds it). **Linking and env vars need a Vercel account.** |
 | 3.17 Freeze the prototype | ✅ | Tag `proto-v1`; `docs/reference/prototype-dataset.ts`; **60 baseline screenshots** in `e2e/__screenshots__/proto-v1/`, three roles × two themes, captured against a production build. |
 | 3.18 Progress tracker | ✅ | This file. |
+| D14 Docker removed (post-plan) | ✅ | Decided 2026-09-09 mid-build. Local stack dropped; scripts, docs, CI and both env templates now target hosted projects. `pnpm db:reset` and `pnpm test:rls` refuse to run against `SUPABASE_PROD_PROJECT_REF`. |
 
 ### Verification run
 
@@ -45,21 +46,26 @@ Branch `build/01-foundations`. Baseline tag `proto-v1` at commit `e52d6cc`.
 | `pnpm env:check` | ✅ passes; fails naming the key when one is deleted |
 | Visual parity vs `proto-v1` | ✅ 60/60 screenshots identical after the strictness refactor **and** after the formatting pass |
 | Lint catches a deliberate violation | ✅ `next/*` in a service, Drizzle in a service, `queries` in a component, `toLocaleString`, `localStorage`, `service_role` in a component — all six fire |
-| `pnpm db:start && pnpm db:reset` | ⛔ Docker not running |
+| `pnpm db:link && pnpm db:push` | ⛔ no Supabase project to link (D14 removed the Docker alternative) |
 | `curl /api/health` → 200 | 🟡 returns 503, correctly, on placeholder credentials |
 | Green CI run and Vercel preview | ⛔ nothing pushed; no Vercel account |
 
 ---
 
+## Resolved since the plan
+
+| Was blocking | Resolved |
+|---|---|
+| Repository was public | Now **private**. Branch protection on `main` still to configure. |
+| Git identity unset | Set to Kiranmai Duggirala &lt;app.voola@gmail.com&gt;. |
+| Docker Desktop not running | No longer relevant — **D14 removed Docker entirely**. |
+
 ## Open blockers
 
 | Blocker | Blocks | Owner | Raised |
 |---|---|---|---|
-| **GitHub repo `ApexStudios-interiors/ApexStudios` is PUBLIC.** It will hold client names, GST details and billing logic. Nothing has been pushed. | Every push, CI, Vercel preview, Supabase branching | Voola | 2026-09-09 |
 | Branch protection on `main` not configured (require CI green, require one review) | Merge safety | Voola | 2026-09-09 |
-| `git config user.name` / `user.email` unset | Commits | Voola | 2026-09-09 |
-| Docker Desktop not running; no local Supabase stack | `pnpm db:reset`, Build 02 | Voola | 2026-09-09 |
-| No Supabase org or projects (`apex-prod`, `apex-dev`, ap-south-1), no Pro upgrade, no preview branching | Build 02 onward | Voola | 2026-09-09 |
+| **No Supabase org or projects** (`apex-prod`, `apex-dev`, ap-south-1), no Pro upgrade, no preview branching. **D14 makes this the critical path**: with no local database, Build 02 cannot start at all until `apex-dev` exists. | Build 02 onward | Voola | 2026-09-09 |
 | No Vercel team/project, no Pro, region `bom1` unset | Preview deploys, Build 06 cron | Voola | 2026-09-09 |
 | No Cloudflare R2 buckets or the two separate API tokens | Build 06 files | Voola | 2026-09-09 |
 | No Sentry org, DSN or auth token | Observability, source maps | Voola | 2026-09-09 |
@@ -75,7 +81,7 @@ Branch `build/01-foundations`. Baseline tag `proto-v1` at commit `e52d6cc`.
 ---
 
 ## Build 02 — Database
-Not started. Unblocked on decisions; blocked on Docker and the Supabase projects.
+Not started. Unblocked on decisions. **Blocked on the `apex-dev` Supabase project existing** — D14 removed the local stack, so there is no way to run a migration or a pgTAP test without it.
 
 ## Build 03 — Auth and RBAC
 Not started. Needs the transactional email provider for client magic links.

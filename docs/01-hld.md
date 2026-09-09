@@ -792,7 +792,7 @@ Production additions:
 
 | Environment | Supabase | Vercel |
 |---|---|---|
-| Local | `supabase start` (Docker) | `next dev` |
+| Local | hosted `apex-dev`, no Docker (D14) | `next dev` |
 | Production | Project `apex-prod` (bom1) | Production deployment (bom1) |
 
 The earlier spec explicitly excluded a staging environment. **I would push back on that
@@ -823,7 +823,7 @@ tests → build → Playwright e2e against preview → deploy.
 |---|---|---|
 | Unit | Vitest | Billing engine arithmetic (every branch), progress rollup, cost→client factor, money formatting, status transition legality |
 | Database | pgTAP | **Every RLS policy, per role.** Explicitly: a Client session selecting `internal_amount` must error, not return null. |
-| Integration | Vitest + local Supabase | RPCs: concurrent Delivered, double-billing prevention, negative-stock block |
+| Integration | Vitest + hosted Supabase (D14) | RPCs: concurrent Delivered, double-billing prevention, negative-stock block |
 | E2E | Playwright | The three role journeys from product guide §14, end to end |
 | Visual | Playwright snapshots | Badge colours, light/dark, Gantt rendering |
 

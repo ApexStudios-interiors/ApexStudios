@@ -3,7 +3,8 @@
 Every decision that blocks or shapes schema, security or scope. One entry each.
 
 Sources: `01-hld.md` §18 (D1–D10), `architecture.md` §15–16 (ADR-016, A-4, A-5, A-6), and
-`build/01-foundations.md` §0.1 (D11–D13, which surfaced while reading the code).
+`build/01-foundations.md` §0.1 (D11–D13, which surfaced while reading the code), plus D14, which
+surfaced while executing Build 01.
 
 **A recommendation is an argument, not an answer.** Only an entry with a named person and a date
 under `**Answered:**` is a decision. Any build file that reaches a `PENDING` decision it depends on
@@ -185,6 +186,44 @@ and the actual repository are all root-rooted.
 **Consequence:** `app/`, `components/`, `features/`, `lib/`, `db/` at the repository root. Moving
 to `src/` would churn every import for zero value. `../AGENTS.md` amended in the Build 01 PR; the
 other documents already assumed root.
+
+---
+
+### D14 — Is Docker part of the toolchain?
+
+**Question:** The local Supabase stack (`supabase start`) runs Postgres, GoTrue and PostgREST in
+Docker containers. That is where migrations, seed data and the pgTAP policy suite were going to
+run. Is Docker an acceptable dependency?
+**Answered:** 2026-09-09 by Voola
+**Answer:** No. **No Docker anywhere** — not on a developer machine, not in CI.
+**Consequence:** The local Supabase stack is out entirely.
+
+- **Development** runs against a hosted Supabase project, `apex-dev`, in ap-south-1. There is no
+  local database. Every query is a network round trip to Mumbai, which is the cost of the
+  decision and is worth knowing before Build 04 starts adding queries per page.
+- **Migrations** are applied with `supabase db push` against a linked project, over a connection
+  string. `supabase/migrations/*.sql` remains the source of truth (`../AGENTS.md` database rule 1)
+  and nothing is ever changed through the dashboard.
+- **Pull requests** get a Supabase preview branch (D10), which is a real Postgres with the
+  migrations and seed applied. That is where the pgTAP suite runs in CI, against a connection
+  string rather than a local container.
+- **`supabase start`, `supabase stop` and `supabase db reset` are not used.** `pnpm db:reset` now
+  resets the linked non-production project, which is destructive and refuses to touch production.
+- `supabase/config.toml` is kept: it is also the source for `supabase config push`, which is how
+  `jwt_expiry` and `enable_signup` reach the hosted projects.
+
+**What this costs.** Two things get harder and should not be discovered later:
+
+1. **Seed data is shared.** With no per-developer database, `apex-dev` is one dataset that
+   everyone edits. Destructive experiments belong on a preview branch, not on `apex-dev`.
+2. **Offline development stops working.** No network, no database.
+
+**What it does not cost.** The rule in `02-lld.md` §6.3 — test RLS from a client SDK session,
+never the SQL editor — is unaffected and arguably better served, because the policies now run on
+real Supabase infrastructure rather than a local approximation.
+
+Supersedes the "Local" row in `architecture.md` §5.2 and `01-hld.md` §13, and the Docker
+prerequisites in `build/01-foundations.md` §0.4 and `build/02-database.md`.
 
 ---
 

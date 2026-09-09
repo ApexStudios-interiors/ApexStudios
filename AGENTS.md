@@ -62,27 +62,36 @@ receive, **stop and flag it**. Do not "fix" it by hiding the value in the UI.
 ```bash
 pnpm install
 cp .env.example .env.local            # fill in Supabase + R2 credentials
-pnpm supabase start                   # local Postgres + Auth (needs Docker)
-pnpm db:reset                         # applies migrations + seed.sql
+pnpm env:check                        # every key present and well-formed
+pnpm db:link                          # link the apex-dev project (ap-south-1)
+pnpm db:push                          # apply migrations to it
 pnpm dev                              # http://localhost:3000
 ```
 
-Seeded logins are printed by `pnpm db:reset`. There is one account per role.
+**There is no Docker and no local database (D14).** Development runs against the
+hosted `apex-dev` project, so every query is a round trip to Mumbai and there is
+no offline mode. `apex-dev` is shared: destructive experiments belong on a
+pull request's Supabase preview branch, not on it.
+
+`pnpm db:reset` drops and re-seeds the **linked** project. It refuses to run
+against `SUPABASE_PROD_PROJECT_REF` and makes you type the ref back. Seeded
+logins are printed by it; there is one account per role.
 
 ## Commands
 
-| Command                    | What it does                                            |
-| -------------------------- | ------------------------------------------------------- |
-| `pnpm dev`                 | Next.js dev server                                      |
-| `pnpm build`               | Production build — must pass before any PR              |
-| `pnpm typecheck`           | `tsc --noEmit`, strict mode                             |
-| `pnpm lint`                | ESLint + Prettier check                                 |
-| `pnpm test`                | Vitest unit + integration                               |
-| `pnpm test:rls`            | pgTAP policy tests against local Supabase               |
-| `pnpm test:e2e`            | Playwright, all three role journeys                     |
-| `pnpm db:reset`            | Drop, re-migrate, re-seed local database                |
-| `pnpm db:migration <name>` | Scaffold a new timestamped migration file               |
-| `pnpm db:types`            | Regenerate Drizzle/Supabase types from the local schema |
+| Command                    | What it does                                               |
+| -------------------------- | ---------------------------------------------------------- |
+| `pnpm dev`                 | Next.js dev server                                         |
+| `pnpm build`               | Production build — must pass before any PR                 |
+| `pnpm typecheck`           | `tsc --noEmit`, strict mode                                |
+| `pnpm lint`                | ESLint + Prettier check                                    |
+| `pnpm test`                | Vitest unit + integration                                  |
+| `pnpm test:rls`            | pgTAP policy tests against the linked or preview database  |
+| `pnpm test:e2e`            | Playwright, all three role journeys                        |
+| `pnpm db:reset`            | Drop, re-migrate, re-seed the **linked** project. Guarded. |
+| `pnpm db:push`             | Apply pending migrations to the linked project             |
+| `pnpm db:migration <name>` | Scaffold a new timestamped migration file                  |
+| `pnpm db:types`            | Regenerate Drizzle/Supabase types from the local schema    |
 
 Before opening a PR: `pnpm typecheck && pnpm lint && pnpm test && pnpm test:rls && pnpm build`.
 

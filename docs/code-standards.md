@@ -222,7 +222,8 @@ Domain errors are typed and mapped at the action boundary (`02-lld.md` §10):
 - **Unit** (Vitest) — pure services. Billing at 100% branch coverage.
 - **Database** (pgTAP) — every policy, every role, from a **client SDK session**. Never the SQL
   editor.
-- **Integration** (Vitest + local Supabase) — RPCs, concurrency, illegal transitions. Concurrency
+- **Integration** (Vitest + a hosted Supabase project — the linked dev project, or the PR's
+  preview branch in CI; there is no local stack, D14) — RPCs, concurrency, illegal transitions. Concurrency
   tests run in a loop; passing once proves nothing.
 - **E2E** (Playwright) — the three role journeys, with saved storage state per role.
 - **Visual** (Playwright snapshots) — badge colours, light and dark, the Gantt.

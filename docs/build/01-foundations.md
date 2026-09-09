@@ -118,8 +118,10 @@ several depend on the one above.
       *Not needed to finish Build 01, but the DNS propagation delay makes it worth starting now.*
 - [ ] **`CRON_SECRET`** — generate a 32-byte random value (`openssl rand -base64 32`). Used in
       Build 06.
-- [ ] Local machine: **Node 20+**, **pnpm 9+**, **Docker Desktop running**, **Supabase CLI**,
-      **`psql`**, and the **Vercel CLI**.
+- [ ] Local machine: **Node 20+**, **pnpm 9+**, and the **Vercel CLI**. The Supabase CLI is a
+      dev dependency, so `pnpm install` provides it.
+      **Superseded by D14: Docker Desktop and `psql` are NOT required.** There is no local
+      database; development runs against the hosted `apex-dev` project.
 
 ### 0.5 Book, don't block
 
@@ -355,9 +357,13 @@ Confirm `.env.local` is gitignored (it is) and that `.env.example` contains no r
 
 ### 3.9 Supabase local development
 
+> **Superseded by D14.** There is no local stack and no Docker. `supabase init` still runs, and
+> `config.toml` is still committed, but the database is the hosted `apex-dev` project reached with
+> `pnpm db:link` and `pnpm db:push`. `supabase start` / `stop` / `db reset --local` are not used.
+
 ```bash
-pnpm supabase init
-pnpm supabase start          # requires Docker
+pnpm exec supabase init
+pnpm db:link                 # links apex-dev; no Docker
 ```
 Commit `supabase/config.toml`. Set the local JWT expiry to 1800s to match production
 (`01-hld.md` §6). Add scripts:
@@ -370,7 +376,8 @@ Commit `supabase/config.toml`. Set the local JWT expiry to 1800s to match produc
 "db:diff":      "supabase db diff"
 ```
 
-`pnpm db:reset` must succeed against an empty `supabase/migrations/` before Build 02 starts.
+`pnpm db:push` must succeed against an empty `supabase/migrations/` before Build 02 starts.
+(D14: `pnpm db:reset` now targets the linked project and is guarded against production.)
 
 ### 3.10 Drizzle configuration
 

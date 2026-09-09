@@ -33,7 +33,9 @@ who sees what is decided here, and schema is the one thing that does not roll ba
 - [ ] **Real inventory unit list** from Apex (`bag`, `sqft`, `nos`, `kg`, `ltr`, …). Used for
       seed realism and for the unit dropdown in Build 07.
 - [ ] **`apex-dev` Supabase project reachable**, and `DATABASE_URL` in `.env.local`.
-- [ ] **Docker running** — `pnpm supabase start` must work before you begin.
+- [ ] **A linked `apex-dev` project** — `pnpm db:link` then `pnpm db:push` must work before you
+      begin. **D14 superseded the Docker prerequisite**: there is no local stack. pgTAP runs
+      against the linked project locally and the PR's preview branch in CI.
 
 ---
 

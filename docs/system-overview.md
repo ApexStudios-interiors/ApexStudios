@@ -387,7 +387,7 @@ Per-minute cron requires Vercel Pro.
 ```mermaid
 flowchart TB
     subgraph DEV["Local"]
-        D1["next dev + supabase start<br/>Docker Postgres, seed.sql"]
+        D1["next dev + hosted apex-dev<br/>no Docker (D14), seed.sql"]
     end
     subgraph PR["Per pull request"]
         P1["Vercel preview"]

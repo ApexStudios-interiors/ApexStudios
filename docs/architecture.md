@@ -202,7 +202,7 @@ issues six queries pays six round trips; at 200 ms cross-region that is 1.2 s of
 
 | Environment | Compute | Database | Storage | Data |
 |---|---|---|---|---|
-| **Local** | `next dev` | `supabase start` (Docker) | R2 dev bucket or MinIO | `seed.sql` |
+| **Local** | `next dev` | hosted `apex-dev` (ap-south-1) — **no Docker, no local DB** (D14) | R2 dev bucket | `seed.sql`, pushed |
 | **Preview** | Vercel preview per PR | Supabase **branch** (ephemeral, per PR) | R2 `apex-preview` | Seed only |
 | **Production** | Vercel production | Supabase `apex-prod` | R2 `apex-prod` + `apex-backups` | Real |
 
@@ -519,7 +519,7 @@ push / PR
    ├─ lint                 eslint + prettier + import restrictions
    ├─ secret scan          gitleaks
    ├─ unit tests           vitest — billing 100% branch coverage gate
-   ├─ db: supabase start → migrations → seed
+   ├─ db: Supabase preview branch → migrations → seed   (no Docker, D14)
    ├─ RLS tests            pgTAP, every policy, every role      ◄── blocking
    ├─ integration tests    RPCs, concurrency, illegal transitions
    ├─ build                next build
