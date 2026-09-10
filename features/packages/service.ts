@@ -51,6 +51,13 @@ export function weightedProgress(items: { allocated: number; progressPct: number
  * of its tasks — a 3-week task at 100% and a 1-week task at 0% is 75%, not
  * 50%. Mirrors, and is the oracle for, the same trigger's `v_pkg_progress`
  * calculation (`sum(duration_weeks * progress_pct) / sum(duration_weeks)`).
+ *
+ * The identical formula also lives at features/schedule/service.ts's own
+ * `weightedProgress` — that copy is what the Gantt's live per-phase
+ * percentage is actually computed from at request time; this one exists
+ * purely to check the trigger's arithmetic in isolation. Not factored into
+ * one shared function: each is a four-line pure function owned by the
+ * feature that tests it against its own SQL counterpart.
  */
 export function durationWeightedProgress(tasks: { durationWeeks: number; progressPct: number }[]): number {
   const totalWeeks = tasks.reduce((sum, t) => sum + t.durationWeeks, 0);

@@ -17,11 +17,15 @@ export interface Package {
   done?: boolean;
 }
 
+// `w` (start week) and `d` (duration) are gone (build/05-schedule-and-progress.md
+// §2, ADR-011): the real schema stores a real start_date + duration_weeks,
+// and the Gantt, AddTaskDialog and TaskDetailDialog — this type's only three
+// consumers of those two fields — are all converted to real data now.
+// `p` (progress) and `pkg` (phase) stay: MilestoneTable's Billing tab still
+// reads them from this mock array until Build 09 converts it.
 export interface Task {
   t: string;
   owner: string;
-  w: number;
-  d: number;
   p: number;
   pkg?: string;
 }

@@ -257,3 +257,49 @@ question anyone was asked — both are findings.
 | Schedule, Updates, Stock, Billing package tabs — still `AppContext` | Builds 05–09, in that order per the build sequence |
 | `markPhaseComplete` | Deferred to Build 05, where the "phase has no tasks" precondition can be tested |
 | A vendor-name lead (e.g. "Laxmi Multi Services" in the prototype) has no real representation — `lead_profile_id` only points at staff profiles | Cosmetic; not blocking |
+
+## Build 05 — Schedule, Tasks, the Gantt on Real Dates & Progress Rollup
+
+Branch `build/05-schedule`. **Verified end to end**: real task CRUD and progress journeys against
+`apex-dev` from a real production build (Playwright, all three roles), 66/66 visual-baseline
+screenshots passing against `proto-v1` (documented differences only, one new route baselined),
+46/46 pgTAP, 37/37 integration tests, 81/81 unit tests (including under `TZ=America/New_York`),
+typecheck/lint/build all clean. Full `--workers=1` e2e run (matching CI): 84 passed, 24 skipped
+(role-inapplicable routes), 0 failed.
+
+### What shipped
+
+| Area | Status | Notes |
+|---|---|---|
+| `rpc_set_task_progress`, `rpc_mark_phase_complete` | ✅ | Both `security definer`, row-locking, membership+role checks, never-reopen-billed/paid logic, `fn_audit` calls. `rpc_mark_phase_complete`'s Server Action and UI wiring are Build 09's, per this build's own deliverables list — the RPC and its tests ship now. |
+| `features/schedule/{schema,service,queries,actions}.ts` | ✅ | Real date arithmetic (`weekIndex`, `taskEndDate`, `dateAtWeek`, `isLate`, `viewportWeeks`, `monthHeaders`, `weightedProgress`), all pure and unit-tested. `getScheduleForProject`/`getScheduleForPackage` role-branch to `v_package_site`/`v_phase_site` for non-admin. `createTask`, `updateTask`, `setTaskProgress` (all `siteAction`), plus `getOwnerOptions`/`getPhaseOptions`/`getTaskForEdit`. |
+| `Gantt.tsx` rewrite | ✅ | Real dates and a scrolling viewport instead of a fixed 14-column grid; role-unaware (`canEdit` prop only). A real, pre-existing (since Build 01) stacking bug was found and fixed in the same file — see below. |
+| `AddTaskDialog`, `TaskDetailDialog` | ✅ | Real Phase/Owner dropdowns (FKs, not free text). `TaskDetailDialog`'s progress slider is this build's one `useOptimistic` use: instant visual update, commit-on-release, automatic revert on failure. |
+| Schedule surfaces → routes | ✅ | `projects/[projectId]/schedule` (all packages, collapsible cards) and the new `packages/[moduleId]/schedule` route, both real Server Components now. |
+| `lib/logic.ts`/`lib/data.ts`/`lib/types.ts` cleanup | ✅ | `progress()` deleted (zero remaining callers post-conversion). `Task`'s mock `w`/`d` fields removed; `p`/`pkg` kept (MilestoneTable's Billing tab still reads them until Build 09). |
+| Tests | ✅ | pgTAP: both RPCs `security definer` and not anon-executable, `tasks`' select policy shape, the ancestry trigger's own `security definer` fix. Unit: every build-file-specified date-arithmetic edge case, 21 tests, timezone-independent. Integration: T-17, never-reopen-billed, refusals, and a direct D24 regression test. Playwright: one journey per role (below). |
+
+### Real bugs found only by actually running it
+
+| Finding | Where |
+|---|---|
+| **A site user could never create a task, ever, since Build 02.** `trg_tasks_check_ancestry` read the admin-only `phases` table under plain `SECURITY INVOKER`, so its own lookup returned nothing under RLS for any non-admin caller, raising a false "phase does not exist" for a phase the caller was a real member of. Fixed by making the trigger `SECURITY DEFINER` — it validates a structural invariant with values the client doesn't control, so bypassing RLS for this one internal check is correct. | `supabase/migrations/20260911090002_fix_tasks_ancestry_trigger.sql`, D24 |
+| **`createTask`, and separately `getScheduleForProject`/`getScheduleForPackage`, crashed or returned empty for site/client** — both queried the admin-only base tables `packages`/`phases` directly. The same root cause as Build 04's `v_phase_client` finding, rediscovered twice more in this build alone: an incidental lookup against an admin-only table, inside a code path a non-admin role can reach, silently fails under RLS. Fixed by routing through `v_package_site`/`v_phase_site`. | `features/schedule/{actions,queries}.ts` |
+| **Every week-cell in a Gantt row is `position: relative` (unchanged since Build 01), so a multi-week task bar's own overflow past its first week was visually correct but painted BELOW later cells in the same row** — same-level positioned siblings stack by DOM order, and later weeks come later in the DOM. Two consequences: every multi-week bar was clickable only in its first ~one-week segment (confirmed via `elementFromPoint`, not a screenshot — the overflow rendered correctly, it just didn't receive the click), and the "today" column's grey highlight painted a visible grey patch into any bar crossing it. Fixed with a `z-10` on just the bar's own starting cell. Predates Build 05 entirely; found only because this build's own Playwright journeys are the first to actually click a multi-week bar. | `components/domain/Gantt.tsx`, D25 |
+| **A stale visual baseline, unrelated to any Build 05 code**: `project-dashboard`/`project-packages`/`package-detail` showed the Swimming Pool package's progress as 14% against a database that has always (since Build 02's seed) computed 16% for its current task data (verified by hand against the rollup trigger's own formula: `round((2×100+3×100)/32) = 16`). Refreshed rather than treated as a regression. | D25 |
+
+### Decisions
+
+D23 (this build's four prerequisite confirmations), D24 (the ancestry-trigger finding) and D25
+(three visual-baseline findings, two accepted-as-correct and one real fix) all recorded.
+
+### Still open going into Build 06
+
+| Item | Blocks |
+|---|---|
+| TOTP enrollment UI (D22) | A real admin/owner account cannot use any admin-gated action today |
+| Updates, Stock, Billing package tabs — still `AppContext` | Builds 06–09, in that order per the build sequence |
+| `rpc_mark_phase_complete`'s Server Action and UI (the Billing tab's "Mark Complete" button) | Build 09 |
+| The build file's own Playwright spec item "...and the phase shows as Billable in the Billing tab" is not verifiable yet — that tab is still mock data. T-17 (the RPC's actual billing_status flip) is covered directly against the database in `tests/integration/schedule.test.ts` instead. | Build 09 |
+| Every seeded task has `owner_profile_id is null` — the prototype's owner values (vendor/gang names like "Sai Waterproofing", role placeholders like "Client") have no real profile to point at, the same class of gap as Build 04's package-lead finding. Renders correctly as "To assign". | Cosmetic; not blocking |
+| No existing schedule (MS Project/Excel) was provided to import (D23's own open item) — Build 05 proceeded on the documented assumption that tasks are entered by hand | Build 10's task importer, only if a real file surfaces |

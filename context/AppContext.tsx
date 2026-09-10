@@ -22,7 +22,7 @@ export type DialogState =
   | { kind: "addModule"; projectId: string }
   | { kind: "editModule"; projectId: string; moduleId: string }
   | { kind: "addTask"; projectId: string; moduleId: string }
-  | { kind: "taskDetail"; projectId: string; moduleId: string; taskIndex: number }
+  | { kind: "taskDetail"; projectId: string; moduleId: string; taskId: string }
   | { kind: "newRequest"; projectId: string; moduleId?: string }
   | { kind: "newApproval"; projectId: string; moduleId?: string }
   | { kind: "approvalPhotos"; approvalId: string }
@@ -59,12 +59,9 @@ interface AppContextValue {
     moduleId: string,
     m: { name: string; allocated: number; internal: number; lead: string; status: string }
   ) => void;
-  addTask: (
-    projectId: string,
-    moduleId: string,
-    t: { t: string; pkg: string; owner: string; w: number; d: number }
-  ) => void;
-  updateTask: (projectId: string, moduleId: string, taskIndex: number, patch: Partial<Task>) => void;
+  // addTask/updateTask removed: build/05-schedule-and-progress.md converts
+  // AddTaskDialog and TaskDetailDialog to real Server Actions
+  // (features/schedule/actions.ts), the only two callers these ever had.
   addRequest: (
     projectId: string,
     r: { mod: string; pkg?: string; item: string; qty: number; unit: string; rate: number; need: string }
@@ -260,44 +257,6 @@ export function AppProvider({
     []
   );
 
-  const addTask = useCallback(
-    (
-      projectId: string,
-      moduleId: string,
-      t: { t: string; pkg: string; owner: string; w: number; d: number }
-    ) => {
-      setData((prev) => {
-        const next = clone(prev);
-        const mod = next.projects.find((x) => x.id === projectId)?.modules.find((x) => x.id === moduleId);
-        if (!mod) return prev;
-        mod.tasks.push({
-          t: t.t || "New task",
-          owner: t.owner || "To assign",
-          w: t.w || 1,
-          d: t.d || 1,
-          p: 0,
-          pkg: t.pkg,
-        });
-        return next;
-      });
-    },
-    []
-  );
-
-  const updateTask = useCallback(
-    (projectId: string, moduleId: string, taskIndex: number, patch: Partial<Task>) => {
-      setData((prev) => {
-        const next = clone(prev);
-        const mod = next.projects.find((x) => x.id === projectId)?.modules.find((x) => x.id === moduleId);
-        const task = mod?.tasks[taskIndex];
-        if (!task) return prev;
-        Object.assign(task, patch);
-        return next;
-      });
-    },
-    []
-  );
-
   const addRequest = useCallback(
     (
       projectId: string,
@@ -470,8 +429,6 @@ export function AppProvider({
       markPhaseDone,
       addModule,
       editModule,
-      addTask,
-      updateTask,
       addRequest,
       addApproval,
       addApprovalPhotos,
@@ -497,8 +454,6 @@ export function AppProvider({
       markPhaseDone,
       addModule,
       editModule,
-      addTask,
-      updateTask,
       addRequest,
       addApproval,
       addApprovalPhotos,
