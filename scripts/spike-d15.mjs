@@ -7,7 +7,8 @@
  * service_role connection both bypass RLS and will report a broken policy as
  * working (AGENTS.md database rule 8).
  *
- * Usage:  pnpm spike:d15
+ * Usage:  pnpm spike:d15   — run it straight after `pnpm db:push`, before the
+ *          seed and before anything is built on top of migration 0014.
  * Needs:  DATABASE_URL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
  *         SUPABASE_SERVICE_ROLE_KEY  — against a NON-PRODUCTION project.
  *
@@ -47,6 +48,9 @@ const admin = createClient(URL, SERVICE, { auth: { persistSession: false } });
 const email = `spike-${randomUUID()}@example.invalid`;
 const password = randomUUID();
 let userId;
+let spikeOrgId;
+let spikeClientId;
+let spikeProjectId;
 let verdict = "UNKNOWN";
 
 try {
@@ -62,21 +66,36 @@ try {
   if (cErr) throw cErr;
   userId = created.user.id;
 
-  const [org] = await sql`select id from public.orgs limit 1`;
-  if (!org) throw new Error("No org row. Run the seed first: pnpm db:reset");
-  const [project] = await sql`select id from public.projects where deleted_at is null limit 1`;
-  if (!project) throw new Error("No project row. Run the seed first: pnpm db:reset");
+  // Self-sufficient on purpose. The spike answers a question about migration
+  // 0014, so it has to be runnable immediately after `db:push` — before the
+  // seed, and before anything is built on top of an assumption that may not
+  // hold. It makes its own org, client and project, and removes them again.
+  const [org] = await sql`
+    insert into public.orgs (name, legal_name) values ('D15 Spike Org', 'D15 Spike Org')
+    returning id`;
+  spikeOrgId = org.id;
+
+  const [client] = await sql`
+    insert into public.clients (org_id, name) values (${spikeOrgId}, 'D15 Spike Client')
+    returning id`;
+  spikeClientId = client.id;
+
+  const [project] = await sql`
+    insert into public.projects (org_id, client_id, code, name, start_date)
+    values (${spikeOrgId}, ${spikeClientId}, 'D15-SPIKE', 'D15 Spike Project', current_date)
+    returning id`;
+  spikeProjectId = project.id;
 
   await sql`
     insert into public.profiles (id, org_id, full_name, email, role)
-    values (${userId}, ${org.id}, 'Spike Client', ${email}, 'client')
+    values (${userId}, ${spikeOrgId}, 'Spike Client', ${email}, 'client')
     on conflict (id) do update set role = 'client'`;
   await sql`
     insert into public.project_members (project_id, profile_id)
-    values (${project.id}, ${userId}) on conflict do nothing`;
+    values (${spikeProjectId}, ${userId}) on conflict do nothing`;
   await sql`
     insert into public.spike_costs (project_id, public_val, secret_val)
-    values (${project.id}, 100.00, 999.99)`;
+    values (${spikeProjectId}, 100.00, 999.99)`;
 
   console.log("3. signing in as that client (real JWT, RLS applies)");
   const asClient = createClient(URL, ANON, { auth: { persistSession: false } });
@@ -129,6 +148,10 @@ try {
       await sql`delete from public.profiles where id = ${userId}`;
       await admin.auth.admin.deleteUser(userId);
     }
+    // Reverse order of creation, so foreign keys are satisfied on the way out.
+    if (spikeProjectId) await sql`delete from public.projects where id = ${spikeProjectId}`;
+    if (spikeClientId) await sql`delete from public.clients where id = ${spikeClientId}`;
+    if (spikeOrgId) await sql`delete from public.orgs where id = ${spikeOrgId}`;
   } catch (e) {
     console.error("  cleanup incomplete:", e.message);
   }

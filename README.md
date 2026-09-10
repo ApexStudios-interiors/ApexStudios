@@ -18,8 +18,8 @@ Three roles see genuinely different data: **Admin**, **Site Supervisor**, **Clie
 pnpm install
 cp .env.example .env.local   # fill in Supabase + R2 credentials
 pnpm env:check               # confirms every key is present and well-formed
-pnpm db:link                 # link the hosted apex-dev project (ap-south-1)
-pnpm db:push                 # apply migrations to it
+pnpm db:inspect              # read-only: what is already in that database?
+pnpm db:bootstrap            # migrations -> D15 spike -> seed -> pgTAP -> tests
 pnpm dev                     # http://localhost:3000
 ```
 

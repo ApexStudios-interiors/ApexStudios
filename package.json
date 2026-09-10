@@ -29,7 +29,8 @@
     "spike:d15": "node scripts/spike-d15.mjs",
     "test:integration": "vitest run --config vitest.integration.mts",
     "check:release": "node scripts/check-release-ready.mjs",
-    "db:inspect": "node scripts/inspect-db.mjs"
+    "db:inspect": "node scripts/inspect-db.mjs",
+    "db:bootstrap": "node scripts/bootstrap.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",
