@@ -10,6 +10,7 @@ import { NewRequestDialog } from "./NewRequestDialog";
 import { NewApprovalDialog } from "./NewApprovalDialog";
 import { ApprovalPhotosDialog } from "./ApprovalPhotosDialog";
 import { PostUpdateDialog } from "./PostUpdateDialog";
+import { EditUpdateDialog } from "./EditUpdateDialog";
 import { BillUploadDialog } from "./BillUploadDialog";
 import { BillViewDialog } from "./BillViewDialog";
 import { InviteUserDialog } from "./InviteUserDialog";
@@ -39,6 +40,8 @@ export function DialogHost() {
       return <ApprovalPhotosDialog approvalId={dialog.approvalId} />;
     case "postUpdate":
       return <PostUpdateDialog projectId={dialog.projectId} moduleId={dialog.moduleId} />;
+    case "editUpdate":
+      return <EditUpdateDialog updateId={dialog.updateId} body={dialog.body} />;
     case "billUpload":
       return <BillUploadDialog billId={dialog.billId} />;
     case "billView":

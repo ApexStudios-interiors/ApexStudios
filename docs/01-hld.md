@@ -664,14 +664,15 @@ covers the case where a function times out mid-job — a reaper requeues expired
 
 | Job | Kind | Schedule | Purpose |
 |---|---|---|---|
-| `backup.nightly` | Scheduled | 01:00 IST | `pg_dump` logical backup → R2 `apex-backups/`. **P1 alert on failure.** |
-| `inventory.reconcile` | Scheduled | 02:00 IST | Recompute `qty_on_hand` from `stock_movements`; alert on drift |
+| `backup.nightly` | **D17: GitHub Actions, not Vercel Cron** | 01:00 IST | `pg_dump` logical backup → R2 `apex-backups/`, reported to the `jobs` table via `POST /api/backup/report`. **P1 alert on failure.** |
+| `backup.verify` | Scheduled (Vercel Cron) | 02:30 IST | D17's own requirement: HeadObject the expected backup key; throws (→ `failed`, alerted) if it's missing. The assertion that the object really exists, independent of whether the writer thinks it succeeded. |
+| `inventory.reconcile` | Scheduled | 02:00 IST | Recompute `qty_on_hand` from `stock_movements`; alert on drift. **Build 07** |
 | `jobs.drain` | Scheduled | every minute | Pick up queued work |
 | `jobs.reap` | Scheduled | hourly | Requeue jobs whose `lease_until` expired |
 | `attachment.thumbnail` | Queued | on upload confirm | Resize to 400px, store under `thumb/` |
-| `bill.pdf` | Queued | on bill submit | Render RA bill PDF, store in R2, attach |
+| `bill.pdf` | Queued | on bill submit | Render RA bill PDF, store in R2, attach. **Build 09** |
 | `attachment.orphan_sweep` | Scheduled | weekly | Delete R2 objects with no `attachments` row, older than 24h |
-| `project.archive` | Scheduled | weekly | Archive projects closed > 12 months |
+| `project.archive` | Scheduled | weekly | Archive projects closed > 12 months (`projects.completed_at`, trigger-maintained) |
 
 Excel export is **not** a job — `exceljs` renders fast enough to stream directly from a route
 handler on request. One less moving part.

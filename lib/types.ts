@@ -102,16 +102,11 @@ export interface Bill {
   files: BillFile[];
 }
 
-export interface Update {
-  id: string;
-  proj: string;
-  mod: string;
-  date: string;
-  by: string;
-  text: string;
-  men: number;
-  photos: number;
-}
+// `Update` is gone (build/06-files-jobs-daily-updates.md §4.2): Daily
+// Updates is real data now (features/updates/queries.ts's own `UpdateDTO`),
+// and the prototype's `men` (mentions) field was never wired to anything —
+// dropped rather than carried into the real DTO, per the build file's own
+// instruction.
 
 export type ApprovalStatus = "Pending" | "Approved" | "Rejected";
 
@@ -154,7 +149,6 @@ export interface AppData {
   projects: Project[];
   requests: StockRequest[];
   bills: Bill[];
-  updates: Update[];
   approvals: Approval[];
   team: TeamMember[];
   inventory: InventoryItem[];

@@ -1,0 +1,70 @@
+name: backup.nightly
+
+# D17 (docs/decisions.md, "the build file calls this D17"): a Vercel
+# serverless function cannot run pg_dump — no binary in that runtime, and
+# its timeout is far shorter than a growing logical dump. ubuntu-latest has
+# a real pg_dump.
+#
+# 19:30 UTC = 01:00 IST (01-hld.md §10.2's own schedule). GitHub Actions
+# cron is UTC, same as Vercel's — AGENTS.md background job rule 4 applies
+# here just as much as it does to vercel.json.
+#
+# This workflow WRITES the backup and reports its own outcome. A second,
+# independent check (/api/cron/backup.verify, a real Vercel cron at 02:30
+# IST) reads the bucket half an hour later and fails if the object is
+# missing — D17's own requirement that the alert asserts a real object
+# exists, not merely that this job didn't throw. Either can fail without
+# silencing the other.
+
+on:
+  schedule:
+    - cron: "30 19 * * *"
+  workflow_dispatch: {} # for a manual re-run after a failure (see the backup-failed.md runbook)
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Install PostgreSQL client and AWS CLI
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client awscli
+
+      - name: Dump and compress
+        id: dump
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          KEY="pg_dump/$(date -u +%F).sql.gz"
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          pg_dump "$SUPABASE_DB_URL" --no-owner --no-privileges | gzip > backup.sql.gz
+
+      # A token scoped ONLY to apex-backups (build §0.1) — distinct from the
+      # app's own R2 credentials, which must never be able to reach this
+      # bucket at all.
+      - name: Upload to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          set -euo pipefail
+          aws s3 cp backup.sql.gz \
+            "s3://${{ secrets.R2_BACKUP_BUCKET }}/${{ steps.dump.outputs.key }}" \
+            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+
+      - name: Report success
+        if: success()
+        run: |
+          curl -sf -X POST "${{ secrets.APP_URL }}/api/backup/report" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d '{"ok": true, "key": "${{ steps.dump.outputs.key }}"}'
+
+      - name: Report failure
+        if: failure()
+        run: |
+          curl -sf -X POST "${{ secrets.APP_URL }}/api/backup/report" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d '{"ok": false, "error": "backup-nightly workflow failed — see the Actions run log"}'

@@ -27,6 +27,7 @@ export type DialogState =
   | { kind: "newApproval"; projectId: string; moduleId?: string }
   | { kind: "approvalPhotos"; approvalId: string }
   | { kind: "postUpdate"; projectId: string; moduleId?: string }
+  | { kind: "editUpdate"; updateId: string; body: string }
   | { kind: "billUpload"; billId: string }
   | { kind: "billView"; billId: string }
   | { kind: "inviteUser" }
@@ -71,7 +72,6 @@ interface AppContextValue {
     a: { mod: string; pkg?: string; type: string; item: string; need: string; note: string; photos: number }
   ) => void;
   addApprovalPhotos: (approvalId: string, count: number) => void;
-  addUpdate: (projectId: string, u: { mod: string; date: string; text: string; photos: number }) => void;
   uploadBillFiles: (billId: string, files: BillFile[]) => void;
   addProject: (p: {
     name: string;
@@ -323,27 +323,6 @@ export function AppProvider({
     });
   }, []);
 
-  const addUpdate = useCallback(
-    (projectId: string, u: { mod: string; date: string; text: string; photos: number }) => {
-      setData((prev) => {
-        const next = clone(prev);
-        const by = next.team.find((t) => t.r === role)?.n.split(" ")[0] || "You";
-        next.updates.unshift({
-          id: "u" + Date.now(),
-          proj: projectId,
-          mod: u.mod,
-          date: u.date,
-          by,
-          text: u.text || "Update",
-          men: 0,
-          photos: u.photos,
-        });
-        return next;
-      });
-    },
-    [role]
-  );
-
   const uploadBillFiles = useCallback((billId: string, files: BillFile[]) => {
     setData((prev) => {
       const next = clone(prev);
@@ -432,7 +411,6 @@ export function AppProvider({
       addRequest,
       addApproval,
       addApprovalPhotos,
-      addUpdate,
       uploadBillFiles,
       addProject,
       inviteUser,
@@ -457,7 +435,6 @@ export function AppProvider({
       addRequest,
       addApproval,
       addApprovalPhotos,
-      addUpdate,
       uploadBillFiles,
       addProject,
       inviteUser,

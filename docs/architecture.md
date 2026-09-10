@@ -350,17 +350,23 @@ transition to infrequent-access. This is driven by two constraints:
 
 | Property | Value |
 |---|---|
-| Method | Nightly `pg_dump` logical backup via `/api/cron/backup.nightly` → R2 `apex-backups/` |
-| Schedule | 01:00 IST |
-| Retention | 30 daily · 12 monthly (first-of-month promoted) |
+| Method | **D17 (docs/decisions.md): a scheduled GitHub Actions workflow** (`.github/workflows/backup-nightly.yml`), not a Vercel function — there is no `pg_dump` binary in that runtime and its timeout is far shorter than a growing logical dump. `ubuntu-latest` runs real `pg_dump`, pipes to `gzip`, uploads to R2 `apex-backups/` with the AWS CLI using a token scoped to that bucket only, then calls `POST /api/backup/report` (Bearer `CRON_SECRET`) to record the outcome as a `backup.nightly` job row — same table, same Admin ops page as every other job. |
+| Schedule | 19:30 UTC = 01:00 IST (the workflow's own cron, GitHub Actions schedules are UTC same as Vercel's) |
+| Verification | **`/api/cron/backup.verify`, a real Vercel cron job, 21:00 UTC = 02:30 IST daily** — `HeadObject`s that day's expected key in `apex-backups` and lets a missing object THROW; its failure (landing in `jobs` as `failed`) is the alert. D17's own requirement: "assert an object was actually written, not merely that the handler did not throw." |
+| Retention | 30 daily · 12 monthly (first-of-month promoted) — an R2 lifecycle rule on `apex-backups`, not application code |
 | Encryption | R2 server-side; bucket private, separate credentials from the app bucket |
 | RPO | 24 hours (free tier) → **15 minutes once on Supabase Pro with PITR** |
 | RTO | 4 hours |
-| Verification | **Quarterly restore drill into a scratch Supabase project, with a named owner and a calendar entry.** |
+| Drill | **Quarterly restore drill into a scratch Supabase project, with a named owner and a calendar entry.** |
 
-The verification line is the important one. An unverified backup is a belief, not a control.
-The drill is done: restore the dump, run the pgTAP suite against it, spot-check the most
-recent bill's arithmetic, record the elapsed time, delete the scratch project.
+The verification line is still the important one, now split into two real, separately-scheduled
+checks rather than one job trusted to both write and grade its own homework: the GitHub Actions
+workflow WRITES the backup and reports its own outcome; `backup.verify`, running independently
+half an hour later on Vercel, checks that a real object landed. Either one can fail without
+silencing the other. An unverified backup is a belief, not a control.
+
+The quarterly drill is done: restore the dump, run the pgTAP suite against it, spot-check the
+most recent bill's arithmetic, record the elapsed time, delete the scratch project.
 
 **Strong recommendation: move to Supabase Pro before the first real client is billed through
 the system.** Free tier has no point-in-time recovery and pauses after seven days of
@@ -488,7 +494,7 @@ open. Putting these on the Admin dashboard means they get looked at.
 | Alert | Condition | Channel | Severity |
 |---|---|---|---|
 | Site down | `/api/health` failing 3× consecutively | Email + phone | P1 |
-| Nightly backup failed | Job failure or no object written by 02:00 IST | Email | **P1** |
+| Nightly backup failed | The GitHub Actions workflow fails, or `backup.verify` finds no object written by 02:30 IST | Email | **P1** |
 | Error rate spike | > 10 errors / 5 min in Sentry | Email | P2 |
 | Inventory drift detected | Reconcile job finds cache ≠ ledger | Email | P2 |
 | Job failed permanently | Any `jobs` row reaches `status='failed'` | Admin ops page + Sentry | P2 |
@@ -612,7 +618,7 @@ Concise, in the repo at `docs/runbooks/`. Each is a numbered procedure someone c
 | Runbook | Trigger | Summary |
 |---|---|---|
 | `restore-database.md` | Data loss / corruption | Pull latest dump from R2 → new Supabase project → restore → run pgTAP → repoint `DATABASE_URL` → verify latest bill |
-| `backup-failed.md` | Backup alert | Check the `jobs` row and `last_error` → check R2 credentials → hit `/api/cron/backup.nightly` manually → if two consecutive failures, escalate to P1 |
+| `backup-failed.md` | Backup alert | Check the GitHub Actions run log for `backup-nightly.yml` → check the `jobs` row `backup.verify` left and its `last_error` → check the R2 backup-scoped token → re-run the workflow manually (`gh workflow run backup-nightly.yml`) → if two consecutive nights fail, escalate to P1 |
 | `inventory-drift.md` | Reconcile alert | Diff `qty_on_hand` vs `Σ stock_movements` → find the un-ledgered mutation → post a compensating `adjust` movement with reason → fix the code path |
 | `bill-number-gap.md` | Gap in `bill_no` | Almost always a cancelled draft. Confirm via `bill_events`. Do **not** renumber — document the gap. |
 | `role-change-not-taking-effect.md` | User reports wrong permissions | Stale JWT. Confirm `profiles.role`, then force global sign-out via admin API. Wait ≤30 min otherwise. |

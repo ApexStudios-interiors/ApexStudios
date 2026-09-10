@@ -826,6 +826,7 @@ export type Database = {
           updated_at: string;
           updated_by: string | null;
           deleted_at: string | null;
+          completed_at: string | null;
         };
         Insert: {
           id?: string;
@@ -851,6 +852,7 @@ export type Database = {
           updated_at?: string;
           updated_by?: string | null;
           deleted_at?: string | null;
+          completed_at?: string | null;
         };
         Update: {
           id?: string;
@@ -876,6 +878,7 @@ export type Database = {
           updated_at?: string;
           updated_by?: string | null;
           deleted_at?: string | null;
+          completed_at?: string | null;
         };
         Relationships: [];
       };
@@ -1356,6 +1359,12 @@ export type Database = {
         Args: Record<string, never>;
         Returns: Database["public"]["Enums"]["app_role"];
       };
+      custom_access_token_hook: {
+        Args: {
+          event: Json;
+        };
+        Returns: Json;
+      };
       fn_audit: {
         Args: {
           p_entity_type: string;
@@ -1396,6 +1405,14 @@ export type Database = {
         };
         Returns: boolean;
       };
+      rpc_claim_jobs: {
+        Args: {
+          p_names: unknown;
+          p_limit?: number;
+          p_lease?: string;
+        };
+        Returns: unknown;
+      };
       rpc_create_project: {
         Args: {
           p_name: string;
@@ -1406,6 +1423,23 @@ export type Database = {
           p_package_names?: unknown;
         };
         Returns: string;
+      };
+      rpc_enqueue_job: {
+        Args: {
+          p_name: string;
+          p_payload?: Json;
+          p_idempotency_key?: string;
+          p_run_after?: string;
+        };
+        Returns: string;
+      };
+      rpc_finish_job: {
+        Args: {
+          p_id: string;
+          p_ok: boolean;
+          p_error?: string;
+        };
+        Returns: unknown;
       };
       rpc_log_impersonation: {
         Args: {
@@ -1421,11 +1455,21 @@ export type Database = {
         };
         Returns: unknown;
       };
+      rpc_retry_job: {
+        Args: {
+          p_id: string;
+        };
+        Returns: unknown;
+      };
       rpc_set_task_progress: {
         Args: {
           p_task_id: string;
           p_pct: number;
         };
+        Returns: unknown;
+      };
+      trg_projects_completed_at: {
+        Args: Record<string, never>;
         Returns: unknown;
       };
       trg_set_updated_at: {

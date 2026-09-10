@@ -303,3 +303,61 @@ D23 (this build's four prerequisite confirmations), D24 (the ancestry-trigger fi
 | The build file's own Playwright spec item "...and the phase shows as Billable in the Billing tab" is not verifiable yet — that tab is still mock data. T-17 (the RPC's actual billing_status flip) is covered directly against the database in `tests/integration/schedule.test.ts` instead. | Build 09 |
 | Every seeded task has `owner_profile_id is null` — the prototype's owner values (vendor/gang names like "Sai Waterproofing", role placeholders like "Client") have no real profile to point at, the same class of gap as Build 04's package-lead finding. Renders correctly as "To assign". | Cosmetic; not blocking |
 | No existing schedule (MS Project/Excel) was provided to import (D23's own open item) — Build 05 proceeded on the documented assumption that tasks are entered by hand | Build 10's task importer, only if a real file surfaces |
+
+## Build 06 — File Storage, the Background Job Runner & Daily Updates
+
+Branch `build/06-files-and-jobs`. **No real Cloudflare R2 account, Vercel Pro, or CRON_SECRET
+exist yet** (still Build 01's fake-but-valid-shaped local placeholders) — proceeded per Voola's
+own instruction: write and fully test everything that doesn't need live R2/Vercel, and report the
+rest as unverified. **Verified**: 60/60 pgTAP (14 new), 48/48 integration tests (11 new,
+`tests/integration/files-and-jobs.test.ts`), 100/100 unit tests, 66/66 visual-baseline screenshots
+(documented differences only), typecheck/lint/build all clean, `--workers=1` e2e green. Manually
+verified live against `apex-dev`: the full Daily Updates write path (post with a photo attempt,
+photo fails against fake R2 with an inline Retry, text still posts), every `/api/cron/[job]` route
+(401 without/with-wrong `CRON_SECRET`, 404 for an unknown job name, 200 with a real summary for
+each of `jobs.drain`/`jobs.reap`/`inventory.reconcile`/`weekly.maintenance`/`backup.verify`, each
+R2-touching one failing exactly as expected against fake credentials), and the Admin Failed Jobs
+page (list + Retry, both against a real failed row).
+
+### What shipped
+
+| Area | Status | Notes |
+|---|---|---|
+| `rpc_enqueue_job`, `rpc_retry_job` | ✅ | New RPCs alongside Build 02's `rpc_claim_jobs`/`rpc_finish_job`. Enqueue is an authenticated-callable allowlist (`attachment.thumbnail` only, for now); retry is admin-only and resets `attempts` to 0, not just `status` — a "retry" at `max_attempts` that can't actually retry isn't one. |
+| `projects.completed_at` | ✅ | New trigger-maintained column (migration 0025) — `project.archive`'s "closed > 12 months" needs a real transition timestamp; `updated_at` would let an unrelated later edit push the archive date out. |
+| `lib/r2/{constraints,keys,client,presign,head}.ts` | ✅ | Pure key builder and sanitizer (path traversal, unicode, length, double-extension — all unit-tested), presign (5-min PUT / 15-min GET TTL), HeadObject wrapped as a discriminated result. |
+| `lib/jobs/{enqueue,registry,runner}.ts` + handlers | ✅ | `runner.ts` needed the same service_role carve-out as `lib/jobs/handlers/**` (ESLint's own restriction, widened with a documented reason) — `rpc_claim_jobs`/`rpc_finish_job` are service_role-only, and a cron invocation has no Supabase session for `rpc_enqueue_job`'s path to work with anyway. `attachment.thumbnail`, `attachment.orphan_sweep`, `project.archive`, `backup.verify` all real; `inventory.reconcile` a documented stub (Build 07). |
+| `app/api/cron/[job]/route.ts` | ✅ | One route serves five cron entries. Bearer auth before anything else, unknown name is 404, claim/dispatch/record only — no real work in the handler. |
+| `features/attachments/` | ✅ | `requestUploadUrl`/`confirmUpload` take an explicit `projectId` (a documented deviation from the build file's own shorthand — a daily update's photos upload before the update row exists, so there's nothing yet to derive a project from), `getDownloadUrl`, `getThumbnailUrl`. |
+| `FileUploader.tsx` | ✅ | Per-file request→PUT→confirm, 3 concurrent, inline per-file retry, the rest of the form still submits on a failure. Its internal queue is one self-recursive function, not two mutually-referencing `useCallback`s — the latter tripped the React Compiler's own hooks/refs lint twice over (temporal-dead-zone access, then a ref write during render) before landing on this shape. |
+| `features/updates/` + three real surfaces | ✅ | `postDailyUpdate` (client-generated id, carried through the upload flow), `editDailyUpdate` (24-hour window enforced in RLS, not just the action), `getUpdatesForProject` (keyset-paginated, role-branched package lookup). Project-level, package-level, and the dashboard's Latest Updates card all real now. |
+| Admin Failed Jobs page | ✅ | `app/(app)/ops/jobs/`, admin-only (`requireRole` throws, not a hidden nav link), list + Retry via `rpc_retry_job`. |
+| `backup.nightly` (D17/D26) | ✅ | A GitHub Actions workflow, not Vercel — real `pg_dump`, uploaded with a backup-scoped credential, outcome reported to the same `jobs` table via `POST /api/backup/report`. `backup.verify` (a real Vercel cron, independent) asserts a real object exists. Neither has run for real yet — no R2 account. |
+| Tests | ✅ | pgTAP: both new RPCs' grants/security, `attachments`/`daily_updates` policy shapes. Unit: `sanitizeFilename`'s every edge case, `canEditUpdate`'s boundary. Integration: real-session enqueue/retry, the reaper's own query, cross-project `attachments` RLS, the 24-hour edit window at the RLS layer. Playwright: the achievable half of both photo-upload journeys (resilience, not the live-thumbnail happy path), the client button-absence journey. |
+
+### Real bugs and gaps found only by actually running it
+
+| Finding | Where |
+|---|---|
+| **The type generator excluded every service_role-only RPC**, on the premise that only the RLS-scoped client ever calls one — true until this build's `runner.ts` needed to call `rpc_claim_jobs`/`rpc_finish_job` through the admin client. Widened to include functions granted to `authenticated` OR `service_role`. | `scripts/gen-types.mjs` |
+| **The prototype's package badge lost its "01 " number prefix** converting `UpdateList` to real data — `mno()`'s own convention, dropped in the first pass and caught by the `proto-v1` baseline. | `features/updates/queries.ts`, `components/domain/UpdateList.tsx`, D27 |
+| **No seeded `daily_update` has a matching `attachments` row** — the prototype's photo counts (2–6 per entry) have nothing real behind them; there was no upload pipeline when they were seeded, and no real R2 bucket yet to backfill them against. Renders correctly as an empty photo grid. | D27 |
+| **`FileUploader`'s upload queue tripped the React Compiler's hooks/refs lint twice**: first for two `useCallback`s referencing each other before both were declared (a real temporal-dead-zone risk, not just a style complaint), then for a "keep a ref pointed at the latest callback" fix that itself violated a separate "no ref writes during render" rule. Resolved by making the queue one self-recursive function instead of two mutually-referencing ones — no forward reference, nothing else to trip on. | `components/upload/FileUploader.tsx` |
+
+### Decisions
+
+D26 (backup location — the build file's own text calls it "D17", already taken by the inventory
+unit vocabulary; recorded under the next free number with a cross-reference) and D27 (the two
+Daily Updates visual-baseline findings) both recorded, alongside the R2/Vercel-not-provisioned
+confirmation.
+
+### Still open going into Build 07
+
+| Item | Blocks |
+|---|---|
+| **No real Cloudflare R2 account** (three buckets, CORS, two scoped tokens, lifecycle rules) | Every live upload-pipeline check; Build 08 (approval photos); Build 09 (bill PDFs) |
+| **Vercel not on Pro** | The real per-minute `jobs.drain` |
+| `CRON_SECRET` and the R2 env vars are still local placeholders | Both rows above |
+| `inventory.reconcile` is a documented no-op stub | Build 07 fills it in |
+| `bill.pdf` isn't in `lib/jobs/registry.ts` yet (no code enqueues it) | Build 09 adds it, and its own name to `rpc_enqueue_job`'s allowlist |
+| TOTP enrollment UI (D22) | A real admin/owner account cannot use any admin-gated action today |
