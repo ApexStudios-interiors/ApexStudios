@@ -47,7 +47,15 @@ export type PackageRowDTO = {
   statusLabel: string;
   progressPct: number;
 } & (
-  | { role: "money"; allocated: number; internal: number; committed: number; remaining: number; usedPct: number; isOverBudget: boolean }
+  | {
+      role: "money";
+      allocated: number;
+      internal: number;
+      committed: number;
+      remaining: number;
+      usedPct: number;
+      isOverBudget: boolean;
+    }
   | { role: "client"; contractValue: number }
   | { role: "site"; openRequests: number; phaseCount: number }
 );
@@ -61,7 +69,10 @@ export type PackagesForProject =
   | { role: "client"; packages: PackageRowDTO[]; totals: { allocated: number } }
   | { role: "site"; packages: PackageRowDTO[] };
 
-export async function getPackagesForProject(session: Session, projectId: string): Promise<PackagesForProject> {
+export async function getPackagesForProject(
+  session: Session,
+  projectId: string
+): Promise<PackagesForProject> {
   const effectiveRole = effectiveRoleOf(session);
   if (effectiveRole === "owner" || effectiveRole === "admin") return getPackagesForProjectAdmin(projectId);
   if (effectiveRole === "client") return getPackagesForProjectClient(projectId);
@@ -197,7 +208,15 @@ export type PackageDetailDTO = {
   statusLabel: string;
   progressPct: number;
 } & (
-  | { role: "money"; allocated: number; internal: number; committed: number; remaining: number; usedPct: number; updatedAt: string }
+  | {
+      role: "money";
+      allocated: number;
+      internal: number;
+      committed: number;
+      remaining: number;
+      usedPct: number;
+      updatedAt: string;
+    }
   | { role: "client"; contractValue: number }
   | { role: "site" }
 );
@@ -250,7 +269,10 @@ async function getPackageDetailAdmin(packageId: string): Promise<PackageDetailDT
   };
 }
 
-async function getPackageDetailClient(projectId: string, packageId: string): Promise<PackageDetailDTO | null> {
+async function getPackageDetailClient(
+  projectId: string,
+  packageId: string
+): Promise<PackageDetailDTO | null> {
   const supabase = await createClient();
   const { data: p, error } = await supabase
     .from("v_package_client")
@@ -308,7 +330,11 @@ export type PhaseRowDTO = { id: string; seqNo: number; name: string } & (
 );
 
 export type PhasesForPackage =
-  | { role: "money"; phases: PhaseRowDTO[]; totals: { allocated: number; internal: number; committed: number } }
+  | {
+      role: "money";
+      phases: PhaseRowDTO[];
+      totals: { allocated: number; internal: number; committed: number };
+    }
   | { role: "client"; phases: PhaseRowDTO[]; totals: { allocated: number } }
   | { role: "site"; phases: PhaseRowDTO[] };
 

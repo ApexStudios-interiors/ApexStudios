@@ -143,7 +143,10 @@ const eslintConfig = defineConfig([
       // core no-restricted-imports has no allowTypeImports; disabled here so
       // the @typescript-eslint version (which does) is the only one active.
       "no-restricted-imports": "off",
-      "@typescript-eslint/no-restricted-imports": ["error", { patterns: [...RLS_BYPASS_TS, ...NO_DATA_LAYER] }],
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        { patterns: [...RLS_BYPASS_TS, ...NO_DATA_LAYER] },
+      ],
     },
   },
 

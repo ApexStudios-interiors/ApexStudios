@@ -7,7 +7,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
 import { updatePackageSchema } from "@/features/packages/schema";
-import { updatePackage, getPackageForEdit, getStaffOptions, type PackageForEdit } from "@/features/packages/actions";
+import {
+  updatePackage,
+  getPackageForEdit,
+  getStaffOptions,
+  type PackageForEdit,
+} from "@/features/packages/actions";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
 
 const STATUSES = [

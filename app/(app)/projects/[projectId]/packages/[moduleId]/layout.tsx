@@ -53,7 +53,12 @@ export default async function PackageDetailLayout({
             {detail.lead} · {detail.statusLabel} · {detail.progressPct}% complete
           </p>
         </div>
-        <PackageDetailActions projectId={projectId} moduleId={moduleId} isMoney={isMoney} isClient={isClient} />
+        <PackageDetailActions
+          projectId={projectId}
+          moduleId={moduleId}
+          isMoney={isMoney}
+          isClient={isClient}
+        />
       </div>
 
       {/* ui-guide.md §6.5: "Site sees no stat row here — straight to the tabs." */}

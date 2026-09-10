@@ -48,7 +48,11 @@ export default async function HomePage() {
               sub: `Margin ${formatINRCompact(Number(portfolio.stats.totalAllocated) - Number(portfolio.stats.totalInternal))}`,
             },
             { label: "Committed", value: formatINRCompact(portfolio.stats.committed), sub: "of internal" },
-            { label: "Active Projects", value: portfolio.stats.activeProjects, sub: `of ${portfolio.projects.length}` },
+            {
+              label: "Active Projects",
+              value: portfolio.stats.activeProjects,
+              sub: `of ${portfolio.projects.length}`,
+            },
           ]}
         />
       ) : portfolio.role === "client" ? (
@@ -64,7 +68,11 @@ export default async function HomePage() {
               value: portfolio.stats.activeProjects,
               sub: `of ${portfolio.projects.length}`,
             },
-            { label: "Awaiting Your Approval", value: portfolio.stats.awaitingApproval, sub: "samples & bills" },
+            {
+              label: "Awaiting Your Approval",
+              value: portfolio.stats.awaitingApproval,
+              sub: "samples & bills",
+            },
           ]}
         />
       ) : (

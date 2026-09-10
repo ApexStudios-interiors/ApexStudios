@@ -31,53 +31,49 @@ import {
  * invalidation call once caching is added.
  */
 
-export const createProject = adminAction
-  .inputSchema(createProjectSchema)
-  .action(async ({ parsedInput }) => {
-    const supabase = await createClient();
-    const { data, error } = await supabase.rpc("rpc_create_project", {
-      p_name: parsedInput.name,
-      p_client_id: parsedInput.clientId,
-      p_code: parsedInput.code,
-      // The generated Functions.Args type can't express nullability for a
-      // scalar RPC parameter — information_schema.parameters carries no such
-      // flag the way information_schema.columns does for table columns (see
-      // scripts/gen-types.mjs) — but the column and this parameter both
-      // genuinely accept null.
-      p_location: (parsedInput.location ?? null) as unknown as string,
-      p_start_date: parsedInput.startDate,
-      p_package_names: parsedInput.packages,
-    });
-    if (error) throw new Error(error.message);
-
-    updateTag(`project:${data}`);
-    revalidatePath("/");
-    return { id: data as string };
+export const createProject = adminAction.inputSchema(createProjectSchema).action(async ({ parsedInput }) => {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("rpc_create_project", {
+    p_name: parsedInput.name,
+    p_client_id: parsedInput.clientId,
+    p_code: parsedInput.code,
+    // The generated Functions.Args type can't express nullability for a
+    // scalar RPC parameter — information_schema.parameters carries no such
+    // flag the way information_schema.columns does for table columns (see
+    // scripts/gen-types.mjs) — but the column and this parameter both
+    // genuinely accept null.
+    p_location: (parsedInput.location ?? null) as unknown as string,
+    p_start_date: parsedInput.startDate,
+    p_package_names: parsedInput.packages,
   });
+  if (error) throw new Error(error.message);
 
-export const updateProject = adminAction
-  .inputSchema(updateProjectSchema)
-  .action(async ({ parsedInput }) => {
-    const { id, ...patch } = parsedInput;
-    const supabase = await createClient();
-    const { error } = await supabase
-      .from("projects")
-      .update({
-        ...(patch.name !== undefined && { name: patch.name }),
-        ...(patch.location !== undefined && { location: patch.location }),
-        ...(patch.targetEndDate !== undefined && { target_end_date: patch.targetEndDate }),
-        ...(patch.contractValue !== undefined && { contract_value: Number(patch.contractValue) }),
-      })
-      .eq("id", id);
-    if (error) throw new Error(error.message);
+  updateTag(`project:${data}`);
+  revalidatePath("/");
+  return { id: data as string };
+});
 
-    updateTag(`project:${id}`);
-    revalidatePath("/");
-    // 'layout': every route under this project (dashboard, packages,
-    // package detail) can render fields this action changes.
-    revalidatePath(`/projects/${id}`, "layout");
-    return { ok: true as const };
-  });
+export const updateProject = adminAction.inputSchema(updateProjectSchema).action(async ({ parsedInput }) => {
+  const { id, ...patch } = parsedInput;
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("projects")
+    .update({
+      ...(patch.name !== undefined && { name: patch.name }),
+      ...(patch.location !== undefined && { location: patch.location }),
+      ...(patch.targetEndDate !== undefined && { target_end_date: patch.targetEndDate }),
+      ...(patch.contractValue !== undefined && { contract_value: Number(patch.contractValue) }),
+    })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+
+  updateTag(`project:${id}`);
+  revalidatePath("/");
+  // 'layout': every route under this project (dashboard, packages,
+  // package detail) can render fields this action changes.
+  revalidatePath(`/projects/${id}`, "layout");
+  return { ok: true as const };
+});
 
 export const setProjectStatus = adminAction
   .inputSchema(setProjectStatusSchema)

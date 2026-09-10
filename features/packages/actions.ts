@@ -34,34 +34,36 @@ async function nextSeqNo(table: "packages" | "phases", column: "project_id" | "p
   return (data[0]?.seq_no ?? 0) + 1;
 }
 
-export const createPackage = adminAction.inputSchema(createPackageSchema).action(async ({ parsedInput, ctx }) => {
-  const supabase = await createClient();
-  const seqNo = await nextSeqNo("packages", "project_id", parsedInput.projectId);
-  const { data, error } = await supabase
-    .from("packages")
-    .insert({
-      org_id: ctx.session.orgId,
-      project_id: parsedInput.projectId,
-      seq_no: seqNo,
-      name: parsedInput.name,
-      allocated_amount: Number(parsedInput.allocatedAmount),
-      internal_amount: Number(parsedInput.internalAmount),
-      lead_profile_id: parsedInput.leadProfileId ?? null,
-    })
-    .select("id")
-    .single();
-  if (error) throw new Error(error.message);
+export const createPackage = adminAction
+  .inputSchema(createPackageSchema)
+  .action(async ({ parsedInput, ctx }) => {
+    const supabase = await createClient();
+    const seqNo = await nextSeqNo("packages", "project_id", parsedInput.projectId);
+    const { data, error } = await supabase
+      .from("packages")
+      .insert({
+        org_id: ctx.session.orgId,
+        project_id: parsedInput.projectId,
+        seq_no: seqNo,
+        name: parsedInput.name,
+        allocated_amount: Number(parsedInput.allocatedAmount),
+        internal_amount: Number(parsedInput.internalAmount),
+        lead_profile_id: parsedInput.leadProfileId ?? null,
+      })
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message);
 
-  updateTag(`project:${parsedInput.projectId}`);
-  // 'layout' revalidates this whole project subtree in one call — the
-  // dashboard AND the packages list both render the same packages table.
-  // Found live: adding a package from the dashboard closed the dialog but
-  // left its (unrevalidated) table stale, because this only ever
-  // invalidated the sibling /packages route, never the page the dialog was
-  // actually opened from.
-  revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
-  return { id: data.id };
-});
+    updateTag(`project:${parsedInput.projectId}`);
+    // 'layout' revalidates this whole project subtree in one call — the
+    // dashboard AND the packages list both render the same packages table.
+    // Found live: adding a package from the dashboard closed the dialog but
+    // left its (unrevalidated) table stale, because this only ever
+    // invalidated the sibling /packages route, never the page the dialog was
+    // actually opened from.
+    revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
+    return { id: data.id };
+  });
 
 export const updatePackage = adminAction.inputSchema(updatePackageSchema).action(async ({ parsedInput }) => {
   const { id, updatedAt, ...patch } = parsedInput;

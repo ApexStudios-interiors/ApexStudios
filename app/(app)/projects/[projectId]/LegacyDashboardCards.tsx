@@ -52,7 +52,11 @@ export function LegacyDashboardCards({
           <CardHeader>
             <h3>Pending Approvals</h3>
             <div className="ml-auto flex gap-2 items-center">
-              <Button variant="ghost" size="sm" onClick={() => router.push(`/projects/${projectId}/approvals`)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push(`/projects/${projectId}/approvals`)}
+              >
                 View all
               </Button>
             </div>

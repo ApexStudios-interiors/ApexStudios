@@ -21,11 +21,7 @@ import { formatINRCompact } from "@/lib/money";
  * Component can render a Client Component directly, so the rest of this page
  * stays server-rendered around it.
  */
-export default async function ProjectDashboardPage({
-  params,
-}: {
-  params: Promise<{ projectId: string }>;
-}) {
+export default async function ProjectDashboardPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
   const session = await requireSession();
 
@@ -72,7 +68,11 @@ export default async function ProjectDashboardPage({
           prog={header.progressPct}
         />
       ) : packages.role === "client" ? (
-        <ClientDashboardStats projectId={projectId} alloc={packages.totals.allocated} prog={header.progressPct} />
+        <ClientDashboardStats
+          projectId={projectId}
+          alloc={packages.totals.allocated}
+          prog={header.progressPct}
+        />
       ) : (
         <SiteDashboardStats projectId={projectId} packages={packages} />
       )}
@@ -89,7 +89,15 @@ export default async function ProjectDashboardPage({
   );
 }
 
-async function ClientDashboardStats({ projectId, alloc, prog }: { projectId: string; alloc: number; prog: number }) {
+async function ClientDashboardStats({
+  projectId,
+  alloc,
+  prog,
+}: {
+  projectId: string;
+  alloc: number;
+  prog: number;
+}) {
   const { billedNet, paidNet, billsSubmitted, approvalsPending } = await getClientBillingStats(projectId);
   return (
     <BudgetStatBar

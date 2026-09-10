@@ -74,7 +74,8 @@ async function ensureAdminTotpEnrolled(url: string, anonKey: string): Promise<st
     email: ADMIN_EMAIL,
     password: "apex-dev-only",
   });
-  if (signInError) throw new Error(`could not sign in as ${ADMIN_EMAIL} to enroll MFA: ${signInError.message}`);
+  if (signInError)
+    throw new Error(`could not sign in as ${ADMIN_EMAIL} to enroll MFA: ${signInError.message}`);
 
   // Clean slate: a factor from a previous, interrupted run would be
   // "unverified" and unusable (its secret is gone), and would otherwise pile
@@ -114,7 +115,9 @@ export default async function globalSetup(config: FullConfig) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !anonKey) {
-    throw new Error("global-setup needs NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local");
+    throw new Error(
+      "global-setup needs NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local"
+    );
   }
   const adminTotpSecret = await ensureAdminTotpEnrolled(supabaseUrl, anonKey);
 

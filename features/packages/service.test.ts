@@ -97,9 +97,9 @@ describe("costToClientFactor", () => {
 
   it("falls all the way back to 1.0 when neither has margin data — bill at cost, visibly", () => {
     expect(costToClientFactor(null, null)).toBe(1.0);
-    expect(costToClientFactor({ allocatedAmount: 0, internalAmount: 0 }, { allocatedAmount: 0, internalAmount: 0 })).toBe(
-      1.0
-    );
+    expect(
+      costToClientFactor({ allocatedAmount: 0, internalAmount: 0 }, { allocatedAmount: 0, internalAmount: 0 })
+    ).toBe(1.0);
   });
 });
 

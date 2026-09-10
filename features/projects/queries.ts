@@ -276,7 +276,10 @@ export type ProjectHeaderDTO = {
   progressPct: number;
 };
 
-export async function getProjectHeader(session: Session, projectId: string): Promise<ProjectHeaderDTO | null> {
+export async function getProjectHeader(
+  session: Session,
+  projectId: string
+): Promise<ProjectHeaderDTO | null> {
   const effectiveRole = session.impersonating?.role ?? session.role;
   const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
   const supabase = await createClient();
@@ -309,7 +312,12 @@ export async function getProjectHeader(session: Session, projectId: string): Pro
  *  (ui-guide §6.2). `bills` is admin-only on select — v_bill_client is the
  *  client-safe read, already carrying net_payable pre-computed by the row
  *  itself (02-lld.md §3.8), not recomputed here. */
-export type ClientBillingStats = { billedNet: number; paidNet: number; billsSubmitted: number; approvalsPending: number };
+export type ClientBillingStats = {
+  billedNet: number;
+  paidNet: number;
+  billsSubmitted: number;
+  approvalsPending: number;
+};
 
 export async function getClientBillingStats(projectId: string): Promise<ClientBillingStats> {
   const supabase = await createClient();
@@ -319,8 +327,12 @@ export async function getClientBillingStats(projectId: string): Promise<ClientBi
     .eq("project_id", projectId);
   if (error) throw new Error(error.message);
 
-  const billedNet = bills.filter((b) => b.status !== "draft").reduce((a, b) => a + Number(b.net_payable ?? 0), 0);
-  const paidNet = bills.filter((b) => b.status === "paid").reduce((a, b) => a + Number(b.net_payable ?? 0), 0);
+  const billedNet = bills
+    .filter((b) => b.status !== "draft")
+    .reduce((a, b) => a + Number(b.net_payable ?? 0), 0);
+  const paidNet = bills
+    .filter((b) => b.status === "paid")
+    .reduce((a, b) => a + Number(b.net_payable ?? 0), 0);
   const billsSubmitted = bills.filter((b) => b.status === "submitted").length;
 
   const { count: approvalsPending, error: apErr } = await supabase

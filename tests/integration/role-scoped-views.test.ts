@@ -101,7 +101,10 @@ describe("v_package_site / v_phase_site (site role)", () => {
 
   it("v_phase_site returns rows for a package's phases (T-11: was 0 before D21's fix)", async () => {
     const supabase = await client(SITE_EMAIL);
-    const { data, error } = await supabase.from("v_phase_site").select("*").eq("package_id", SEED.poolPackage);
+    const { data, error } = await supabase
+      .from("v_phase_site")
+      .select("*")
+      .eq("package_id", SEED.poolPackage);
     expect(error).toBeNull();
     expect(data?.length).toBeGreaterThan(0);
     for (const row of data ?? []) {
@@ -115,7 +118,10 @@ describe("v_package_site / v_phase_site (site role)", () => {
 describe("v_phase_client (client role)", () => {
   it("returns rows with contract_value and no internal column (T-11: was 0 before D21's fix)", async () => {
     const supabase = await client(CLIENT_EMAIL);
-    const { data, error } = await supabase.from("v_phase_client").select("*").eq("package_id", SEED.poolPackage);
+    const { data, error } = await supabase
+      .from("v_phase_client")
+      .select("*")
+      .eq("package_id", SEED.poolPackage);
     expect(error).toBeNull();
     expect(data?.length).toBeGreaterThan(0);
     for (const row of data ?? []) {

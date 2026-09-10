@@ -14,5 +14,9 @@ export default function PackageUpdatesTab() {
 
   const updates = data.updates.filter((u) => u.proj === project.id && u.mod === mod.id);
 
-  return <Card>{updates.length ? <UpdateList project={project} updates={updates} /> : <Empty>No updates yet.</Empty>}</Card>;
+  return (
+    <Card>
+      {updates.length ? <UpdateList project={project} updates={updates} /> : <Empty>No updates yet.</Empty>}
+    </Card>
+  );
 }

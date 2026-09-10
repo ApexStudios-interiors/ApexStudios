@@ -81,7 +81,12 @@ export function AddProjectDialog() {
       <form onSubmit={onSubmit} className="grid grid-cols-2 gap-3.5">
         <div className="col-span-2">
           <Field label="Project Name" htmlFor="ap-name">
-            <input id="ap-name" className={inputClass} placeholder="Model Villas Interiors" {...register("name")} />
+            <input
+              id="ap-name"
+              className={inputClass}
+              placeholder="Model Villas Interiors"
+              {...register("name")}
+            />
           </Field>
           {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
         </div>
