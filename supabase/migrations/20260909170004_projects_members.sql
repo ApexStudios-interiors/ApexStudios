@@ -38,6 +38,13 @@ create table public.projects (
   deleted_at             timestamptz,
 
   constraint projects_code_uq unique (org_id, code),
+  -- Confirmed 2026-09-10 by Voola: 'BHEL-NCH'. Upper-case alphanumeric groups
+  -- separated by single hyphens. The code is embedded in every bill number
+  -- forever (D6), so a typo at project creation is permanent — worth a check
+  -- constraint rather than a hopeful comment. 20 characters keeps
+  -- 'RA-{code}-{n}' comfortably inside a bill-header column.
+  constraint projects_code_ck check (
+    code ~ '^[A-Z0-9]+(-[A-Z0-9]+)*$' and length(code) between 3 and 20),
   constraint projects_pct_ck check (
     gst_rate_pct between 0 and 100
     and retention_pct between 0 and 100

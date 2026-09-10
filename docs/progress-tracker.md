@@ -95,7 +95,7 @@ Every SQL statement below is unrun.
 | 2 Spike (definer view under `force` RLS) | ⛔ | Written and runnable as `pnpm spike:d15`. **Cannot run without a database.** Recorded as **D15**, not D14 — that number was taken by the Docker decision. Gates migration 0014. |
 | 3 / 4.1–4.7 Migrations 0001–0016 | 🟡 | All sixteen written, ~1,750 lines. Each table-creating file enables RLS, forces it, adds policies and indexes every policy column, in the same file — checked mechanically. No floating-point type anywhere. **Unapplied and unrun.** |
 | 4.8 Drizzle schema and types | 🟡 | `db/schema/*` mirrors the migrations; `db/index.ts` carries the D11 rule. `db:types` needs a database. |
-| 4.9 Seed | 🟡 | `supabase/seed.sql`, fixed UUIDs, idempotent. Five stock-request statuses, four bill statuses, three approval outcomes, three inventory states, one fully complete phase. **Org legal identity is a placeholder and `pnpm test` fails until it is real.** |
+| 4.9 Seed | 🟡 | `supabase/seed.sql`, fixed UUIDs, idempotent. Five stock-request statuses, four bill statuses, three approval outcomes, three inventory states, one fully complete phase. **Org legal identity on hold** — tracked by `pnpm check:release`, not by a red test suite. |
 | 4.10 CI database stages | 🟡 | Added: migrations, seed, pgTAP, integration, drift. Fails loudly when `SUPABASE_DB_URL` is absent rather than skipping — a quietly absent RLS stage looks green. |
 | 5.1 pgTAP policy suite | 🟡 | 14 assertions over the policy matrix and the role-scoped views. Unrun. |
 | 5.2 Structural pgTAP | 🟡 | 6 catalogue assertions: RLS enabled and forced, every table has a policy, every definer function pins `search_path`, no floating point, append-only tables have no write policy. Unrun. |
@@ -106,6 +106,8 @@ Every SQL statement below is unrun.
 
 | Finding | Where |
 |---|---|
+| **Project code is now constrained, not just conventional.** `BHEL-NCH` confirmed; `projects_code_ck` enforces upper-case alphanumeric groups, 3–20 characters. A typo at project creation is permanent, because it is already in the bill numbers by the time anyone notices. | migration 0004, D16 |
+| **The unit list became a lookup table.** Nine confirmed codes, referenced by both `inventory_items.unit` and `stock_requests.unit`. Free text over a closed vocabulary lets `bag` and `bags` become two materials that never reconcile, in a table whose quantity feeds a bill. Deviates from `02-lld.md` §3.4, which is amended in the same PR. | migration 0006, D17 |
 | **RA-001's transcribed total was wrong.** The prototype's two lines sum to ₹89,877.75, not the ₹1,19,837 first written. Caught by recomputing rather than trusting the transcription; the corrected net matches the prototype's own displayed ₹1,01,562. | `supabase/seed.sql` |
 | **The prototype's margin uses a magic number.** `billTotals()` computes cost as `Σ lineCost − round(recovery × 0.6)`. That 0.6 appears nowhere in the HLD or LLD, and it is why the prototype shows RA-002's margin as ₹2,28,210 where `taxable − internal_cost` gives ₹1,56,308. Build 09 has to decide what recovery does to margin. | `lib/logic.ts`, seed comment |
 | **`projects.start_date` is NOT NULL, but a quoted project has no start date.** The prototype's second project has `start: null`. Seeded with the quote date and flagged for Build 04. | `02-lld.md` §3.2 |
@@ -120,9 +122,9 @@ Everything in Build 02 §0 that has not been supplied:
 | Needed | Blocks |
 |---|---|
 | **`apex-dev` Supabase project** and `DATABASE_URL` | The spike, migrations, pgTAP, integration tests, drift check — all of it |
-| **Apex Studios' legal identity**: legal name, GSTIN, PAN, registered address | The `orgs` seed row. Placeholders here print on a tax invoice, so `pnpm test` fails until they are real |
-| **Project code convention** confirmed (`BHEL-NCH` assumed) | Bill numbers, permanently. `projects.code` is unique per org |
-| **Real inventory unit list** | Seed realism and the Build 07 unit dropdown. The prototype's units are used meanwhile |
+| **Apex Studios' legal identity**: legal name, GSTIN, PAN, registered address — **ON HOLD at Voola's request, 2026-09-10** | The `orgs` seed row. Reported by `pnpm check:release` and a hard gate on production deploy; deliberately not a failing unit test, so development is not blocked |
+| ~~Project code convention~~ | **Resolved 2026-09-10: `BHEL-NCH`.** Now enforced by a check constraint (D16) |
+| ~~Real inventory unit list~~ | **Resolved 2026-09-10.** Nine codes, now a `units` lookup table both quantity columns reference (D17) |
 | Default billing constants confirmed as defaults (18 / 5 / 75 / 0 assumed) | New-project defaults only |
 
 ## Build 03 — Auth and RBAC

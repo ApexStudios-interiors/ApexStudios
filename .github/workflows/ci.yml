@@ -174,3 +174,25 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: pnpm db:check-drift
+
+  # Reports inputs that are still on hold — missing facts, not broken code.
+  #
+  # `continue-on-error` is deliberate HERE and nowhere else. These items block
+  # issuing a real document, not writing code, and a permanently red required
+  # check is one people learn to ignore, which is how the RLS stage would end up
+  # ignored too. The production deploy workflow (Build 10) runs the same script
+  # as a hard gate.
+  release-readiness:
+    name: inputs on hold
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:release

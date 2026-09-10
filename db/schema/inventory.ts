@@ -3,6 +3,7 @@ import { movementDirection } from "./enums";
 import { auditColumns, money, quantity, tsz } from "./columns";
 import { orgs, profiles } from "./identity";
 import { projects } from "./projects";
+import { units } from "./units";
 
 /** Mirrors migration 0006. */
 export const inventoryItems = pgTable(
@@ -17,7 +18,9 @@ export const inventoryItems = pgTable(
     name: text("name").notNull(),
     category: text("category"),
     sku: text("sku"),
-    unit: text("unit").notNull(),
+    unit: text("unit")
+      .notNull()
+      .references(() => units.code),
     /** A cache of stock_movements, reconciled nightly. Moves only via RPC. */
     qtyOnHand: quantity("qty_on_hand").notNull().default("0"),
     reorderLevel: quantity("reorder_level").notNull().default("0"),

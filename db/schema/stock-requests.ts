@@ -5,6 +5,7 @@ import { orgs, profiles } from "./identity";
 import { projects } from "./projects";
 import { packages, phases } from "./work";
 import { inventoryItems } from "./inventory";
+import { units } from "./units";
 
 /** Mirrors migration 0007. `rate` is internal cost, so this table is admin-only. */
 export const stockRequests = pgTable(
@@ -26,7 +27,9 @@ export const stockRequests = pgTable(
     inventoryItemId: uuid("inventory_item_id").references(() => inventoryItems.id),
     materialName: text("material_name").notNull(),
     qty: quantity("qty").notNull(),
-    unit: text("unit").notNull(),
+    unit: text("unit")
+      .notNull()
+      .references(() => units.code),
     /** ADMIN ONLY — internal cost per unit. */
     rate: money("rate"),
     neededBy: date("needed_by"),

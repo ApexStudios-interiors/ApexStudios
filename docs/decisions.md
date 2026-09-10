@@ -3,8 +3,8 @@
 Every decision that blocks or shapes schema, security or scope. One entry each.
 
 Sources: `01-hld.md` §18 (D1–D10), `architecture.md` §15–16 (ADR-016, A-4, A-5, A-6), and
-`build/01-foundations.md` §0.1 (D11–D13, which surfaced while reading the code), plus D14, which
-surfaced while executing Build 01.
+`build/01-foundations.md` §0.1 (D11–D13, which surfaced while reading the code), plus D14–D17,
+which surfaced while executing Builds 01 and 02.
 
 **A recommendation is an argument, not an answer.** Only an entry with a named person and a date
 under `**Answered:**` is a decision. Any build file that reaches a `PENDING` decision it depends on
@@ -330,11 +330,52 @@ Builds 04–09.
 
 ---
 
+### D16 — Project code convention
+
+**Question:** `projects.code` is unique per org and is embedded in every bill
+number forever (D6, `RA-{code}-{n}`). What format, what maximum length, and who
+assigns it?
+**Answered:** 2026-09-10 by Voola
+**Answer:** `BHEL-NCH`. Upper-case alphanumeric groups separated by single
+hyphens.
+**Consequence:** Enforced by `projects_code_ck` in migration 0004:
+`code ~ '^[A-Z0-9]+(-[A-Z0-9]+)*$' and length(code) between 3 and 20`. A check
+constraint rather than a hopeful comment, because a typo at project creation is
+permanent — it is already in the bill numbers by the time anyone notices. Twenty
+characters keeps `RA-{code}-{n}` inside a bill-header column.
+**Still loose:** who assigns a code was not specified. Currently any admin can,
+since project creation is an admin action. Tighten to owner-only if that turns
+out to matter.
+
+---
+
+### D17 — Inventory unit vocabulary
+
+**Question:** What are the real units Apex works in? Needed for seed realism and
+for the Build 07 unit dropdown.
+**Answered:** 2026-09-10 by Voola
+**Answer:** `bag`, `sft`, `kit`, `len`, `can`, `sqm`, `rft`, `nos`, `set`.
+**Consequence:** A closed list, so it became a `units(code, label, sort_order)`
+lookup table in migration 0006 rather than staying free text.
+`inventory_items.unit` and `stock_requests.unit` both reference it; the column
+type is unchanged, it just gained a foreign key.
+
+This deviates from `02-lld.md` §3.4, which had `unit text` with the codes in a
+comment, and that document is amended in the same PR. The reason: free text over
+a closed vocabulary lets `bag` and `bags` become two materials that never
+reconcile, in a table whose quantity feeds a bill. Build 07's dropdown now reads
+the table instead of duplicating the list in TypeScript and drifting from it.
+
+Adding a unit later is a migration inserting a row, never a dashboard edit.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |
 |---|---|---|---|
 | **D15 spike — definer views under `force row level security`.** Cannot run without a database. Gates migration 0014 and every non-admin surface. | Claude, on `apex-dev` | Builds 04–09 | 2026-09-09 |
+| **Apex Studios' legal identity — ON HOLD at Voola's request (2026-09-10).** legal_name, GSTIN, PAN and registered address are placeholders in the seed. `pnpm check:release` reports it; it is a hard gate on any production deploy, and deliberately not a failing unit test, because development is not blocked by it. | Voola | First real bill (Build 09), production deploy | 2026-09-10 |
 | CA confirmation: material-at-site as secured advance (D4) | Voola → CA | First real bill | 2026-09-09 |
 | CA confirmation: statutory retention period (A-5) | Voola → CA | Build 10 R2 lifecycle rules | 2026-09-09 |
 | CA sign-off: the five tax questions in `01-hld.md` §8.4 | Voola → CA | Build 09 go-live | 2026-09-09 |

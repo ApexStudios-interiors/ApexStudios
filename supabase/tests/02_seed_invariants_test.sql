@@ -6,7 +6,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(7);
+select plan(9);
 
 select is(
   (select count(distinct status)::int from public.stock_requests),
@@ -57,6 +57,22 @@ select is_empty(
         select coalesce(max(b.seq_no), 0) from public.bills b where b.project_id = p.id
       ) $$,
   'next_bill_seq leads the highest seeded bill on every project'
+);
+
+-- Units are a closed vocabulary confirmed by Voola on 2026-09-10. Both
+-- inventory_items and stock_requests reference them, so losing one breaks
+-- inserts rather than degrading gracefully.
+select set_eq(
+  $$ select code::text from public.units $$,
+  $$ values ('bag'),('sft'),('kit'),('len'),('can'),('sqm'),('rft'),('nos'),('set') $$,
+  'the unit vocabulary is exactly the nine confirmed codes'
+);
+
+select is_empty(
+  $$ select i.name::text from public.inventory_items i
+      left join public.units u on u.code = i.unit
+     where u.code is null $$,
+  'every seeded inventory item uses a unit from the vocabulary'
 );
 
 select * from finish();

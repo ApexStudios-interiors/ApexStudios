@@ -4,6 +4,44 @@
 -- through the append-only ledger so weighted-average costing is additive later
 -- without a rewrite (ADR-003).
 
+-- ── units ────────────────────────────────────────────────────────────────────
+-- DEVIATION FROM 02-lld.md §3.4, amended there in this PR.
+--
+-- The LLD has `unit text not null` with the codes in a comment. Voola confirmed
+-- the closed list on 2026-09-10, and free text over a closed vocabulary means
+-- 'bag' and 'bags' silently become two materials that never reconcile — in a
+-- table whose quantity feeds a bill. The column stays `text`; it just gains a
+-- foreign key.
+--
+-- It also gives Build 07's unit dropdown something to read, instead of the list
+-- being duplicated in TypeScript and drifting from the database.
+--
+-- To add a unit later: a migration inserting a row. Not a dashboard edit.
+create table public.units (
+  code       text primary key,
+  label      text not null,
+  sort_order int not null default 0
+);
+
+insert into public.units (code, label, sort_order) values
+  ('bag', 'Bag',           1),
+  ('sft', 'Square feet',   2),
+  ('kit', 'Kit',           3),
+  ('len', 'Length',        4),
+  ('can', 'Can',           5),
+  ('sqm', 'Square metre',  6),
+  ('rft', 'Running feet',  7),
+  ('nos', 'Numbers',       8),
+  ('set', 'Set',           9);
+
+alter table public.units enable row level security;
+alter table public.units force row level security;
+
+-- Readable by every signed-in user; there is nothing confidential in a unit
+-- code. No write policy: the list changes by migration.
+create policy units_select on public.units for select to authenticated
+  using ( true );
+
 create table public.inventory_items (
   id            uuid primary key default gen_random_uuid(),
   org_id        uuid not null references public.orgs(id),
@@ -12,7 +50,7 @@ create table public.inventory_items (
   name          text not null,
   category      text,
   sku           text,
-  unit          text not null,                     -- 'bag','sqft','nos','kg','ltr'
+  unit          text not null references public.units(code),
   qty_on_hand   numeric(14,3) not null default 0,  -- CACHE of stock_movements
   reorder_level numeric(14,3) not null default 0,
   unit_cost     numeric(14,2) not null default 0,  -- ADMIN/SITE only, never client

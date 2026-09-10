@@ -18,7 +18,7 @@ create table public.stock_requests (
   inventory_item_id uuid references public.inventory_items(id),  -- null = new material
   material_name     text not null,
   qty               numeric(14,3) not null,
-  unit              text not null,
+  unit              text not null references public.units(code),
   rate              numeric(14,2),                    -- ADMIN ONLY (internal cost per unit)
   needed_by         date,
   note              text,

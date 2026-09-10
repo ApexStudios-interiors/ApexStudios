@@ -27,7 +27,8 @@
     "db:check-drift": "vitest run --config vitest.integration.mts tests/integration/drift.test.ts",
     "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
     "spike:d15": "node scripts/spike-d15.mjs",
-    "test:integration": "vitest run --config vitest.integration.mts"
+    "test:integration": "vitest run --config vitest.integration.mts",
+    "check:release": "node scripts/check-release-ready.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",

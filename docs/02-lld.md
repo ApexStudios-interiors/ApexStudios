@@ -292,7 +292,7 @@ create table public.inventory_items (
   name            text not null,
   category        text,
   sku             text,
-  unit            text not null,                    -- 'bag','sqft','nos','kg','ltr'
+  unit            text not null references public.units(code),  -- see units below
   qty_on_hand     numeric(14,3) not null default 0, -- CACHE of stock_movements
   reorder_level   numeric(14,3) not null default 0,
   unit_cost       numeric(14,2) not null default 0, -- ADMIN/SITE only, never client
@@ -327,6 +327,15 @@ create table public.stock_movements (
 create index idx_movements_item on public.stock_movements(inventory_item_id, created_at desc);
 create index idx_movements_ref on public.stock_movements(ref_type, ref_id);
 ```
+
+**Amended 2026-09-10 (Build 02).** `unit` was plain `text` with the codes in a
+comment. Voola confirmed the closed list — `bag`, `sft`, `kit`, `len`, `can`,
+`sqm`, `rft`, `nos`, `set` — so a `units(code, label, sort_order)` lookup table
+was added in migration 0006 and both `inventory_items.unit` and
+`stock_requests.unit` reference it. The column type is unchanged. Free text over
+a closed vocabulary lets `bag` and `bags` become two materials that never
+reconcile, in a table whose quantity feeds a bill; and Build 07's unit dropdown
+now reads the list rather than duplicating it in TypeScript.
 
 `stock_movements` is **append-only**. No update, no delete policy exists for any role. A
 mistake is corrected with a compensating `adjust` movement carrying a reason. This is the
