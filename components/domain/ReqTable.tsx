@@ -75,13 +75,13 @@ export function ReqTable({
                 </Button>
               </div>
             );
-          } else if (r.status === "Approved" && role === "admin") {
+          } else if (r.status === "Approved" && (role === "admin" || role === "owner")) {
             action = (
               <Button size="sm" onClick={() => setRequestStatus(r.id, "Ordered")}>
                 Mark Ordered
               </Button>
             );
-          } else if (r.status === "Ordered" && (role === "admin" || role === "site")) {
+          } else if (r.status === "Ordered" && (role === "admin" || role === "owner" || role === "site")) {
             action = (
               <Button size="sm" onClick={() => setRequestStatus(r.id, "Delivered")}>
                 Mark Delivered

@@ -54,10 +54,29 @@ export function DialogShell({
   );
 }
 
-export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+export function Field({
+  label,
+  hint,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  /**
+   * Optional. Associates the label with its input via `htmlFor`/`id`, so
+   * `getByLabel()` (Playwright, Testing Library) and screen readers can find
+   * the field programmatically rather than by adjacency. Backward compatible —
+   * every existing caller omits it and renders exactly as before. Added for
+   * build/03-auth-and-rbac.md's login forms, which need it to be testable.
+   */
+  htmlFor?: string;
+  children: ReactNode;
+}) {
   return (
     <div>
-      <label className="block text-[12.5px] font-semibold mb-1.5">{label}</label>
+      <label htmlFor={htmlFor} className="block text-[12.5px] font-semibold mb-1.5">
+        {label}
+      </label>
       {children}
       {hint && <div className="text-xs text-muted-foreground mt-1.5">{hint}</div>}
     </div>

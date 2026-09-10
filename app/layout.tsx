@@ -1,11 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { AppProvider } from "@/context/AppContext";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
-import { Toast } from "@/components/ui/Toast";
-import { DialogHost } from "@/components/dialogs/DialogHost";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -25,25 +20,19 @@ const THEME_INIT_SCRIPT = `
   } catch (e) {}
 `;
 
+/**
+ * Deliberately thin. The Sidebar/Header/AppProvider shell moved to
+ * app/(app)/layout.tsx (build/03-auth-and-rbac.md §2.7) so that app/(auth)/**
+ * can render outside it — an auth screen has no session to show a sidebar
+ * user card for, and no project to scope a header to.
+ */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
-      <body className="font-sans text-sm leading-relaxed">
-        <AppProvider>
-          <div className="grid grid-cols-[250px_1fr] min-h-screen">
-            <Sidebar />
-            <div className="min-w-0">
-              <Header />
-              <div className="p-7 max-w-[1280px]">{children}</div>
-            </div>
-          </div>
-          <DialogHost />
-          <Toast />
-        </AppProvider>
-      </body>
+      <body className="font-sans text-sm leading-relaxed">{children}</body>
     </html>
   );
 }

@@ -388,6 +388,32 @@ default to Mumbai.
 
 ---
 
+### D19 — Phone OTP for client sign-in: v1 or deferred?
+
+**Question:** `01-hld.md` §6 offers clients magic link **or** phone OTP. Phone OTP needs a paid
+SMS provider, an Indian DLT sender-ID registration, and template approval — a multi-week
+regulatory process, not a configuration step.
+**Answered:** 2026-09-10 by Voola
+**Answer:** Magic link only for v1. Phone OTP deferred; DLT registration not started.
+**Consequence:** `app/(auth)/client-login/page.tsx` offers email magic link only. No SMS
+provider, no DLT registration, no phone-number column treated as a sign-in credential in
+Build 03. Revisit if a client without email access becomes a real blocker.
+
+---
+
+### D20 — Admin "preview as" impersonation: build it now?
+
+**Question:** `01-hld.md` §3.1 specifies a read-only, audit-logged, banner-flagged capability
+for owner/admin to see what a client or site supervisor sees.
+**Answered:** 2026-09-10 by Voola
+**Answer:** Yes, build it in Build 03.
+**Consequence:** A signed, short-lived (15-minute) httpOnly cookie shapes reads for the
+previewed role and project. Every write path still checks the **real** session and refuses —
+enforced in the RPCs and tested directly, not just hidden in the UI. `fn_audit` records start
+and stop. The banner is persistent and not dismissible while active.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |

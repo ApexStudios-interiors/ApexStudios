@@ -4,9 +4,17 @@ import { useEffect } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useApp } from "@/context/AppContext";
-import { ALLOWED_SECTIONS, sectionFromPath } from "@/lib/nav";
+import { ALLOWED_SECTIONS, sectionFromPath } from "@/lib/rbac/nav";
 
-export default function ProjectLayout({ children }: { children: React.ReactNode }) {
+/**
+ * Renamed from the file's old default export (layout.tsx), moved here
+ * verbatim — this is UX only, unchanged by build/03-auth-and-rbac.md.
+ * layout.tsx now does the SECURITY check (requireProjectAccess, server-side)
+ * before this ever renders. Hiding a nav item is UX; the layout guard and RLS
+ * are the security (02-lld.md §8.2) — this file remains the former, the new
+ * layout.tsx server wrapper is the latter.
+ */
+export function ProjectShell({ children }: { children: React.ReactNode }) {
   const params = useParams<{ projectId: string }>();
   const pathname = usePathname();
   const router = useRouter();

@@ -12,6 +12,11 @@ import { z } from "zod";
 const clientSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
+  // The magic-link callback target (features/auth/actions.ts). Must be
+  // allow-listed in Supabase's Redirect URLs (build/03-auth-and-rbac.md §0.1)
+  // in every environment — a mismatch fails on Supabase's side with no
+  // server-side log to find.
+  NEXT_PUBLIC_SITE_URL: z.url(),
 });
 
 export type ClientEnv = z.infer<typeof clientSchema>;
@@ -21,6 +26,7 @@ export type ClientEnv = z.infer<typeof clientSchema>;
 const raw = {
   NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
   NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
 };
 
 function parseClientEnv(): ClientEnv {

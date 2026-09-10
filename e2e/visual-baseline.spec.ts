@@ -7,17 +7,13 @@ import { expect, test } from "@playwright/test";
  * images are what "no pixel changed" is measured against, and they cannot be
  * recaptured once the prototype is gone. See docs/build/01-foundations.md §3.17.
  *
- * Role lives in React state with no persistence, so a full navigation resets it
- * to admin. Every case therefore navigates first and switches role second.
+ * Each Playwright project (admin/site/client) now carries a REAL signed-in
+ * storage state from e2e/global-setup.ts (build/03-auth-and-rbac.md) — no more
+ * in-page role switching, because that UI no longer exists. AppContext's
+ * `role` is locked to the real session for the run.
  */
 
 type Role = "admin" | "site" | "client";
-
-const ROLE_LABEL: Record<Role, string> = {
-  admin: "Admin",
-  site: "Site Supervisor",
-  client: "Client",
-};
 
 const PROJECT = "bhel";
 const MODULE = "pool";
@@ -63,15 +59,6 @@ for (const theme of THEMES) {
         }, theme);
 
         await page.goto(route.path);
-
-        if (role !== "admin") {
-          await page
-            .getByRole("button", { name: /Switch role/i })
-            .or(page.locator("aside > div:last-child > button"))
-            .last()
-            .click();
-          await page.getByRole("button", { name: ROLE_LABEL[role], exact: true }).click();
-        }
 
         // The role-gate redirect in the project layout runs in an effect.
         await page.waitForLoadState("networkidle");

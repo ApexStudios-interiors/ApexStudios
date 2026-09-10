@@ -1,0 +1,84 @@
+"use server";
+
+import "server-only";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { actionClient } from "@/lib/safe-action";
+import { clientEnv } from "@/lib/env.client";
+import { staffLoginSchema, magicLinkSchema, totpVerifySchema } from "./schema";
+
+/**
+ * The one place `actionClient` (no guard) is used, exactly as
+ * build/03-auth-and-rbac.md §2.6 specifies — everything past this point
+ * requires a session.
+ *
+ * DEFERRED (recorded, not silently skipped): §2.7's "per-IP and per-email
+ * throttle in the action". Supabase's own project-level limits are live today
+ * via supabase/config.toml [auth.rate_limit] (email_sent, sign_in_sign_ups,
+ * token_verifications) — real protection, not a placeholder — but they are
+ * project-wide, not per-address. An additional per-email cooldown needs a
+ * small table and is left for a follow-up rather than rushed here.
+ */
+
+export const signInWithPassword = actionClient
+  .inputSchema(staffLoginSchema)
+  .action(async ({ parsedInput }) => {
+    const supabase = await createClient();
+
+    const { error } = await supabase.auth.signInWithPassword(parsedInput);
+    if (error) {
+      // Never reveal whether the email exists — the message is identical either
+      // way, mapped at this boundary rather than left to whatever GoTrue said.
+      throw new Error("Incorrect email or password.");
+    }
+
+    // 01-hld.md §6: TOTP required for admin/owner. If the account has an
+    // enrolled factor and hasn't completed it this session, the client needs a
+    // challenge before it can call anything role-gated — lib/auth/session.ts's
+    // requireRole() checks the session's aal, so signing in without finishing
+    // this step gets FORBIDDEN on the first admin/owner action, not silently in.
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
+      const { data: factors } = await supabase.auth.mfa.listFactors();
+      const factor = factors?.totp[0];
+      if (factor) {
+        const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+          factorId: factor.id,
+        });
+        if (challengeError) throw new Error("Could not start the verification step. Try again.");
+        return { needsMfa: true as const, factorId: factor.id, challengeId: challenge.id };
+      }
+    }
+
+    return { needsMfa: false as const };
+  });
+
+export const verifyTotp = actionClient.inputSchema(totpVerifySchema).action(async ({ parsedInput }) => {
+  const supabase = await createClient();
+  const { error } = await supabase.auth.mfa.verify(parsedInput);
+  if (error) throw new Error("That code didn't work. Check your authenticator app and try again.");
+  return { ok: true as const };
+});
+
+export const requestMagicLink = actionClient.inputSchema(magicLinkSchema).action(async ({ parsedInput }) => {
+  const supabase = await createClient();
+  // emailRedirectTo must be an allow-listed URL in Supabase's Redirect URLs
+  // setting (build/03-auth-and-rbac.md §0.1) — a mismatch fails silently on
+  // Supabase's side with no server-side log, which is why that prerequisite
+  // exists.
+  const { error } = await supabase.auth.signInWithOtp({
+    email: parsedInput.email,
+    options: { emailRedirectTo: `${clientEnv.NEXT_PUBLIC_SITE_URL}/auth/callback` },
+  });
+  // Deliberately the same success response whether or not the email exists —
+  // otherwise this endpoint becomes a way to enumerate client email addresses.
+  if (error) throw new Error("Could not send the link. Try again in a moment.");
+  return { ok: true as const };
+});
+
+export async function signOut(): Promise<never> {
+  "use server";
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect("/login");
+}
