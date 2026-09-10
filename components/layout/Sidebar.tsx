@@ -4,10 +4,10 @@ import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
 import { Fragment, useRef, useState } from "react";
 import { useApp } from "@/context/AppContext";
-import { Icon, IconName } from "@/components/ui/Icon";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import { initials } from "@/lib/logic";
-import { ALLOWED_SECTIONS, Section, sectionFromPath } from "@/lib/nav";
-import { Role } from "@/lib/types";
+import { ALLOWED_SECTIONS, type Section, sectionFromPath } from "@/lib/nav";
+import type { Role } from "@/lib/types";
 import { useClickOutside } from "@/hooks/useClickOutside";
 
 const NAV_ITEMS: { key: Section; label: string; icon: IconName; href: (id: string) => string }[] = [
@@ -41,10 +41,10 @@ export function Sidebar() {
   useClickOutside(roleMenuRef, () => setRoleMenuOpen(false), roleMenuOpen);
 
   const isHome = pathname === "/";
-  const project = params?.projectId ? data.projects.find((p) => p.id === params.projectId) ?? null : null;
+  const project = params?.projectId ? (data.projects.find((p) => p.id === params.projectId) ?? null) : null;
   const allowed = ALLOWED_SECTIONS[role];
 
-  const user = data.team.find((t) => t.r === role)!;
+  const user = data.team.find((t) => t.r === role);
 
   return (
     <aside className="bg-sidebar border-r border-border flex flex-col sticky top-0 self-start h-screen overflow-auto p-3">
@@ -102,12 +102,19 @@ export function Sidebar() {
         <Link
           href="/inventory"
           className={`shrink-0 flex items-center gap-2.5 w-full text-left border-0 rounded-md px-2 py-[7px] mb-2.5 cursor-pointer text-[13.5px] ${
-            pathname === "/inventory" ? "bg-accent font-semibold text-foreground" : "font-medium text-foreground hover:bg-accent"
+            pathname === "/inventory"
+              ? "bg-accent font-semibold text-foreground"
+              : "font-medium text-foreground hover:bg-accent"
           }`}
         >
-          <Icon name="archive" className={`w-4 h-4 flex-none ${pathname === "/inventory" ? "text-foreground" : "text-muted-foreground"}`} />
+          <Icon
+            name="archive"
+            className={`w-4 h-4 flex-none ${pathname === "/inventory" ? "text-foreground" : "text-muted-foreground"}`}
+          />
           Inventory
-          <span className="ml-auto text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">All</span>
+          <span className="ml-auto text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+            All
+          </span>
         </Link>
       )}
 
@@ -120,9 +127,15 @@ export function Sidebar() {
           <nav className="shrink-0 flex flex-col gap-px">
             {(() => {
               const activeKey = sectionFromPath(pathname, project.id);
-              const pend = data.requests.filter((r) => r.proj === project.id && r.status === "Pending").length;
-              const apPend = data.approvals.filter((a) => a.proj === project.id && a.status === "Pending").length;
-              const billPend = data.bills.filter((b) => b.proj === project.id && b.status === "Submitted").length;
+              const pend = data.requests.filter(
+                (r) => r.proj === project.id && r.status === "Pending"
+              ).length;
+              const apPend = data.approvals.filter(
+                (a) => a.proj === project.id && a.status === "Pending"
+              ).length;
+              const billPend = data.bills.filter(
+                (b) => b.proj === project.id && b.status === "Submitted"
+              ).length;
 
               return NAV_ITEMS.filter((it) => allowed.includes(it.key)).map((it) => {
                 const on = activeKey === it.key;
@@ -130,20 +143,25 @@ export function Sidebar() {
                   it.key === "stock" && pend && role !== "client"
                     ? pend
                     : it.key === "approvals" && apPend && role === "client"
-                    ? apPend
-                    : it.key === "billing" && billPend && role === "client"
-                    ? billPend
-                    : 0;
+                      ? apPend
+                      : it.key === "billing" && billPend && role === "client"
+                        ? billPend
+                        : 0;
                 const label = it.key === "billing" ? (role === "client" ? "Bills" : "Billing") : it.label;
                 return (
                   <Fragment key={it.key}>
                     <Link
                       href={it.href(project.id)}
                       className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md px-2 py-[7px] cursor-pointer text-[13.5px] ${
-                        on ? "bg-accent font-semibold text-foreground" : "font-medium text-foreground hover:bg-accent"
+                        on
+                          ? "bg-accent font-semibold text-foreground"
+                          : "font-medium text-foreground hover:bg-accent"
                       }`}
                     >
-                      <Icon name={it.icon} className={`w-4 h-4 flex-none ${on ? "text-foreground" : "text-muted-foreground"}`} />
+                      <Icon
+                        name={it.icon}
+                        className={`w-4 h-4 flex-none ${on ? "text-foreground" : "text-muted-foreground"}`}
+                      />
                       {label}
                       {badge ? (
                         <span className="ml-auto text-[11px] font-semibold bg-primary text-primary-foreground rounded-full min-w-[18px] h-[18px] px-1.5 grid place-items-center">
@@ -161,7 +179,10 @@ export function Sidebar() {
                           }}
                           className="ml-auto w-[26px] h-[26px] grid place-items-center rounded hover:bg-border text-muted-foreground"
                         >
-                          <Icon name="chevronRight" className={`w-3.5 h-3.5 transition-transform ${modsOpen ? "rotate-90" : ""}`} />
+                          <Icon
+                            name="chevronRight"
+                            className={`w-3.5 h-3.5 transition-transform ${modsOpen ? "rotate-90" : ""}`}
+                          />
                         </span>
                       ) : null}
                     </Link>
@@ -172,7 +193,9 @@ export function Sidebar() {
                           key={m.id}
                           href={`/projects/${project.id}/packages/${m.id}`}
                           className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md pl-[34px] pr-2 py-[7px] cursor-pointer text-[13.5px] ${
-                            params?.moduleId === m.id ? "text-foreground font-medium bg-accent" : "text-muted-foreground font-normal hover:bg-accent"
+                            params?.moduleId === m.id
+                              ? "text-foreground font-medium bg-accent"
+                              : "text-muted-foreground font-normal hover:bg-accent"
                           }`}
                         >
                           <span className="inline-block min-w-[22px] text-muted-foreground tabular-nums font-medium">
@@ -197,10 +220,15 @@ export function Sidebar() {
           <Link
             href="/users"
             className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md px-2 py-[7px] cursor-pointer text-[13.5px] ${
-              pathname === "/users" ? "bg-accent font-semibold text-foreground" : "font-medium text-foreground hover:bg-accent"
+              pathname === "/users"
+                ? "bg-accent font-semibold text-foreground"
+                : "font-medium text-foreground hover:bg-accent"
             }`}
           >
-            <Icon name="users" className={`w-4 h-4 flex-none ${pathname === "/users" ? "text-foreground" : "text-muted-foreground"}`} />
+            <Icon
+              name="users"
+              className={`w-4 h-4 flex-none ${pathname === "/users" ? "text-foreground" : "text-muted-foreground"}`}
+            />
             Users
           </Link>
         </div>
@@ -232,13 +260,16 @@ export function Sidebar() {
           className="flex items-center gap-2.5 w-full text-left pt-3 pb-2 px-2 border-t border-border hover:bg-accent rounded-md outline-none focus-visible:bg-accent"
         >
           <div className="w-[30px] h-[30px] rounded-full bg-muted grid place-items-center text-[11.5px] font-semibold flex-none">
-            {initials(user.n)}
+            {initials(user?.n ?? "")}
           </div>
           <div className="min-w-0">
-            <div className="font-semibold text-[13px] leading-tight truncate">{user.n}</div>
-            <div className="text-[11.5px] text-muted-foreground">{user.t}</div>
+            <div className="font-semibold text-[13px] leading-tight truncate">{user?.n ?? ""}</div>
+            <div className="text-[11.5px] text-muted-foreground">{user?.t ?? ""}</div>
           </div>
-          <Icon name="chevronRight" className="w-3.5 h-3.5 ml-auto text-muted-foreground -rotate-90 flex-none" />
+          <Icon
+            name="chevronRight"
+            className="w-3.5 h-3.5 ml-auto text-muted-foreground -rotate-90 flex-none"
+          />
         </button>
       </div>
     </aside>

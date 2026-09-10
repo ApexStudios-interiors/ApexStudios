@@ -1,0 +1,198 @@
+name: CI
+
+# docs/architecture.md §10.1. The full pipeline is:
+#
+#   install → typecheck → lint → secret scan → unit tests → build
+#   → db (Supabase preview branch for this PR: migrations, seed)
+#   → RLS tests (pgTAP, against that branch)   ◄── BLOCKING BY POLICY
+#   → integration tests → deploy preview → e2e → production
+#
+# D14: no Docker anywhere. There is no `supabase start` stage. The database
+# for the db, RLS and integration stages is the pull request's Supabase preview
+# branch (D10), reached over SUPABASE_DB_URL.
+#
+# The database, RLS, integration and e2e stages are added in Build 02 and
+# Build 10, when they have content.
+#
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │ THE RLS STAGE IS BLOCKING BY POLICY.                                     │
+# │                                                                          │
+# │ It must never be given `continue-on-error`, never be marked optional,    │
+# │ and never be skipped to get a release out. It is the test suite that     │
+# │ protects the product's core promise: a client cannot read internal cost  │
+# │ or margin. If it is red, the change does not ship.                       │
+# │ docs/architecture.md §10.1, docs/ai-workflow-rules.md §8.                │
+# └──────────────────────────────────────────────────────────────────────────┘
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: typecheck · lint · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # gitleaks needs history to scan the commits in the PR, not just the tip.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Unit tests
+        run: pnpm test:coverage
+
+      - name: Build
+        # No secrets in CI, and none are needed to compile. lib/env.ts still
+        # validates at runtime; this only skips the build-time parse.
+        env:
+          SKIP_ENV_VALIDATION: "1"
+        run: pnpm build
+
+  secret-scan:
+    name: secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # gitleaks-action lists the commits on the pull request to scan only what
+    # changed, so it needs read access to pull requests. The top-level
+    # `contents: read` alone gives a 403.
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  audit:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # docs/architecture.md §6.5: high and critical are a build failure.
+      - run: pnpm audit --audit-level=high
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # DATABASE, RLS AND INTEGRATION
+  #
+  # D14: no Docker. The database for this job is the Supabase preview branch
+  # created for this pull request (D10), reached over SUPABASE_DB_URL.
+  #
+  # ┌──────────────────────────────────────────────────────────────────────────┐
+  # │ THE RLS STAGE IS BLOCKING BY POLICY (architecture.md §10.1).             │
+  # │                                                                          │
+  # │ It must never be given `continue-on-error`, never be marked optional and  │
+  # │ never be skipped to get a release out. It is the suite that protects the  │
+  # │ product's core promise: a client cannot read internal cost or margin.     │
+  # │                                                                          │
+  # │ Note what this job does NOT do: it does not silently skip when the        │
+  # │ database secret is missing. A quietly absent RLS stage is the same as a   │
+  # │ disabled one, and it looks green. It fails instead, and says why.         │
+  # └──────────────────────────────────────────────────────────────────────────┘
+  database:
+    name: migrations · seed · RLS · drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Require a database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::SUPABASE_DB_URL is not set, so migrations, the RLS suite and the"
+            echo "::error::integration tests cannot run. Build 02 is NOT verified."
+            echo "::error::Create the apex-dev Supabase project, enable preview branching (D10),"
+            echo "::error::and add SUPABASE_DB_URL to the repository secrets."
+            exit 1
+          fi
+
+      - name: Apply migrations and seed
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          pnpm exec supabase db push --db-url "$SUPABASE_DB_URL"
+          pnpm db:seed
+
+      - name: RLS and structural tests (pgTAP)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_PROD_PROJECT_REF: ${{ secrets.SUPABASE_PROD_PROJECT_REF }}
+        run: pnpm test:rls
+
+      - name: Integration tests
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: pnpm test:integration
+
+      - name: Drizzle drift check
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: pnpm db:check-drift
+
+  # Reports inputs that are still on hold — missing facts, not broken code.
+  #
+  # `continue-on-error` is deliberate HERE and nowhere else. These items block
+  # issuing a real document, not writing code, and a permanently red required
+  # check is one people learn to ignore, which is how the RLS stage would end up
+  # ignored too. The production deploy workflow (Build 10) runs the same script
+  # as a hard gate.
+  release-readiness:
+    name: inputs on hold
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:release

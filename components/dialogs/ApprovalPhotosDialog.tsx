@@ -24,7 +24,13 @@ export function ApprovalPhotosDialog({ approvalId }: { approvalId: string }) {
       }}
     >
       <Field label="Photos">
-        <input type="file" accept="image/*" multiple className="px-1.5 py-1.5" onChange={(e) => setCount(e.target.files?.length ?? 0)} />
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          className="px-1.5 py-1.5"
+          onChange={(e) => setCount(e.target.files?.length ?? 0)}
+        />
       </Field>
     </DialogShell>
   );

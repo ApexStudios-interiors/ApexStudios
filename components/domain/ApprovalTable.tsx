@@ -1,7 +1,7 @@
 "use client";
 
 import { useApp } from "@/context/AppContext";
-import { Approval, Project } from "@/lib/types";
+import type { Approval, Project } from "@/lib/types";
 import { dmy, isClientRole, mno } from "@/lib/logic";
 import { ApprovalStatusBadge } from "@/components/domain/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";
@@ -67,7 +67,11 @@ export function ApprovalTable({ project, list }: { project: Project; list: Appro
                 </Button>
               </div>
             ) : !client ? (
-              <Button variant="ghost" size="sm" onClick={() => openDialog({ kind: "approvalPhotos", approvalId: a.id })}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => openDialog({ kind: "approvalPhotos", approvalId: a.id })}
+              >
                 Add photos
               </Button>
             ) : null;

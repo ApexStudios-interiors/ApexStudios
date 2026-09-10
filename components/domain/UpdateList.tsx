@@ -1,4 +1,4 @@
-import { Project, Update } from "@/lib/types";
+import type { Project, Update } from "@/lib/types";
 import { dmy, mno } from "@/lib/logic";
 import { Badge } from "@/components/ui/Badge";
 
@@ -14,7 +14,11 @@ export function UpdateList({ project, updates }: { project: Project; updates: Up
           >
             <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
               <span className="font-bold text-[13.5px] tabular-nums">{dmy(u.date)}</span>
-              {m && <Badge variant="outline">{mno(project, m)} {m.name}</Badge>}
+              {m && (
+                <Badge variant="outline">
+                  {mno(project, m)} {m.name}
+                </Badge>
+              )}
               <span className="text-muted-foreground text-sm">{u.by}</span>
             </div>
             <div className="text-[13.5px] max-w-[70ch]">{u.text}</div>

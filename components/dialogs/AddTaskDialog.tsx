@@ -31,7 +31,12 @@ export function AddTaskDialog({ projectId, moduleId }: { projectId: string; modu
       <div className="grid grid-cols-2 gap-3.5">
         <div className="col-span-2">
           <Field label="Task">
-            <input className={inputClass} placeholder="Coping stone fixing" value={task} onChange={(e) => setTask(e.target.value)} />
+            <input
+              className={inputClass}
+              placeholder="Coping stone fixing"
+              value={task}
+              onChange={(e) => setTask(e.target.value)}
+            />
           </Field>
         </div>
         <div className="col-span-2">
@@ -47,13 +52,31 @@ export function AddTaskDialog({ projectId, moduleId }: { projectId: string; modu
           </Field>
         </div>
         <Field label="Owner">
-          <input className={inputClass} placeholder="Gang, vendor or client" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <input
+            className={inputClass}
+            placeholder="Gang, vendor or client"
+            value={owner}
+            onChange={(e) => setOwner(e.target.value)}
+          />
         </Field>
         <Field label="Start Week">
-          <input type="number" min={1} max={14} className={inputClass} value={w} onChange={(e) => setW(e.target.value)} />
+          <input
+            type="number"
+            min={1}
+            max={14}
+            className={inputClass}
+            value={w}
+            onChange={(e) => setW(e.target.value)}
+          />
         </Field>
         <Field label="Duration (weeks)">
-          <input type="number" min={1} className={inputClass} value={d} onChange={(e) => setD(e.target.value)} />
+          <input
+            type="number"
+            min={1}
+            className={inputClass}
+            value={d}
+            onChange={(e) => setD(e.target.value)}
+          />
         </Field>
       </div>
     </DialogShell>

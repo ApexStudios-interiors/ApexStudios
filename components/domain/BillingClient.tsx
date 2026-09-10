@@ -1,7 +1,7 @@
 "use client";
 
 import { useApp } from "@/context/AppContext";
-import { Bill, Project } from "@/lib/types";
+import type { Bill, Project } from "@/lib/types";
 import { bills, billTotals, dmy, fmt, fmtS, mno } from "@/lib/logic";
 import { StatBar } from "@/components/ui/StatBar";
 import { Card } from "@/components/ui/Card";
@@ -21,15 +21,29 @@ export function BillingClient({ project }: { project: Project }) {
     <div>
       <div className="mb-[22px]">
         <h1 className="text-[26px] font-bold tracking-tight">Bills</h1>
-        <p className="mt-1 text-muted-foreground text-[13.5px]">Running account bills from Apex Studios. Amounts include GST.</p>
+        <p className="mt-1 text-muted-foreground text-[13.5px]">
+          Running account bills from Apex Studios. Amounts include GST.
+        </p>
       </div>
 
       <StatBar
         stats={[
           { label: "Bills Raised", value: fmtS(sum(() => true)), sub: `${bs.length} bills` },
-          { label: "Awaiting Approval", value: fmtS(sum((b) => b.status === "Submitted")), sub: `${bs.filter((b) => b.status === "Submitted").length} bills` },
-          { label: "Approved, Unpaid", value: fmtS(sum((b) => b.status === "Certified")), sub: `${bs.filter((b) => b.status === "Certified").length} bills` },
-          { label: "Paid", value: fmtS(sum((b) => b.status === "Paid")), sub: `${bs.filter((b) => b.status === "Paid").length} bills` },
+          {
+            label: "Awaiting Approval",
+            value: fmtS(sum((b) => b.status === "Submitted")),
+            sub: `${bs.filter((b) => b.status === "Submitted").length} bills`,
+          },
+          {
+            label: "Approved, Unpaid",
+            value: fmtS(sum((b) => b.status === "Certified")),
+            sub: `${bs.filter((b) => b.status === "Certified").length} bills`,
+          },
+          {
+            label: "Paid",
+            value: fmtS(sum((b) => b.status === "Paid")),
+            sub: `${bs.filter((b) => b.status === "Paid").length} bills`,
+          },
         ]}
       />
 
@@ -62,7 +76,11 @@ export function BillingClient({ project }: { project: Project }) {
                     <td className={td}>
                       {b.id}
                       <span className={sub}>
-                        {b.paid ? `Paid ${dmy(b.paid)}` : b.certified ? `Approved ${dmy(b.certified)}` : `Submitted ${dmy(b.submitted)}`}
+                        {b.paid
+                          ? `Paid ${dmy(b.paid)}`
+                          : b.certified
+                            ? `Approved ${dmy(b.certified)}`
+                            : `Submitted ${dmy(b.submitted)}`}
                       </span>
                       <BillFiles files={b.files} />
                     </td>
@@ -76,11 +94,19 @@ export function BillingClient({ project }: { project: Project }) {
                     </td>
                     <td className={td}>
                       <div className="flex gap-1.5 flex-wrap justify-end">
-                        <Button variant="ghost" size="sm" onClick={() => openDialog({ kind: "billView", billId: b.id })}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openDialog({ kind: "billView", billId: b.id })}
+                        >
                           View
                         </Button>
                         {b.status === "Submitted" && (
-                          <Button variant="primary" size="sm" onClick={() => setBillStatus(b.id, "Certified")}>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => setBillStatus(b.id, "Certified")}
+                          >
                             Approve
                           </Button>
                         )}

@@ -1,4 +1,16 @@
-import { AppData, Approval, Bill, BillLine, BillableItem, InventoryItem, ModuleT, Package, Project, Role, StockRequest } from "./types";
+import type {
+  AppData,
+  Approval,
+  Bill,
+  BillLine,
+  BillableItem,
+  InventoryItem,
+  ModuleT,
+  Package,
+  Project,
+  Role,
+  StockRequest,
+} from "./types";
 import { CR, GST, L, MAS, RET } from "./data";
 
 export const isMoney = (role: Role) => role === "admin";
@@ -34,6 +46,7 @@ const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct
 export function dmy(s?: string | null): string {
   if (!s) return "–";
   const [y, m, d] = s.split("-");
+  if (!y || !m || !d) return "–";
   return `${d} ${MON[+m - 1]} ${y}`;
 }
 
@@ -205,7 +218,12 @@ export function buildNotifications(data: AppData, role: Role): Notification[] {
     data.requests
       .filter((r) => r.status === "Pending")
       .forEach((r) =>
-        items.push({ id: "req-" + r.id, text: r.item, sub: `Stock request · ${projectName(r.proj)}`, href: `/projects/${r.proj}/stock` })
+        items.push({
+          id: "req-" + r.id,
+          text: r.item,
+          sub: `Stock request · ${projectName(r.proj)}`,
+          href: `/projects/${r.proj}/stock`,
+        })
       );
   }
 
@@ -213,18 +231,33 @@ export function buildNotifications(data: AppData, role: Role): Notification[] {
     data.approvals
       .filter((a) => a.status === "Pending")
       .forEach((a) =>
-        items.push({ id: "ap-" + a.id, text: a.item, sub: `Approval needed · ${projectName(a.proj)}`, href: `/projects/${a.proj}/approvals` })
+        items.push({
+          id: "ap-" + a.id,
+          text: a.item,
+          sub: `Approval needed · ${projectName(a.proj)}`,
+          href: `/projects/${a.proj}/approvals`,
+        })
       );
     data.bills
       .filter((b) => b.status === "Submitted")
       .forEach((b) =>
-        items.push({ id: "bill-" + b.id, text: `Bill ${b.id}`, sub: `Awaiting your approval · ${projectName(b.proj)}`, href: `/projects/${b.proj}/billing` })
+        items.push({
+          id: "bill-" + b.id,
+          text: `Bill ${b.id}`,
+          sub: `Awaiting your approval · ${projectName(b.proj)}`,
+          href: `/projects/${b.proj}/billing`,
+        })
       );
   } else {
     data.bills
       .filter((b) => b.status === "Submitted")
       .forEach((b) =>
-        items.push({ id: "bill-" + b.id, text: `Bill ${b.id} submitted`, sub: `Ready to certify · ${projectName(b.proj)}`, href: `/projects/${b.proj}/billing` })
+        items.push({
+          id: "bill-" + b.id,
+          text: `Bill ${b.id} submitted`,
+          sub: `Ready to certify · ${projectName(b.proj)}`,
+          href: `/projects/${b.proj}/billing`,
+        })
       );
     data.inventory
       .filter((i) => inventoryStatus(i) !== "OK")
@@ -259,11 +292,23 @@ export function buildSearchResults(data: AppData, role: Role, query: string): Se
 
   data.projects.forEach((p) => {
     if (match(p.name) || match(p.client)) {
-      results.push({ id: "proj-" + p.id, category: "Projects", text: p.name, sub: p.client, href: `/projects/${p.id}` });
+      results.push({
+        id: "proj-" + p.id,
+        category: "Projects",
+        text: p.name,
+        sub: p.client,
+        href: `/projects/${p.id}`,
+      });
     }
     p.modules.forEach((m) => {
       if (match(m.name)) {
-        results.push({ id: "mod-" + m.id, category: "Packages", text: m.name, sub: p.name, href: `/projects/${p.id}/packages/${m.id}` });
+        results.push({
+          id: "mod-" + m.id,
+          category: "Packages",
+          text: m.name,
+          sub: p.name,
+          href: `/projects/${p.id}/packages/${m.id}`,
+        });
       }
     });
   });
@@ -308,7 +353,13 @@ export function buildSearchResults(data: AppData, role: Role, query: string): Se
   if (role !== "site") {
     data.bills.forEach((b) => {
       if (match(b.id)) {
-        results.push({ id: "bill-" + b.id, category: "Bills", text: b.id, sub: projectName(b.proj), href: `/projects/${b.proj}/billing` });
+        results.push({
+          id: "bill-" + b.id,
+          category: "Bills",
+          text: b.id,
+          sub: projectName(b.proj),
+          href: `/projects/${b.proj}/billing`,
+        });
       }
     });
   }

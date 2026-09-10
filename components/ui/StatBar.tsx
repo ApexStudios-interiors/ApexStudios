@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Card } from "./Card";
 
 export interface Stat {
@@ -16,7 +16,9 @@ export function StatBar({ stats, className = "" }: { stats: Stat[]; className?: 
           <div className="text-[11.5px] font-semibold text-muted-foreground uppercase tracking-wide">
             {s.label}
           </div>
-          <div className={`text-[23px] font-bold tracking-tight mt-[7px] leading-tight ${s.negative ? "font-bold" : ""}`}>
+          <div
+            className={`text-[23px] font-bold tracking-tight mt-[7px] leading-tight ${s.negative ? "font-bold" : ""}`}
+          >
             {s.value}
           </div>
           {s.sub != null && <div className="text-xs text-muted-foreground mt-1">{s.sub}</div>}

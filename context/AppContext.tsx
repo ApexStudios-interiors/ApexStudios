@@ -2,7 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { seedData } from "@/lib/data";
-import {
+import type {
   AppData,
   ApprovalStatus,
   BillFile,
@@ -49,13 +49,20 @@ interface AppContextValue {
   setBillStatus: (id: string, status: BillStatus) => void;
   createBill: (projectId: string, selectedKeys: Set<string>) => string | null;
   markPhaseDone: (projectId: string, moduleId: string, pkgId: string) => void;
-  addModule: (projectId: string, m: { name: string; allocated: number; internal: number; lead: string }) => void;
+  addModule: (
+    projectId: string,
+    m: { name: string; allocated: number; internal: number; lead: string }
+  ) => void;
   editModule: (
     projectId: string,
     moduleId: string,
     m: { name: string; allocated: number; internal: number; lead: string; status: string }
   ) => void;
-  addTask: (projectId: string, moduleId: string, t: { t: string; pkg: string; owner: string; w: number; d: number }) => void;
+  addTask: (
+    projectId: string,
+    moduleId: string,
+    t: { t: string; pkg: string; owner: string; w: number; d: number }
+  ) => void;
   updateTask: (projectId: string, moduleId: string, taskIndex: number, patch: Partial<Task>) => void;
   addRequest: (
     projectId: string,
@@ -68,7 +75,13 @@ interface AppContextValue {
   addApprovalPhotos: (approvalId: string, count: number) => void;
   addUpdate: (projectId: string, u: { mod: string; date: string; text: string; photos: number }) => void;
   uploadBillFiles: (billId: string, files: BillFile[]) => void;
-  addProject: (p: { name: string; client: string; location: string; start: string | null; packageNames: string[] }) => string;
+  addProject: (p: {
+    name: string;
+    client: string;
+    location: string;
+    start: string | null;
+    packageNames: string[];
+  }) => string;
   inviteUser: (u: { name: string; email: string; role: Role }) => void;
   updateTeamRole: (index: number, role: Role, roleLabel: string) => void;
 }
@@ -131,56 +144,53 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const createBill = useCallback(
-    (projectId: string, selectedKeys: Set<string>): string | null => {
-      let newId: string | null = null;
-      setData((prev) => {
-        const next = clone(prev);
-        const p = next.projects.find((x) => x.id === projectId);
-        if (!p) return prev;
-        const items = billableItems(prev, p).filter((i) => selectedKeys.has(i.key));
-        if (!items.length) return prev;
-        const id = "RA-" + String(next.bills.length + 1).padStart(3, "0");
-        let recovery = 0;
-        const phs = new Set(items.filter((i) => i.type === "milestone").map((i) => i.mod + ":" + i.pkg));
-        next.bills
-          .filter((b) => b.proj === p.id)
-          .forEach((b) =>
-            b.lines.forEach((l) => {
-              if (l.type === "material" && phs.has(l.mod + ":" + l.pkg) && !l.recovered) {
-                recovery += lineVal(l);
-                l.recovered = true;
-              }
-            })
-          );
-        const lines = items.map((i) => ({
-          type: i.type,
-          mod: i.mod,
-          pkg: i.pkg,
-          desc: i.desc,
-          cost: i.cost,
-          client: i.client,
-          pct: i.pct,
-        }));
-        next.bills.push({ id, proj: p.id, date: TODAY_ISO, status: "Draft", lines, recovery, files: [] });
-        items.forEach((i) => {
-          if (i.type === "material") {
-            const key = i.key.slice(2);
-            const r = next.requests.find((x) => x.id === key);
-            if (r) r.billedIn = id;
-          } else {
-            const m = p.modules.find((x) => x.id === i.mod);
-            const k = m?.packages.find((x) => x.id === i.pkg);
-            if (k) k.billedIn = id;
-          }
-        });
-        newId = id;
-        return next;
+  const createBill = useCallback((projectId: string, selectedKeys: Set<string>): string | null => {
+    let newId: string | null = null;
+    setData((prev) => {
+      const next = clone(prev);
+      const p = next.projects.find((x) => x.id === projectId);
+      if (!p) return prev;
+      const items = billableItems(prev, p).filter((i) => selectedKeys.has(i.key));
+      if (!items.length) return prev;
+      const id = "RA-" + String(next.bills.length + 1).padStart(3, "0");
+      let recovery = 0;
+      const phs = new Set(items.filter((i) => i.type === "milestone").map((i) => i.mod + ":" + i.pkg));
+      next.bills
+        .filter((b) => b.proj === p.id)
+        .forEach((b) =>
+          b.lines.forEach((l) => {
+            if (l.type === "material" && phs.has(l.mod + ":" + l.pkg) && !l.recovered) {
+              recovery += lineVal(l);
+              l.recovered = true;
+            }
+          })
+        );
+      const lines = items.map((i) => ({
+        type: i.type,
+        mod: i.mod,
+        pkg: i.pkg,
+        desc: i.desc,
+        cost: i.cost,
+        client: i.client,
+        pct: i.pct,
+      }));
+      next.bills.push({ id, proj: p.id, date: TODAY_ISO, status: "Draft", lines, recovery, files: [] });
+      items.forEach((i) => {
+        if (i.type === "material") {
+          const key = i.key.slice(2);
+          const r = next.requests.find((x) => x.id === key);
+          if (r) r.billedIn = id;
+        } else {
+          const m = p.modules.find((x) => x.id === i.mod);
+          const k = m?.packages.find((x) => x.id === i.pkg);
+          if (k) k.billedIn = id;
+        }
       });
-      return newId;
-    },
-    []
-  );
+      newId = id;
+      return next;
+    });
+    return newId;
+  }, []);
 
   const markPhaseDone = useCallback((projectId: string, moduleId: string, pkgId: string) => {
     setData((prev) => {
@@ -236,12 +246,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addTask = useCallback(
-    (projectId: string, moduleId: string, t: { t: string; pkg: string; owner: string; w: number; d: number }) => {
+    (
+      projectId: string,
+      moduleId: string,
+      t: { t: string; pkg: string; owner: string; w: number; d: number }
+    ) => {
       setData((prev) => {
         const next = clone(prev);
         const mod = next.projects.find((x) => x.id === projectId)?.modules.find((x) => x.id === moduleId);
         if (!mod) return prev;
-        mod.tasks.push({ t: t.t || "New task", owner: t.owner || "To assign", w: t.w || 1, d: t.d || 1, p: 0, pkg: t.pkg });
+        mod.tasks.push({
+          t: t.t || "New task",
+          owner: t.owner || "To assign",
+          w: t.w || 1,
+          d: t.d || 1,
+          p: 0,
+          pkg: t.pkg,
+        });
         return next;
       });
     },
@@ -353,7 +374,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setData((prev) => {
       const next = clone(prev);
       const b = next.bills.find((x) => x.id === billId);
-      if (b) b.files = (b.files || []).concat(files.length ? files : [{ n: b.id + " Apex Studios Bill.pdf", s: "310 KB" }]);
+      if (b)
+        b.files = (b.files || []).concat(
+          files.length ? files : [{ n: b.id + " Apex Studios Bill.pdf", s: "310 KB" }]
+        );
       return next;
     });
   }, []);

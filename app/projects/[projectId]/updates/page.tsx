@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useParams } from "next/navigation";
 import { useApp } from "@/context/AppContext";
+import { useProject } from "@/hooks/useProject";
 import { isClientRole, mno } from "@/lib/logic";
 import { UpdateList } from "@/components/domain/UpdateList";
 import { Card } from "@/components/ui/Card";
@@ -11,9 +11,8 @@ import { Icon } from "@/components/ui/Icon";
 import { Empty } from "@/components/ui/Empty";
 
 export default function UpdatesPage() {
-  const params = useParams<{ projectId: string }>();
   const { data, role, openDialog } = useApp();
-  const project = data.projects.find((p) => p.id === params.projectId)!;
+  const project = useProject();
   const [filter, setFilter] = useState("all");
 
   const updates = data.updates.filter((u) => u.proj === project.id && (filter === "all" || u.mod === filter));
@@ -23,11 +22,16 @@ export default function UpdatesPage() {
       <div className="flex items-start gap-4 flex-wrap mb-[22px]">
         <div>
           <h1 className="text-[26px] font-bold tracking-tight">Daily Updates</h1>
-          <p className="mt-1 text-muted-foreground text-[13.5px]">Work done on site, posted by the site supervisor.</p>
+          <p className="mt-1 text-muted-foreground text-[13.5px]">
+            Work done on site, posted by the site supervisor.
+          </p>
         </div>
         <div className="ml-auto flex gap-2">
           {!isClientRole(role) && (
-            <Button variant="primary" onClick={() => openDialog({ kind: "postUpdate", projectId: project.id })}>
+            <Button
+              variant="primary"
+              onClick={() => openDialog({ kind: "postUpdate", projectId: project.id })}
+            >
               <Icon name="plus" className="w-[15px] h-[15px]" />
               Post Update
             </Button>
@@ -50,7 +54,9 @@ export default function UpdatesPage() {
         </select>
       </div>
 
-      <Card>{updates.length ? <UpdateList project={project} updates={updates} /> : <Empty>No updates yet.</Empty>}</Card>
+      <Card>
+        {updates.length ? <UpdateList project={project} updates={updates} /> : <Empty>No updates yet.</Empty>}
+      </Card>
     </div>
   );
 }

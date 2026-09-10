@@ -1,4 +1,5 @@
-export const th = "text-left font-semibold text-[11.5px] uppercase tracking-wide text-muted-foreground px-3 py-2.5 border-b border-border whitespace-nowrap h-10";
+export const th =
+  "text-left font-semibold text-[11.5px] uppercase tracking-wide text-muted-foreground px-3 py-2.5 border-b border-border whitespace-nowrap h-10";
 export const thNum = th + " text-right";
 export const td = "px-3 py-3 border-b border-border align-middle";
 export const tdNum = td + " text-right";

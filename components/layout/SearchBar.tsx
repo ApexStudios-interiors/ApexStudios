@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { useApp } from "@/context/AppContext";
-import { buildSearchResults, SearchResult } from "@/lib/logic";
-import { Icon, IconName } from "@/components/ui/Icon";
+import { buildSearchResults, type SearchResult } from "@/lib/logic";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import { useClickOutside } from "@/hooks/useClickOutside";
 
 const CATEGORY_ICON: Record<string, IconName> = {
@@ -28,8 +28,9 @@ export function SearchBar() {
   const grouped = useMemo(() => {
     const map = new Map<string, SearchResult[]>();
     results.slice(0, 30).forEach((r) => {
-      if (!map.has(r.category)) map.set(r.category, []);
-      map.get(r.category)!.push(r);
+      const bucket = map.get(r.category);
+      if (bucket) bucket.push(r);
+      else map.set(r.category, [r]);
     });
     return map;
   }, [results]);
@@ -59,7 +60,9 @@ export function SearchBar() {
           {results.length ? (
             [...grouped.entries()].map(([cat, items]) => (
               <div key={cat}>
-                <div className="px-3 pt-2 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{cat}</div>
+                <div className="px-3 pt-2 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  {cat}
+                </div>
                 {items.map((r) => (
                   <Link
                     key={r.id}
@@ -67,7 +70,10 @@ export function SearchBar() {
                     onClick={close}
                     className="flex items-center gap-2.5 px-3 py-2 text-[13px] hover:bg-accent"
                   >
-                    <Icon name={CATEGORY_ICON[cat] ?? "folder"} className="w-3.5 h-3.5 text-muted-foreground flex-none" />
+                    <Icon
+                      name={CATEGORY_ICON[cat] ?? "folder"}
+                      className="w-3.5 h-3.5 text-muted-foreground flex-none"
+                    />
                     <span className="min-w-0">
                       <span className="block font-medium text-foreground truncate">{r.text}</span>
                       <span className="block text-xs text-muted-foreground truncate">{r.sub}</span>
@@ -77,7 +83,9 @@ export function SearchBar() {
               </div>
             ))
           ) : (
-            <div className="px-3 py-6 text-center text-muted-foreground text-[13px]">No results for &quot;{query}&quot;</div>
+            <div className="px-3 py-6 text-center text-muted-foreground text-[13px]">
+              No results for &quot;{query}&quot;
+            </div>
           )}
         </div>
       )}

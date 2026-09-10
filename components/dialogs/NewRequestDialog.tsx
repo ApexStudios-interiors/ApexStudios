@@ -14,21 +14,25 @@ const MATERIALS = [
   "Tile adhesive, pool grade, 20 kg",
   "Epoxy grout, 5 kg",
 ];
-const UNITS = ["sft", "nos", "bag", "kit", "len", "kg", "rft"];
+const UNITS = ["sft", "nos", "bag", "kit", "len", "kg", "rft"] as const;
 
 export function NewRequestDialog({ projectId, moduleId }: { projectId: string; moduleId?: string }) {
   const { data, role, closeDialog, addRequest, toast } = useApp();
   const router = useRouter();
-  const project = data.projects.find((p) => p.id === projectId)!;
+  const project = data.projects.find((p) => p.id === projectId);
 
-  const [mod, setMod] = useState(moduleId ?? project.modules[0]?.id ?? "");
-  const modObj = useMemo(() => project.modules.find((m) => m.id === mod), [project, mod]);
+  const [mod, setMod] = useState(moduleId ?? project?.modules[0]?.id ?? "");
+  const modObj = useMemo(() => project?.modules.find((m) => m.id === mod), [project, mod]);
   const [pkg, setPkg] = useState(modObj?.packages[0]?.id ?? "");
   const [item, setItem] = useState("");
   const [qty, setQty] = useState("");
-  const [unit, setUnit] = useState(UNITS[0]);
+  const [unit, setUnit] = useState<string>(UNITS[0]);
   const [need, setNeed] = useState("2026-09-15");
   const [rate, setRate] = useState("");
+
+  // The dialog is always opened from inside a project, so this cannot fire.
+  // Stated as a guard rather than a `!` — ../AGENTS.md forbids the assertion.
+  if (!project) return null;
 
   const onModChange = (id: string) => {
     setMod(id);
@@ -42,7 +46,15 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
       okLabel="Submit"
       onClose={closeDialog}
       onOk={() => {
-        addRequest(projectId, { mod, pkg: pkg || undefined, item, qty: +qty || 0, unit, rate: +rate || 0, need });
+        addRequest(projectId, {
+          mod,
+          pkg: pkg || undefined,
+          item,
+          qty: +qty || 0,
+          unit,
+          rate: +rate || 0,
+          need,
+        });
         closeDialog();
         router.push(`/projects/${projectId}/stock`);
         toast("Request submitted");
@@ -73,7 +85,13 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
         </Field>
         <div className="col-span-2">
           <Field label="Material">
-            <input className={inputClass} placeholder="Pool-grade vitrified tile 300x300" list="materials" value={item} onChange={(e) => setItem(e.target.value)} />
+            <input
+              className={inputClass}
+              placeholder="Pool-grade vitrified tile 300x300"
+              list="materials"
+              value={item}
+              onChange={(e) => setItem(e.target.value)}
+            />
             <datalist id="materials">
               {MATERIALS.map((mm) => (
                 <option key={mm} value={mm} />
@@ -83,8 +101,19 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
         </div>
         <Field label="Quantity">
           <div className="flex gap-2">
-            <input type="number" className={inputClass} placeholder="0" value={qty} onChange={(e) => setQty(e.target.value)} />
-            <select className={inputClass} style={{ flex: "0 0 90px" }} value={unit} onChange={(e) => setUnit(e.target.value)}>
+            <input
+              type="number"
+              className={inputClass}
+              placeholder="0"
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+            />
+            <select
+              className={inputClass}
+              style={{ flex: "0 0 90px" }}
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+            >
               {UNITS.map((u) => (
                 <option key={u}>{u}</option>
               ))}
@@ -96,7 +125,13 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
         </Field>
         {isMoney(role) && (
           <Field label="Rate (₹ per unit)">
-            <input type="number" className={inputClass} placeholder="Optional" value={rate} onChange={(e) => setRate(e.target.value)} />
+            <input
+              type="number"
+              className={inputClass}
+              placeholder="Optional"
+              value={rate}
+              onChange={(e) => setRate(e.target.value)}
+            />
           </Field>
         )}
         <div className="col-span-2">

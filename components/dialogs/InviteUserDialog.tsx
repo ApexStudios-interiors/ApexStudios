@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useApp } from "@/context/AppContext";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
-import { Role } from "@/lib/types";
+import type { Role } from "@/lib/types";
 
 export function InviteUserDialog() {
   const { closeDialog, inviteUser, toast } = useApp();

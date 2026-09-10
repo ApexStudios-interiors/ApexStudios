@@ -34,8 +34,11 @@ export function Header() {
   } else if (params?.projectId) {
     const project = data.projects.find((p) => p.id === params.projectId);
     const section = sectionFromPath(pathname, params.projectId);
-    const sectionLabel = section === "billing" ? (role === "client" ? "Bills" : "Billing") : SECTION_LABELS[section];
+    const sectionLabel =
+      section === "billing" ? (role === "client" ? "Bills" : "Billing") : SECTION_LABELS[section];
     const mod = params.moduleId ? project?.modules.find((m) => m.id === params.moduleId) : null;
+    // `mod` can only be non-null when `project` is defined; state that for the compiler.
+    const modNo = project && mod ? String(project.modules.indexOf(mod) + 1).padStart(2, "0") : "";
     crumb = (
       <>
         {project?.name} <span>/</span> <b className="text-foreground font-semibold">{sectionLabel}</b>
@@ -44,7 +47,7 @@ export function Header() {
             {" "}
             <span>/</span>{" "}
             <b className="text-foreground font-semibold">
-              {String(project!.modules.indexOf(mod) + 1).padStart(2, "0")} {mod.name}
+              {modNo} {mod.name}
             </b>
           </>
         )}

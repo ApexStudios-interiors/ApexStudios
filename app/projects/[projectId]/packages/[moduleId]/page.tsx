@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { useApp } from "@/context/AppContext";
+import { useProject } from "@/hooks/useProject";
 import { committed, isClientRole, isMoney, mno, progress } from "@/lib/logic";
 import { BudgetStatBar } from "@/components/domain/BudgetStatBar";
 import { PhaseTable } from "@/components/domain/PhaseTable";
@@ -21,9 +22,13 @@ type Tab = "budget" | "schedule" | "updates" | "stock" | "billing";
 export default function ModuleDetailPage() {
   const params = useParams<{ projectId: string; moduleId: string }>();
   const { data, role, openDialog } = useApp();
-  const project = data.projects.find((p) => p.id === params.projectId)!;
-  const mod = project.modules.find((x) => x.id === params.moduleId)!;
+  const project = useProject();
   const [tab, setTab] = useState<Tab>("budget");
+
+  // Unlike projectId, moduleId is not validated by the segment layout, so a
+  // stale or hand-typed id reaches here. Every hook above runs first.
+  const mod = project.modules.find((x) => x.id === params.moduleId);
+  if (!mod) return null;
 
   const money = isMoney(role);
   const client = isClientRole(role);
@@ -55,7 +60,11 @@ export default function ModuleDetailPage() {
         </div>
         <div className="ml-auto flex gap-2">
           {money && (
-            <Button onClick={() => openDialog({ kind: "editModule", projectId: project.id, moduleId: mod.id })}>Edit</Button>
+            <Button
+              onClick={() => openDialog({ kind: "editModule", projectId: project.id, moduleId: mod.id })}
+            >
+              Edit
+            </Button>
           )}
           {tab === "schedule" && !client && (
             <Button onClick={() => openDialog({ kind: "addTask", projectId: project.id, moduleId: mod.id })}>
@@ -64,13 +73,18 @@ export default function ModuleDetailPage() {
             </Button>
           )}
           {tab === "updates" && !client && (
-            <Button onClick={() => openDialog({ kind: "postUpdate", projectId: project.id, moduleId: mod.id })}>
+            <Button
+              onClick={() => openDialog({ kind: "postUpdate", projectId: project.id, moduleId: mod.id })}
+            >
               <Icon name="plus" className="w-[15px] h-[15px]" />
               Post Update
             </Button>
           )}
           {!client && (
-            <Button variant="primary" onClick={() => openDialog({ kind: "newRequest", projectId: project.id, moduleId: mod.id })}>
+            <Button
+              variant="primary"
+              onClick={() => openDialog({ kind: "newRequest", projectId: project.id, moduleId: mod.id })}
+            >
               <Icon name="plus" className="w-[15px] h-[15px]" />
               Stock Request
             </Button>
@@ -98,7 +112,15 @@ export default function ModuleDetailPage() {
         </Card>
       )}
       {tab === "billing" && <MilestoneTable project={project} module={mod} />}
-      {tab === "updates" && <Card>{updates.length ? <UpdateList project={project} updates={updates} /> : <Empty>No updates yet.</Empty>}</Card>}
+      {tab === "updates" && (
+        <Card>
+          {updates.length ? (
+            <UpdateList project={project} updates={updates} />
+          ) : (
+            <Empty>No updates yet.</Empty>
+          )}
+        </Card>
+      )}
     </div>
   );
 }

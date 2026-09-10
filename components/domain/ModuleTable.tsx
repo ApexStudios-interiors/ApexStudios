@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useApp } from "@/context/AppContext";
-import { AppData, Project } from "@/lib/types";
+import type { AppData, Project } from "@/lib/types";
 import { committed, fmt, isMoney, isClientRole, mno, progress, projProgress, totals } from "@/lib/logic";
 import { Bar } from "@/components/ui/Bar";
 import { ModuleStatusBadge } from "@/components/domain/StatusBadges";
@@ -15,7 +15,9 @@ export function ModuleTable({ project }: { project: Project }) {
   const money = isMoney(role);
   const client = isClientRole(role);
   const openRequests = (data: AppData, m: string) =>
-    data.requests.filter((r) => r.proj === project.id && r.mod === m && ["Pending", "Approved", "Ordered"].includes(r.status)).length;
+    data.requests.filter(
+      (r) => r.proj === project.id && r.mod === m && ["Pending", "Approved", "Ordered"].includes(r.status)
+    ).length;
 
   return (
     <TableWrap>
@@ -48,7 +50,10 @@ export function ModuleTable({ project }: { project: Project }) {
           return (
             <tr key={m.id} className={trClick}>
               <td className={td}>
-                <Link href={`/projects/${project.id}/packages/${m.id}`} className="font-medium hover:underline">
+                <Link
+                  href={`/projects/${project.id}/packages/${m.id}`}
+                  className="font-medium hover:underline"
+                >
                   <span className="inline-block min-w-[22px] mr-1.5 text-muted-foreground tabular-nums font-medium">
                     {mno(project, m)}
                   </span>

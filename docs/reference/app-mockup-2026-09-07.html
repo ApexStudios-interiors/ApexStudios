@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Apex Projects</title>
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<!DOCTYPE html>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --background:0 0% 100%; --foreground:0 0% 9%;
+  --card:0 0% 100%; --muted:0 0% 96%; --muted-foreground:0 0% 45%;
+  --border:0 0% 90%; --border-strong:0 0% 78%; --input:0 0% 87%; --ring:0 0% 9%;
+  --primary:0 0% 9%; --primary-foreground:0 0% 100%;
+  --secondary:0 0% 95%; --secondary-foreground:0 0% 9%;
+  --accent:0 0% 95%; --destructive:0 0% 9%; --destructive-foreground:0 0% 100%;
+  --sidebar:0 0% 99%; --sidebar-border:0 0% 90%;
+  --radius:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --background:0 0% 7%; --foreground:0 0% 96%; --card:0 0% 9.5%;
+    --muted:0 0% 15%; --muted-foreground:0 0% 63%; --border:0 0% 18%; --border-strong:0 0% 28%; --input:0 0% 22%; --ring:0 0% 90%;
+    --primary:0 0% 96%; --primary-foreground:0 0% 9%; --secondary:0 0% 16%; --secondary-foreground:0 0% 96%; --accent:0 0% 16%;
+    --destructive:0 0% 96%; --destructive-foreground:0 0% 9%; --sidebar:0 0% 6%; --sidebar-border:0 0% 17%;
+  }
+}
+:root[data-theme="dark"]{
+  --background:0 0% 7%; --foreground:0 0% 96%; --card:0 0% 9.5%;
+  --muted:0 0% 15%; --muted-foreground:0 0% 63%; --border:0 0% 18%; --border-strong:0 0% 28%; --input:0 0% 22%; --ring:0 0% 90%;
+  --primary:0 0% 96%; --primary-foreground:0 0% 9%; --secondary:0 0% 16%; --secondary-foreground:0 0% 96%; --accent:0 0% 16%;
+  --destructive:0 0% 96%; --destructive-foreground:0 0% 9%; --sidebar:0 0% 6%; --sidebar-border:0 0% 17%;
+}
+*{box-sizing:border-box;border-color:hsl(var(--border))}
+body{margin:0;background:hsl(var(--background));color:hsl(var(--foreground));font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-feature-settings:"cv11","ss01";font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3{margin:0;font-weight:700;letter-spacing:-.015em}
+h1{font-size:26px;line-height:1.2}h2{font-size:17px}h3{font-size:14px;font-weight:600}
+a{color:inherit}
+.muted{color:hsl(var(--muted-foreground))}
+.text-sm{font-size:13px}.text-xs{font-size:12px}
+/* layout */
+.app{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
+.sidebar{background:hsl(var(--sidebar));border-right:1px solid hsl(var(--sidebar-border));display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow:auto;padding:14px 12px}
+.brand{display:flex;align-items:center;gap:10px;padding:6px 6px 16px}
+.brand .logo{width:30px;height:30px;border-radius:7px;background:hsl(var(--primary));color:hsl(var(--primary-foreground));display:grid;place-items:center;font-weight:700;font-size:13px}
+.brand .t{font-weight:700;font-size:14px;line-height:1.2}
+.brand .s{font-size:11.5px;color:hsl(var(--muted-foreground))}
+.navtop{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;border-bottom:1px solid hsl(var(--border));background:none;border-radius:0;padding:9px 8px 13px;margin-bottom:10px;cursor:pointer;font-weight:600;font-size:13.5px;color:hsl(var(--foreground))}
+.navtop:hover{opacity:.7}
+.navtop.on{color:hsl(var(--foreground))}
+.navtop svg{width:16px;height:16px;flex:none;color:hsl(var(--foreground))}
+.projhead{font-size:13px;font-weight:700;padding:8px 8px 6px;color:hsl(var(--foreground));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grp{font-size:11px;font-weight:600;color:hsl(var(--muted-foreground));padding:14px 8px 6px;text-transform:uppercase;letter-spacing:.06em}
+.nav{display:flex;flex-direction:column;gap:1px}
+.nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:none;border-radius:6px;padding:7px 8px;cursor:pointer;font-weight:500;font-size:13.5px;color:hsl(var(--foreground))}
+.nav button:hover{background:hsl(var(--accent))}
+.nav button.on{background:hsl(var(--accent));font-weight:600}
+.nav button svg{width:16px;height:16px;flex:none;color:hsl(var(--muted-foreground))}
+.nav button.on svg{color:hsl(var(--foreground))}
+.nav button.sub{padding-left:34px;font-weight:400;color:hsl(var(--muted-foreground))}
+.mno{display:inline-block;min-width:22px;margin-right:6px;color:hsl(var(--muted-foreground));font-variant-numeric:tabular-nums;font-weight:500}
+.nav .chev{margin-left:auto;width:26px;height:26px;display:grid;place-items:center;border-radius:4px;color:hsl(var(--muted-foreground))}
+.nav .chev:hover{background:hsl(var(--border))}
+.nav .chev svg{width:14px;height:14px;transition:transform .15s}
+.nav .chev.open svg{transform:rotate(90deg)}
+.nav button.sub.on{color:hsl(var(--foreground));font-weight:500}
+.nav .cnt{margin-left:auto;font-size:11px;font-weight:600;background:hsl(var(--primary));color:hsl(var(--primary-foreground));border-radius:999px;min-width:18px;height:18px;padding:0 6px;display:grid;place-items:center}
+.user{margin-top:auto;display:flex;align-items:center;gap:10px;padding:12px 8px 4px;border-top:1px solid hsl(var(--border))}
+.avatar{width:30px;height:30px;border-radius:50%;background:hsl(var(--muted));display:grid;place-items:center;font-size:11.5px;font-weight:600}
+.user .t{font-weight:600;font-size:13px;line-height:1.2}.user .s{font-size:11.5px;color:hsl(var(--muted-foreground))}
+.main{min-width:0}
+.header{height:56px;display:flex;align-items:center;gap:12px;padding:0 28px;border-bottom:1px solid hsl(var(--border));position:sticky;top:0;background:hsl(var(--background));z-index:5}
+.crumb{display:flex;align-items:center;gap:8px;font-size:13.5px;color:hsl(var(--muted-foreground));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crumb b{font-weight:600;color:hsl(var(--foreground))}
+.header .sp{flex:1}
+.content{padding:28px;max-width:1280px}
+.pagehead{display:flex;align-items:flex-start;gap:16px;margin-bottom:22px;flex-wrap:wrap}
+.pagehead p{margin:4px 0 0;color:hsl(var(--muted-foreground));font-size:13.5px}
+.pagehead .acts{margin-left:auto;display:flex;gap:8px}
+/* button */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid hsl(var(--input));background:hsl(var(--background));font-weight:500;font-size:13.5px;cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s}
+.btn:hover{background:hsl(var(--accent))}
+.btn.primary{background:hsl(var(--primary));color:hsl(var(--primary-foreground));border-color:hsl(var(--primary))}
+.btn.primary:hover{opacity:.88}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn.ghost:hover{background:hsl(var(--accent))}
+.btn.destructive{color:hsl(var(--foreground));border-color:hsl(var(--input))}
+.btn.destructive:hover{background:hsl(var(--foreground));color:hsl(var(--background));border-color:hsl(var(--foreground))}
+.btn.sm{height:30px;padding:0 10px;font-size:12.5px}
+.btn svg{width:15px;height:15px}
+:focus-visible{outline:2px solid hsl(var(--ring));outline-offset:2px}
+/* card */
+.card{background:hsl(var(--card));border:1px solid hsl(var(--border));border-radius:var(--radius)}
+.card .ch{padding:15px 20px;border-bottom:1px solid hsl(var(--border));display:flex;align-items:center;gap:12px}
+.card .ch .acts{margin-left:auto;display:flex;gap:8px;align-items:center}
+/* statbar - unified stat row (replaces separate boxes for less clutter) */
+.statbar{display:flex;flex-wrap:wrap;margin-bottom:20px}
+.statbar .stat{flex:1 1 170px;padding:18px 22px;border-right:1px solid hsl(var(--border));border-bottom:1px solid hsl(var(--border))}
+.statbar .stat:last-child{border-right:0}
+.stat .l{font-size:11.5px;font-weight:600;color:hsl(var(--muted-foreground));text-transform:uppercase;letter-spacing:.05em}
+.stat .v{font-size:23px;font-weight:700;letter-spacing:-.02em;margin-top:7px;line-height:1.2}
+.stat .s{font-size:12px;color:hsl(var(--muted-foreground));margin-top:4px}
+.stat .v.neg{font-weight:700}
+.flagmini{font-size:9.5px;font-weight:700;border:1px solid currentColor;border-radius:4px;padding:1px 5px;margin-left:5px;text-transform:uppercase;letter-spacing:.04em;vertical-align:2px}
+/* table */
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:680px}
+th{text-align:left;font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:hsl(var(--muted-foreground));padding:10px 16px;border-bottom:1px solid hsl(var(--border));white-space:nowrap;height:40px}
+td{padding:12px 16px;border-bottom:1px solid hsl(var(--border));vertical-align:middle}
+tbody tr:last-child td{border-bottom:0}
+tbody tr.click{cursor:pointer}
+tbody tr.click:hover td{background:hsl(var(--muted)/.6)}
+th.num,td.num{text-align:right}
+td .sub{display:block;font-size:12px;color:hsl(var(--muted-foreground));font-weight:400;margin-top:1px}
+td.name{font-weight:500}
+tr.total td{font-weight:700;background:hsl(var(--muted)/.5)}
+/* progress */
+.progress{height:7px;border-radius:999px;background:hsl(var(--muted));overflow:hidden;min-width:110px}
+.progress i{display:block;height:100%;background:hsl(var(--primary));border-radius:999px}
+.progress i.over{background:repeating-linear-gradient(135deg,hsl(var(--foreground)) 0 5px,hsl(var(--muted-foreground)) 5px 10px)}
+.pcell{display:flex;align-items:center;gap:10px}
+.pcell span{font-size:12px;color:hsl(var(--muted-foreground));min-width:34px;text-align:right}
+/* badge */
+.badge{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 10px;font-size:11.5px;font-weight:600;border:1px solid transparent;white-space:nowrap}
+.badge.default{background:hsl(var(--primary));color:hsl(var(--primary-foreground))}
+.badge.secondary{background:hsl(var(--secondary));color:hsl(var(--secondary-foreground))}
+.badge.outline{border-color:hsl(var(--border-strong));color:hsl(var(--foreground))}
+/* tabs */
+.tabs{display:inline-flex;background:hsl(var(--muted));border-radius:8px;padding:4px;gap:2px;margin-bottom:16px}
+.tabs button{border:0;background:none;padding:6px 12px;border-radius:5px;font-weight:500;font-size:13.5px;cursor:pointer;color:hsl(var(--muted-foreground))}
+.tabs button.on{background:hsl(var(--background));color:hsl(var(--foreground));font-weight:600}
+/* forms */
+.form{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form .full{grid-column:1/-1}
+.field label{display:block;font-size:12.5px;font-weight:600;margin-bottom:6px}
+.field input,.field select,.field textarea{width:100%;height:36px;border:1px solid hsl(var(--input));background:hsl(var(--background));border-radius:7px;padding:0 10px;font-size:13.5px}
+.field textarea{height:auto;min-height:72px;padding:8px 10px;resize:vertical}
+.field .hint{font-size:12px;color:hsl(var(--muted-foreground));margin-top:5px}
+.field input[type=range]{padding:0;border:0;height:auto}
+.row2{display:flex;gap:8px}.row2 > *{flex:1}
+/* dialog */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+.overlay.open{display:flex}
+.dialog{background:hsl(var(--background));border:1px solid hsl(var(--border));border-radius:12px;width:min(640px,100%);max-height:92vh;overflow:auto;box-shadow:0 20px 50px -20px rgba(0,0,0,.45)}
+.dialog .dh{padding:22px 24px 4px}
+.dialog .dh h2{font-size:17px}
+.dialog .dh p{margin:4px 0 0;font-size:13.5px;color:hsl(var(--muted-foreground))}
+.dialog .db{padding:16px 24px}
+.dialog .df{padding:4px 24px 22px;display:flex;justify-content:flex-end;gap:8px}
+/* gantt */
+.gantt{overflow-x:auto}
+.g{display:grid;min-width:960px}
+.g .h{font-size:12px;color:hsl(var(--muted-foreground));padding:8px 6px;border-bottom:1px solid hsl(var(--border));text-align:center;white-space:nowrap;font-weight:500}
+.g .h.th{text-align:left;padding-left:16px;position:sticky;left:0;background:hsl(var(--card));z-index:2}
+.g .h.now{color:hsl(var(--foreground))}
+.g .h .wd{display:block;font-size:14px;font-weight:700;color:hsl(var(--foreground));line-height:1.2}
+.g .h .wn{display:block;font-size:11px;color:hsl(var(--muted-foreground))}
+.g .mh{font-size:12px;font-weight:600;padding:8px 10px;border-bottom:1px solid hsl(var(--border));border-left:1px solid hsl(var(--border));background:hsl(var(--muted)/.5);white-space:nowrap}
+.g .mh.first{border-left:0;position:sticky;left:0;z-index:2}
+.g .task{padding:10px 16px;border-bottom:1px solid hsl(var(--border));position:sticky;left:0;background:hsl(var(--card));z-index:1;font-size:13px}
+.g .task .t{font-weight:500}.g .task .m{font-size:12px;color:hsl(var(--muted-foreground))}
+.g .cell{border-bottom:1px solid hsl(var(--border));border-left:1px solid hsl(var(--border)/.6);position:relative;min-height:46px}
+.g .cell.now{background:hsl(var(--muted)/.6)}
+.g .grp{background:hsl(var(--muted)/.5);font-size:12px;font-weight:600;color:hsl(var(--foreground));padding:6px 16px 6px 10px;position:sticky;left:0;z-index:1;border-bottom:1px solid hsl(var(--border));display:flex;align-items:center;gap:6px;white-space:nowrap;text-transform:none;letter-spacing:normal}
+.gclick,.sclick{cursor:pointer;user-select:none}
+.sclick:hover,.gclick:hover{background:hsl(var(--muted)/.8)}
+.gchev{display:inline-grid;place-items:center;width:18px;height:18px;color:hsl(var(--muted-foreground))}
+.gchev svg{width:14px;height:14px;transition:transform .15s}
+.gchev.open svg{transform:rotate(90deg)}
+.g .gcell{background:hsl(var(--muted)/.5);border-bottom:1px solid hsl(var(--border));min-height:28px}
+.bar{position:absolute;top:13px;height:20px;border-radius:5px;background:hsl(var(--primary)/.12);overflow:hidden;cursor:pointer}
+.bar:hover{outline:2px solid hsl(var(--ring)/.4)}
+.bar .p{position:absolute;left:0;top:0;bottom:0;background:hsl(var(--primary))}
+.bar.late{outline:1.5px dashed hsl(var(--foreground));outline-offset:1px}
+/* updates */
+.ulist{display:flex;flex-direction:column;padding:4px 20px 8px}
+.upd{position:relative;padding:4px 0 22px 26px;border-left:2px solid hsl(var(--border));margin-left:6px}
+.upd:last-child{padding-bottom:6px}
+.upd::before{content:"";position:absolute;left:-7px;top:8px;width:12px;height:12px;border-radius:50%;background:hsl(var(--primary));border:2px solid hsl(var(--card))}
+.uh{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+.ud{font-weight:700;font-size:13.5px;font-variant-numeric:tabular-nums}
+.ut{font-size:13.5px;max-width:70ch}
+.uph{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.uph i{width:96px;height:72px;border-radius:6px;background:hsl(var(--muted));border:1px solid hsl(var(--border))}
+.aph{display:flex;gap:6px;margin-top:8px;align-items:center}
+.aph i{width:56px;height:42px;border-radius:4px;background:hsl(var(--muted));border:1px solid hsl(var(--border))}
+.aph .more{font-size:12px;color:hsl(var(--muted-foreground))}
+/* bill attachments */
+.att{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid hsl(var(--border));border-radius:999px;font-size:12px;font-weight:500;background:hsl(var(--muted)/.5);cursor:pointer;white-space:nowrap}
+.chip svg{width:13px;height:13px}
+.chip em{font-style:normal;color:hsl(var(--muted-foreground));font-weight:400}
+.chip:hover{border-color:hsl(var(--ring))}
+.bfiles{margin-top:14px;padding:10px 12px;border:1px solid hsl(var(--border));border-radius:8px}
+.bfiles .ih{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:hsl(var(--muted-foreground));margin-bottom:6px}
+/* bill dialog */
+.bsum{margin-top:14px;display:flex;flex-direction:column}
+.brow{display:flex;justify-content:space-between;padding:7px 4px;border-bottom:1px solid hsl(var(--border));font-size:13.5px}
+.brow.b{font-weight:700}.brow.big{font-size:15px;border-bottom:0;padding-top:10px}
+.brow .num{font-variant-numeric:tabular-nums}
+.internal{margin-top:14px;padding:10px 12px;border:1px dashed hsl(var(--border-strong));border-radius:8px;background:hsl(var(--muted)/.4)}
+.internal .ih{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:hsl(var(--muted-foreground));margin-bottom:4px}
+.internal .brow:last-child{border-bottom:0}
+/* projects (home dashboard) */
+.projgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.pcard{padding:22px 24px;cursor:pointer;display:flex;flex-direction:column;gap:16px;transition:border-color .15s}
+.pcard:hover{border-color:hsl(var(--foreground))}
+.pctop{display:flex;align-items:flex-start;gap:12px}
+.pctop h3{font-size:16px}
+.pctop .badge{margin-left:auto;flex:none}
+.pcbars{display:flex;flex-direction:column;gap:11px}
+.pcbar-h{display:flex;justify-content:space-between;font-size:12px;color:hsl(var(--muted-foreground));margin-bottom:5px}
+.pcbar-h b{color:hsl(var(--foreground));font-weight:600}
+.empty{padding:40px;text-align:center;color:hsl(var(--muted-foreground));font-size:13.5px}
+.toast{position:fixed;bottom:20px;right:20px;background:hsl(var(--foreground));color:hsl(var(--background));box-shadow:0 8px 30px -10px rgba(0,0,0,.4);padding:12px 16px;border-radius:8px;font-size:13.5px;font-weight:500;opacity:0;transform:translateY(8px);transition:.2s;z-index:60;pointer-events:none}
+.toast.show{opacity:1;transform:none}
+select.role{height:32px;border:1px solid hsl(var(--input));border-radius:7px;background:hsl(var(--background));padding:0 8px;font-size:13px}
+.actions{display:flex;gap:6px}
+@media (max-width:900px){.crumb span,.crumb span+b{display:none}.app{grid-template-columns:1fr}.sidebar{position:relative;height:auto}.user{display:none}.content{padding:16px}.form{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="logo">A</div><div><div class="t">Apex Projects</div><div class="s">app.beapex.in</div></div></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="user"><div class="avatar" id="uAv"></div><div><div class="t" id="uName"></div><div class="s" id="uRole"></div></div></div>
+  </aside>
+  <div class="main">
+    <div class="header"><div class="crumb" id="crumb"></div><div class="sp"></div>
+      <select class="role" id="roleSel" onchange="setRole(this.value)"><option value="admin">Admin</option><option value="site">Site Supervisor</option><option value="client">Client</option></select>
+    </div>
+    <div class="content" id="content"></div>
+  </div>
+</div>
+<div class="overlay" id="ov" onclick="if(event.target===this)closeDialog()"><div class="dialog" id="dialog"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const L=100000, CR=10000000;
+const data={
+  projects:[
+    { id:'bhel', name:'BHEL Nagnar Club House', client:'T V Rao Housing Pvt Ltd', location:'Ghanpur, Hyderabad', start:'2026-08-24', status:'Active',
+      modules:[
+        { id:'pool', name:'Swimming Pool', allocated:4500000, internal:2584054, lead:'Suresh K', status:'In progress',
+          packages:[
+            {id:'p1',name:'Surface preparation and waterproofing',alloc:560000,int:319630,billedIn:'RA-002'},
+            {id:'p2',name:'Pool tiling',alloc:1175000,int:679330},
+            {id:'p3',name:'Deck finishes',alloc:315000,int:182900},
+            {id:'p4',name:'Overflow channel and balance tank',alloc:315000,int:159380},
+            {id:'p5',name:'Filtration plant',alloc:830000,int:522560},
+            {id:'p6',name:'Pool plumbing',alloc:410000,int:222100},
+            {id:'p7',name:'Water treatment',alloc:118000,int:59220},
+            {id:'p8',name:'Pool electricals and lighting',alloc:440000,int:248220},
+            {id:'p9',name:'Pool accessories',alloc:277000,int:156831},
+            {id:'p10',name:'Testing, commissioning and handover',alloc:60000,int:33883}],
+          tasks:[
+            {t:'Surface prep and repairs',owner:'Suresh K',w:1,d:2,p:100,pkg:'p1'},
+            {t:'Waterproofing, 2 coats and ponding test',owner:'Sai Waterproofing',w:2,d:3,p:100,pkg:'p1'},
+            {t:'Overflow channel and balance tank',owner:'Suresh K',w:3,d:3,p:0,pkg:'p4'},
+            {t:'Pool plumbing rough-in',owner:'Laxmi Multi Services',w:3,d:3,p:0,pkg:'p6'},
+            {t:'Tile sample approval',owner:'Client',w:4,d:1,p:0},
+            {t:'Pool tiling',owner:'Tiling gang A',w:5,d:5,p:0,pkg:'p2'},
+            {t:'Deck screed and anti-skid',owner:'Tiling gang B',w:8,d:3,p:0,pkg:'p3'},
+            {t:'Filtration plant order',owner:'Procurement',w:3,d:1,p:0,pkg:'p5'},
+            {t:'Plant room installation',owner:'OEM',w:9,d:3,p:0,pkg:'p5'},
+            {t:'Underwater lights and cabling',owner:'Laxmi Multi Services',w:9,d:3,p:0,pkg:'p8'},
+            {t:'Accessories and signage',owner:'Suresh K',w:11,d:2,p:0,pkg:'p9'},
+            {t:'Fill, commissioning, training',owner:'OEM',w:12,d:2,p:0,pkg:'p10'},
+            {t:'Handover',owner:'Client',w:13,d:1,p:0}]},
+        { id:'facade', name:'Facade and Windows', allocated:7200000, internal:4992470, lead:'Prakash R', status:'Not started',
+          packages:[
+            {id:'f1',name:'Surface preparation and plaster repairs',alloc:189300,int:142000},
+            {id:'f2',name:'Brick-tile cladding',alloc:1981836,int:1423220},
+            {id:'f3',name:'Exterior painting',alloc:301035,int:224175},
+            {id:'f4',name:'Facade lighting',alloc:514700,int:386000},
+            {id:'f5',name:'Balcony and parapet railings',alloc:260100,int:195075},
+            {id:'f6',name:'Entrance canopy and signage',alloc:413300,int:310000},
+            {id:'f7',name:'Scaffolding and cleaning',alloc:696000,int:522000},
+            {id:'f8',name:'Aluminium windows and ventilators',alloc:2623729,int:1625000},
+            {id:'f9',name:'Supervision',alloc:220000,int:165000}], tasks:[] },
+        { id:'int', name:'Interiors', allocated:18000000, internal:12500000, lead:'To assign', status:'Design',
+          packages:[
+            {id:'i1',name:'Flooring',alloc:3000000,int:2500000},{id:'i2',name:'Painting and finishes',alloc:1100000,int:900000},{id:'i3',name:'False ceilings',alloc:1400000,int:1100000},
+            {id:'i4',name:'Toilets and wet areas',alloc:2200000,int:1800000},{id:'i5',name:'Doors and hardware',alloc:1300000,int:1000000},{id:'i6',name:'Fixed joinery and mirrors',alloc:1500000,int:1000000},
+            {id:'i7',name:'Feature walls and partitions',alloc:1000000,int:800000},{id:'i8',name:'Light fittings and fans',alloc:1200000,int:900000},{id:'i9',name:'Project overhead',alloc:600000,int:600000},
+            {id:'i10',name:'Function hall AV',alloc:300000,int:250000},{id:'i11',name:'Blinds and curtains',alloc:200000,int:150000},{id:'i12',name:'Loose furniture',alloc:1000000,int:800000},
+            {id:'i13',name:'Gym equipment',alloc:500000,int:450000},{id:'i14',name:'Indoor games tables',alloc:300000,int:250000}], tasks:[] },
+        { id:'ext', name:'External Development and Lift', allocated:12800000, internal:7965000, lead:'Prakash R', status:'Not started',
+          packages:[{id:'e1',name:'External development',alloc:8500000,int:5465000},{id:'e2',name:'Passenger lift',alloc:3500000,int:2500000}], tasks:[] },
+        { id:'mep', name:'MEP', allocated:13800000, internal:8463365, lead:'Laxmi Multi Services', status:'Not started',
+          packages:[
+            {id:'m1',name:'Electrical distribution and wiring',alloc:6850000,int:4119450},{id:'m2',name:'Air conditioning',alloc:3100000,int:1891215},{id:'m3',name:'Ventilation and exhaust',alloc:525000,int:317600},
+            {id:'m4',name:'Water supply and plumbing',alloc:1340000,int:809600},{id:'m5',name:'Drainage and rainwater',alloc:900000,int:542200},{id:'m6',name:'ELV and CCTV',alloc:635000,int:383300},{id:'m7',name:'Testing and commissioning',alloc:650000,int:400000}], tasks:[] },
+        { id:'civ', name:'Plastering and Putty', allocated:2500000, internal:2000000, lead:'To assign', status:'Not started',
+          packages:[{id:'c1',name:'Internal wall plastering',alloc:1740000,int:1392000},{id:'c2',name:'Wall and ceiling putty',alloc:760000,int:608000}], tasks:[] }
+      ]},
+    { id:'arch', name:'BHEL Nagnar Entrance Arch', client:'T V Rao Housing Pvt Ltd', location:'Ghanpur, Hyderabad', start:null, status:'Quoted',
+      modules:[{ id:'a1', name:'Entrance Arch', allocated:3700000, internal:2660000, lead:'To assign', status:'Quoted', packages:[], tasks:[] }] }
+  ],
+  requests:[
+    {id:'SR-014',proj:'bhel',mod:'pool',pkg:'p2',item:'Pool-grade vitrified tile 300x300, anti-skid',qty:1200,unit:'sft',rate:165,by:'Ravi',need:'2026-10-05',status:'Pending',raised:'2026-09-06'},
+    {id:'SR-013',proj:'bhel',mod:'pool',pkg:'p1',item:'Dr. Fixit Pidifin 2K, 20 kg kit',qty:40,unit:'kit',rate:4050,by:'Ravi',need:'2026-09-08',status:'Delivered',raised:'2026-09-02'},
+    {id:'SR-012',proj:'bhel',mod:'pool',pkg:'p1',item:'Ultratech 53 grade cement, 50 kg',qty:120,unit:'bag',rate:395,by:'Ravi',need:'2026-08-27',status:'Delivered',raised:'2026-08-25',billedIn:'RA-001'},
+    {id:'SR-011',proj:'bhel',mod:'pool',pkg:'p1',item:'Bonding agent, SBR latex 20 L',qty:10,unit:'can',rate:2100,by:'Ravi',need:'2026-08-29',status:'Delivered',raised:'2026-08-25',billedIn:'RA-001'},
+    {id:'SR-010',proj:'bhel',mod:'pool',pkg:'p6',item:'uPVC pipe 63 mm SCH 80, 3 m',qty:60,unit:'len',rate:640,by:'Ravi',need:'2026-09-12',status:'Pending',raised:'2026-09-06'},
+    {id:'SR-009',proj:'bhel',mod:'int',pkg:'i1',item:'Vitrified tile sample set',qty:1,unit:'set',rate:0,by:'Ravi',need:'2026-09-10',status:'Rejected',raised:'2026-09-01'}
+  ],
+  bills:[
+    {id:'RA-001',proj:'bhel',date:'2026-08-30',status:'Paid',submitted:'2026-08-30',certified:'2026-09-02',paid:'2026-09-04',
+     lines:[
+       {type:'material',mod:'pool',pkg:'p1',desc:'SR-012 Ultratech 53 grade cement, 120 bag',cost:47400,client:83045,pct:75},
+       {type:'material',mod:'pool',pkg:'p1',desc:'SR-011 Bonding agent, SBR latex, 10 can',cost:21000,client:36792,pct:75}],
+     recovery:0,files:[{n:'RA-001 Apex Studios Bill.pdf',s:'296 KB'}]},
+    {id:'RA-002',proj:'bhel',date:'2026-09-05',status:'Submitted',submitted:'2026-09-05',
+     lines:[
+       {type:'milestone',mod:'pool',pkg:'p1',desc:'Surface preparation and waterproofing complete',cost:319630,client:560000,pct:100},
+       {type:'material',mod:'pool',pkg:'p4',desc:'SR-013 Balance tank waterproofing, Pidifin 2K, 18 kit',cost:64800,client:112500,pct:75}],
+     recovery:119837,files:[{n:'RA-002 Apex Studios Bill.pdf',s:'318 KB'},{n:'RA-002 Measurement sheet.xlsx',s:'44 KB'}]},
+    {id:'RA-003',proj:'bhel',date:'2026-09-06',status:'Submitted',submitted:'2026-09-06',
+     lines:[
+       {type:'material',mod:'facade',pkg:'f7',desc:'SR-014 Cup-lock scaffolding, 1,200 sqm',cost:180000,client:240000,pct:75}],
+     recovery:0,files:[]}
+  ],
+  updates:[
+    {id:'u4',proj:'bhel',mod:'pool',date:'2026-09-07',by:'Ravi',text:'Second coat of Pidifin on pool floor and walls done, 1,600 sft. Balance tank first coat started. Ponding test planned for Thursday.',men:6,photos:4},
+    {id:'u3',proj:'bhel',mod:'pool',date:'2026-09-06',by:'Ravi',text:'First coat waterproofing completed on main pool walls. Kids pool surface prep finished. Two honeycomb patches repaired near the deep end.',men:7,photos:6},
+    {id:'u2',proj:'bhel',mod:'pool',date:'2026-09-05',by:'Ravi',text:'Cement received, 120 bags. Surface grinding and cleaning complete on main pool. Started primer.',men:5,photos:3},
+    {id:'u1',proj:'bhel',mod:'facade',date:'2026-09-04',by:'Ravi',text:'Scaffolding vendor measured the north face. Plaster repair marking done with the architect.',men:2,photos:2}
+  ],
+  approvals:[
+    {id:'AP-004',proj:'bhel',mod:'pool',pkg:'p2',type:'Material sample',item:'Pool tile, ivory 300x300 anti-skid (Kajaria), coping in matching bullnose',by:'Suresh K',requested:'2026-09-05',need:'2026-09-14',status:'Pending',note:'Sample board at site office. Holds tiling start on W5.',photos:3},
+    {id:'AP-003',proj:'bhel',mod:'pool',pkg:'p8',type:'Material',item:'Underwater lights: 9 nos IP68 LED, Astral in place of Pentair',by:'Suresh K',requested:'2026-09-04',need:'2026-09-20',status:'Pending',note:'Deviation from quoted make. Same lumen and warranty.',photos:2},
+    {id:'AP-002',proj:'bhel',mod:'pool',pkg:'p1',type:'Material',item:'Waterproofing system: Dr. Fixit Pidifin 2K, two coats',by:'Suresh K',requested:'2026-08-26',need:'2026-08-30',status:'Approved',decided:'2026-08-28',note:'',photos:1},
+    {id:'AP-001',proj:'bhel',mod:'facade',pkg:'f2',type:'Design',item:'Facade family: dark grey granite, brass jali, dark grey ACP band (Option B)',by:'John',requested:'2026-08-30',need:'2026-09-05',status:'Approved',decided:'2026-09-02',note:'',photos:4}
+  ],
+  team:[
+    {n:'John Israel Voola',r:'admin',t:'Admin',e:'hello@beapex.in'},
+    {n:'Suresh K',r:'admin',t:'Admin',e:'suresh@beapex.in'},
+    {n:'Prakash R',r:'admin',t:'Admin',e:'prakash@beapex.in'},
+    {n:'Ravi',r:'site',t:'Site Supervisor',e:'+91 98xxx xxxxx'},
+    {n:'Meena D',r:'admin',t:'Admin',e:'meena@beapex.in'},
+    {n:'T V Rao',r:'client',t:'Client',e:'T V Rao Housing Pvt Ltd'}
+  ]
+};
+const FLOW=['Pending','Approved','Ordered','Delivered'];
+const state={role:'admin',proj:'bhel',view:'projects',mod:'pool',tab:'budget',filter:'All',modFilter:'all',modsOpen:true};
+const TODAY=new Date('2026-09-07');
+
+const fmt=n=>{ if(n==null) return '–'; const neg=n<0; const s=Math.round(Math.abs(n)).toString(); let last=s.slice(-3), rest=s.slice(0,-3); if(rest) last=rest.replace(/\B(?=(\d{2})+(?!\d))/g,',')+','+last; return (neg?'-':'')+'₹'+last; };
+const fmtS=n=>{ if(n==null) return '–'; const a=Math.abs(n), s=n<0?'-':''; if(a>=CR) return s+'₹'+(a/CR).toFixed(2)+' Cr'; if(a>=L) return s+'₹'+(a/L).toFixed(2)+' L'; return s+fmt(a); };
+const pct=(a,b)=>b?Math.round(a/b*100):0;
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const dmy=s=>{ if(!s) return '–'; const [y,m,d]=s.split('-'); return `${d} ${MON[+m-1]} ${y}`; };
+const proj=()=>data.projects.find(p=>p.id===state.proj);
+const mno=m=>String(proj().modules.indexOf(m)+1).padStart(2,'0');
+const mlabel=m=>`<span class="mno">${mno(m)}</span>${m.name}`;
+const money=()=>state.role==='admin';
+const isClient=()=>state.role==='client';
+const isSite=()=>state.role==='site';
+const progress=m=>{ const ts=m.tasks.filter(t=>!t.grp); const d=ts.reduce((a,t)=>a+t.d,0); return d?Math.round(ts.reduce((a,t)=>a+t.p*t.d,0)/d):0; };
+const projProgress=p=>{ const a=p.modules.reduce((x,m)=>x+m.allocated,0); return a?Math.round(p.modules.reduce((x,m)=>x+progress(m)*m.allocated,0)/a):0; };
+const canApprove=()=>state.role==='admin';
+const amt=r=>(r.rate||0)*(r.qty||0);
+const committed=(m,pkg)=>data.requests.filter(r=>r.proj===state.proj&&r.mod===m.id&&(!pkg||r.pkg===pkg)&&['Approved','Ordered','Delivered'].includes(r.status)).reduce((a,r)=>a+amt(r),0);
+const totals=p=>{ let alloc=0,int=0,c=0; p.modules.forEach(m=>{alloc+=m.allocated;int+=m.internal||0;c+=committed(m);}); return {alloc,int,c}; };
+const toast=msg=>{ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2400); };
+const I={note:'M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z',check:'M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11',bill:'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M8 13h8M8 17h5',dash:'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z',mod:'M4 6h16M4 12h16M4 18h16',cal:'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z',box:'M21 8l-9-5-9 5v8l9 5 9-5zM3 8l9 5 9-5M12 13v8',folder:'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z',users:'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75',plus:'M12 5v14M5 12h14'};
+const ic=p=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${p}"/></svg>`;
+
+function renderNav(){
+  const p=proj(); const pend=data.requests.filter(r=>r.proj===p.id&&r.status==='Pending').length;
+  const apPend=data.approvals.filter(a=>a.proj===p.id&&a.status==='Pending').length; const billPend=data.bills.filter(b=>b.proj===p.id&&b.status==='Submitted').length;
+  const items=[['dashboard','Dashboard',I.dash],['modules','Packages',I.mod],['schedule','Schedule',I.cal],['updates','Daily Updates',I.note],['stock','Stock Requests',I.box],['approvals','Approvals',I.check],['billing',isClient()?'Bills':'Billing',I.bill]];
+  const allowed={admin:['dashboard','modules','schedule','updates','stock','approvals','billing'],site:['dashboard','modules','schedule','updates','stock','approvals'],client:['dashboard','modules','schedule','updates','approvals','billing']}[state.role];
+  let h=`<button class="navtop ${state.view==='projects'?'on':''}" onclick="go('projects')">${ic(I.folder)}All Projects</button>`;
+  h+=`<div class="projhead" title="${p.name}">${p.name}</div>`;
+  items.forEach(([id,l,i])=>{ if(!allowed.includes(id)) return; const on=state.view===id||(id==='modules'&&state.view==='module');
+    const badge = id==='stock'&&pend&&!isClient()?pend : id==='approvals'&&apPend&&isClient()?apPend : id==='billing'&&billPend&&isClient()?billPend : 0;
+    const chev = id==='modules'?`<span class="chev ${state.modsOpen?'open':''}" onclick="event.stopPropagation();state.modsOpen=!state.modsOpen;renderNav()">${ic('m9 18 6-6-6-6')}</span>`:'';
+    h+=`<button class="${on?'on':''}" onclick="go('${id}')">${ic(i)}${l}${badge?`<span class="cnt">${badge}</span>`:''}${chev}</button>`;
+    if(id==='modules'&&state.modsOpen) p.modules.forEach(m=>h+=`<button class="sub ${state.view==='module'&&state.mod===m.id?'on':''}" onclick="openModule('${m.id}')">${mlabel(m)}</button>`); });
+  if(state.role==='admin'){ h+='<div class="grp">Studio</div>'; h+=`<button class="${state.view==='users'?'on':''}" onclick="go('users')">${ic(I.users)}Users</button>`; }
+  document.getElementById('nav').innerHTML=h;
+  const u=data.team.find(t=>t.r===state.role); document.getElementById('uName').textContent=u.n; document.getElementById('uRole').textContent=u.t; document.getElementById('uAv').textContent=u.n.split(' ').map(x=>x[0]).slice(0,2).join('');
+}
+function go(v){ state.view=v; if(v==='modules') state.modsOpen=true; render(); scrollTo(0,0); }
+function openModule(id){ state.mod=id; state.view='module'; state.tab='budget'; state.modsOpen=true; render(); scrollTo(0,0); }
+function setRole(r){ state.role=r; const ok={admin:null,site:['dashboard','modules','module','schedule','updates','stock','approvals','projects'],client:['dashboard','modules','module','schedule','updates','approvals','billing','projects']}[r]; if(ok&&!ok.includes(state.view)) state.view='projects'; if(r!=='admin'&&state.tab==='billing') state.tab='budget'; if(r==='client'&&state.tab==='stock') state.tab='budget'; render(); }
+function setProject(id){ state.proj=id; state.mod=proj().modules[0]?.id; state.view='dashboard'; render(); }
+
+function render(){
+  renderNav(); const p=proj(); const el=document.getElementById('content');
+  const names={dashboard:'Dashboard',modules:'Packages',module:'Packages',schedule:'Schedule',stock:'Stock Requests',updates:'Daily Updates',approvals:'Approvals',billing:isClient()?'Bills':'Billing',projects:'All Projects',users:'Users'};
+  document.getElementById('crumb').innerHTML= state.view==='projects'?'<b>All Projects</b>' : state.view==='users'?'<b>Users</b>' : `${p.name} <span>/</span> <b>${names[state.view]}</b>${state.view==='module'?` <span>/</span> <b>${mno(p.modules.find(m=>m.id===state.mod))} ${p.modules.find(m=>m.id===state.mod).name}</b>`:''}`;
+  document.getElementById('roleSel').value=state.role;
+  ({dashboard:vDashboard,modules:vModules,module:vModule,schedule:vSchedule,stock:vStock,updates:vUpdates,approvals:vApprovals,billing:vBilling,projects:vProjects,users:vUsers})[state.view](el,p);
+}
+const bar=(c,int)=>{ if(!int) return '<div class="pcell"><div class="progress"><i style="width:0"></i></div><span class="muted">–</span></div>'; const v=pct(c,int); const over=v>100; return `<div class="pcell"><div class="progress"><i class="${over?'over':''}" style="width:${Math.min(100,v)}%"></i></div><span>${v}%${over?' <b class="flagmini">over</b>':''}</span></div>`; };
+const modBadge=(m)=>{ const c=committed(m); if(m.internal&&c>m.internal) return '<span class="badge outline">▲ Over budget</span>'; if(m.status==='In progress') return '<span class="badge default">● In progress</span>'; return `<span class="badge secondary">${m.status}</span>`; };
+const stBadge=s=>({Pending:'<span class="badge outline">● Pending</span>',Approved:'<span class="badge outline">✓ Approved</span>',Ordered:'<span class="badge outline">→ Ordered</span>',Delivered:'<span class="badge default">✓ Delivered</span>',Rejected:'<span class="badge secondary">✕ Rejected</span>'})[s];
+const statCards=(alloc,int,c,prog,extra='')=>{
+  if(money()){ const rem=int-c; return `<div class="card statbar">
+  <div class="stat"><div class="l">Allocated Budget</div><div class="v">${fmtS(alloc)}</div><div class="s">Client price, ex GST</div></div>
+  <div class="stat"><div class="l">Internal Budget</div><div class="v">${fmtS(int)}</div><div class="s">Margin ${fmtS(alloc-int)} · ${pct(alloc-int,alloc)}%</div></div>
+  <div class="stat"><div class="l">Committed</div><div class="v">${fmtS(c)}</div><div class="s">${pct(c,int)}% of internal</div></div>
+  <div class="stat"><div class="l">Remaining</div><div class="v ${rem<0?'neg':''}">${fmtS(rem)}${rem<0?' <b class="flagmini">over</b>':''}</div><div class="s">Internal minus committed</div></div>
+  <div class="stat"><div class="l">Progress</div><div class="v">${prog}%</div><div class="s">Weighted by task duration</div></div></div>`; }
+  if(isClient()) return `<div class="card statbar">
+  <div class="stat"><div class="l">Contract Value</div><div class="v">${fmtS(alloc)}</div><div class="s">Ex GST</div></div>
+  <div class="stat"><div class="l">Work Progress</div><div class="v">${prog}%</div><div class="s">Weighted by task duration</div></div>${extra}</div>`;
+  return '';
+};
+
+function moduleTable(p){
+  const t=totals(p); const m$=money();
+  return `<div class="tw"><table><thead><tr><th>Package</th>${m$?'<th class="num">Allocated</th><th class="num">Internal</th><th class="num">Committed</th><th class="num">Remaining</th><th>Used</th>':isClient()?'<th class="num">Contract Value</th>':'<th>Phases</th><th>Open Requests</th>'}<th>Progress</th><th>Status</th></tr></thead><tbody>
+  ${p.modules.map(m=>{const c=committed(m); return `<tr class="click" onclick="openModule('${m.id}')"><td class="name">${mlabel(m)}<span class="sub" style="padding-left:22px">${m.lead}</span></td>${m$||isClient()?`<td class="num">${fmt(m.allocated)}</td>`:`<td>${m.packages.length}</td><td>${data.requests.filter(r=>r.proj===p.id&&r.mod===m.id&&['Pending','Approved','Ordered'].includes(r.status)).length}</td>`}${m$?`<td class="num">${fmt(m.internal)}</td><td class="num">${fmt(c)}</td><td class="num" ${m.internal-c<0?'style="font-weight:700"':''}>${fmt(m.internal-c)}</td><td>${bar(c,m.internal)}</td>`:''}<td>${bar(progress(m),100)}</td><td>${modBadge(m)}</td></tr>`;}).join('')}
+  ${m$?`<tr class="total"><td>Total</td><td class="num">${fmt(t.alloc)}</td><td class="num">${fmt(t.int)}</td><td class="num">${fmt(t.c)}</td><td class="num">${fmt(t.int-t.c)}</td><td>${bar(t.c,t.int)}</td><td>${bar(projProgress(p),100)}</td><td></td></tr>`:isClient()?`<tr class="total"><td>Total</td><td class="num">${fmt(t.alloc)}</td><td>${bar(projProgress(p),100)}</td><td></td></tr>`:''}</tbody></table></div>`;
+}
+function vDashboard(el,p){
+  const t=totals(p); const pend=data.requests.filter(r=>r.proj===p.id&&r.status==='Pending');
+  const bs=bills(); const billedNet=bs.filter(b=>b.status!=='Draft').reduce((a,b)=>a+billTotals(b).net,0), paidNet=bs.filter(b=>b.status==='Paid').reduce((a,b)=>a+billTotals(b).net,0);
+  const apPend=data.approvals.filter(a=>a.proj===p.id&&a.status==='Pending'); const ups=data.updates.filter(u=>u.proj===p.id).slice(0,3);
+  el.innerHTML=`<div class="pagehead"><div><h1>${p.name}</h1><p>${p.client} · ${p.location}${p.start?' · Started '+dmy(p.start):''}</p></div><div class="acts">${money()?`<button class="btn" onclick="dAddModule()">${ic(I.plus)}Add Package</button>`:''}${isClient()?'':`<button class="btn primary" onclick="dNewRequest()">${ic(I.plus)}Stock Request</button>`}</div></div>
+  ${money()||isClient()?statCards(t.alloc,t.int,t.c,projProgress(p),`<div class="stat"><div class="l">Bills Raised</div><div class="v">${fmtS(billedNet)}</div><div class="s">incl. GST · ${fmtS(paidNet)} paid</div></div><div class="stat"><div class="l">Awaiting Your Approval</div><div class="v">${apPend.length+bs.filter(b=>b.status==='Submitted').length}</div><div class="s">${apPend.length} samples · ${bs.filter(b=>b.status==='Submitted').length} bills</div></div>`):`<div class="card statbar"><div class="stat"><div class="l">Packages in Progress</div><div class="v">${p.modules.filter(m=>m.status==='In progress').length}</div><div class="s">of ${p.modules.length}</div></div><div class="stat"><div class="l">Pending Requests</div><div class="v">${pend.length}</div><div class="s">awaiting approval</div></div><div class="stat"><div class="l">To Receive</div><div class="v">${data.requests.filter(r=>r.proj===p.id&&r.status==='Ordered').length}</div><div class="s">ordered, not yet on site</div></div></div>`}
+  <div class="card"><div class="ch"><h3>Packages</h3></div>${moduleTable(p)}</div>
+  ${apPend.length&&!isSite()?`<div class="card" style="margin-top:20px"><div class="ch"><h3>Pending Approvals</h3><div class="acts"><button class="btn sm ghost" onclick="state.apFilter='Pending';go('approvals')">View all</button></div></div>${approvalTable(apPend)}</div>`:''}
+  ${pend.length&&!isClient()?`<div class="card" style="margin-top:20px"><div class="ch"><h3>Pending Requests</h3><div class="acts"><button class="btn sm ghost" onclick="state.filter='Pending';go('stock')">View all</button></div></div>${reqTable(pend,{compact:true})}</div>`:''}
+  ${ups.length?`<div class="card" style="margin-top:20px"><div class="ch"><h3>Latest Updates</h3><div class="acts"><button class="btn sm ghost" onclick="go('updates')">View all</button></div></div>${updateList(ups)}</div>`:''}`;
+}
+function vModules(el,p){
+  el.innerHTML=`<div class="pagehead"><div><h1>Packages</h1><p>${p.modules.length} packages</p></div><div class="acts">${money()?`<button class="btn primary" onclick="dAddModule()">${ic(I.plus)}Add Package</button>`:''}</div></div><div class="card">${moduleTable(p)}</div>`;
+}
+function vModule(el,p){
+  const m=p.modules.find(x=>x.id===state.mod); const c=committed(m); const reqs=data.requests.filter(r=>r.proj===p.id&&r.mod===m.id); const m$=money();
+  let body='';
+  if(state.tab==='budget'){
+    body=`<div class="card">${m.packages.length?`<div class="tw"><table><thead><tr><th>Phase</th>${m$?'<th class="num">Allocated</th><th class="num">Internal</th><th class="num">Committed</th><th class="num">Remaining</th><th>Used</th>':isClient()?'<th class="num">Contract Value</th>':'<th>Requests</th>'}</tr></thead><tbody>
+    ${m.packages.map(k=>{const kc=committed(m,k.id); const rq=data.requests.filter(r=>r.proj===p.id&&r.mod===m.id&&r.pkg===k.id).length; return `<tr><td class="name">${k.name}</td>${m$||isClient()?`<td class="num">${fmt(k.alloc)}</td>`:`<td>${rq||'<span class="muted">–</span>'}</td>`}${m$?`<td class="num">${fmt(k.int)}</td><td class="num">${kc?fmt(kc):'<span class="muted">–</span>'}</td><td class="num" ${k.int-kc<0?'style="font-weight:700"':''}>${fmt(k.int-kc)}</td><td>${bar(kc,k.int)}</td>`:''}</tr>`;}).join('')}
+    ${m$?`<tr class="total"><td>Total</td><td class="num">${fmt(m.packages.reduce((a,k)=>a+k.alloc,0))}</td><td class="num">${fmt(m.packages.reduce((a,k)=>a+k.int,0))}</td><td class="num">${fmt(c)}</td><td class="num">${fmt(m.internal-c)}</td><td>${bar(c,m.internal)}</td></tr>`:isClient()?`<tr class="total"><td>Total</td><td class="num">${fmt(m.packages.reduce((a,k)=>a+k.alloc,0))}</td></tr>`:''}</tbody></table></div>`:`<div class="empty">No phases yet.</div>`}</div>`;
+  }
+  if(state.tab==='schedule') body=`<div class="card">${gantt(m,p)}</div>`;
+  if(state.tab==='stock') body=`<div class="card">${reqTable(reqs,{module:true})}</div>`;
+  if(state.tab==='billing') body=milestoneTable(m);
+  if(state.tab==='updates'){ const ups=data.updates.filter(u=>u.proj===p.id&&u.mod===m.id); body=`<div class="card">${ups.length?updateList(ups):'<div class="empty">No updates yet.</div>'}</div>`; }
+  el.innerHTML=`<div class="pagehead"><div><h1>${mlabel(m)}</h1><p>${m.lead} · ${m.status} · ${progress(m)}% complete</p></div><div class="acts">${m$?`<button class="btn" onclick="dEditModule('${m.id}')">Edit</button>`:''}${state.tab==='schedule'&&!isClient()?`<button class="btn" onclick="dAddTask('${m.id}')">${ic(I.plus)}Add Task</button>`:''}${state.tab==='updates'&&!isClient()?`<button class="btn" onclick="dPostUpdate('${m.id}')">${ic(I.plus)}Post Update</button>`:''}${isClient()?'':`<button class="btn primary" onclick="dNewRequest('${m.id}')">${ic(I.plus)}Stock Request</button>`}</div></div>
+  ${statCards(m.allocated,m.internal,c,progress(m))}
+  <div class="tabs"><button class="${state.tab==='budget'?'on':''}" onclick="state.tab='budget';render()">${m$?'Budget':'Phases'}</button><button class="${state.tab==='schedule'?'on':''}" onclick="state.tab='schedule';render()">Schedule</button><button class="${state.tab==='updates'?'on':''}" onclick="state.tab='updates';render()">Updates</button>${isClient()?'':`<button class="${state.tab==='stock'?'on':''}" onclick="state.tab='stock';render()">Stock Requests</button>`}${m$?`<button class="${state.tab==='billing'?'on':''}" onclick="state.tab='billing';render()">Billing</button>`:''}</div>${body}`;
+}
+function gantt(m,p){
+  const weeks=14; const start=p.start?new Date(p.start):null; const nowWk=start?Math.floor((TODAY-start)/(7*864e5))+1:0;
+  if(!m.tasks.length) return `<div class="empty">No tasks yet. <a href="#" onclick="dAddTask('${m.id}');return false">Add a task</a></div>`;
+  const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const wkDate=i=>{ const d=new Date(start); d.setDate(d.getDate()+(i-1)*7); return d; };
+  let months='';
+  if(start){ let i=1; while(i<=weeks){ const d=wkDate(i); let n=0; while(i+n<=weeks && wkDate(i+n).getMonth()===d.getMonth()) n++; months+=`<div class="mh" style="grid-column:span ${n}">${MON[d.getMonth()]} ${d.getFullYear()}</div>`; i+=n; } }
+  const lbl=i=>{ if(!start) return 'W'+i; const d=wkDate(i); return `<span class="wd">${d.getDate()}</span><span class="wn">W${i}</span>`; };
+  let h=`<div class="gantt"><div class="g" style="grid-template-columns:280px repeat(${weeks},minmax(52px,1fr))">${start?`<div class="mh first"></div>${months}`:''}<div class="h th">Task</div>${Array.from({length:weeks},(_,i)=>`<div class="h ${i+1===nowWk?'now':''}">${lbl(i+1)}</div>`).join('')}`;
+  const closed=state.grpClosed||(state.grpClosed=new Set());
+  const groups=[...m.packages.map(k=>({id:k.id,name:k.name,tasks:phTasks(m,k)})).filter(g=>g.tasks.length),{id:'other',name:'General',tasks:m.tasks.filter(t=>!t.grp&&!m.packages.some(k=>k.id===t.pkg))}].filter(g=>g.tasks.length);
+  groups.forEach(g=>{
+    const key=m.id+':'+g.id; const isClosed=closed.has(key); const gd=g.tasks.reduce((a,t)=>a+t.d,0); const gp=gd?Math.round(g.tasks.reduce((a,t)=>a+t.p*t.d,0)/gd):0;
+    h+=`<div class="grp gclick" onclick="toggleGrp('${key}')"><span class="gchev ${isClosed?'':'open'}">${ic('m9 18 6-6-6-6')}</span>${g.name}<span class="muted" style="font-weight:400;margin-left:8px">${g.tasks.length} tasks · ${gp}%</span></div>${Array.from({length:weeks},()=>'<div class="gcell"></div>').join('')}`;
+    if(isClosed) return;
+  g.tasks.forEach(t=>{ const idx=m.tasks.indexOf(t);
+    const late=start&&t.p<100&&t.w+t.d-1<nowWk;
+    h+=`<div class="task"><div class="t">${t.t}</div><div class="m">${t.owner} · ${t.d} wk · <b style="color:hsl(var(--foreground));font-weight:600">${t.p}%</b>${late?' · <b class="flagmini">late</b>':''}</div></div>`;
+    for(let i=1;i<=weeks;i++) h+=`<div class="cell ${i===nowWk?'now':''}">${i===t.w?`<div class="bar ${late?'late':''}" style="left:3px;width:calc(${t.d*100}% - 6px)" onclick="dTask(${idx},'${m.id}')" title="${t.t}: ${t.p}%"><div class="p" style="width:${t.p}%"></div></div>`:''}</div>`;
+  }); });
+  return h+'</div></div>';
+}
+function toggleGrp(k){ const s=state.grpClosed; s.has(k)?s.delete(k):s.add(k); render(); }
+function toggleSched(id){ const s=state.schedClosed; s.has(id)?s.delete(id):s.add(id); render(); }
+function vSchedule(el,p){
+  const closed=state.schedClosed||(state.schedClosed=new Set(p.modules.filter(m=>!m.tasks.length).map(m=>m.id)));
+  el.innerHTML=`<div class="pagehead"><div><h1>Schedule</h1><p>${p.start?'Started '+dmy(p.start):'Not started'}</p></div><div class="acts"><button class="btn sm ghost" onclick="p=proj();state.schedClosed=new Set();render()">Expand all</button><button class="btn sm ghost" onclick="state.schedClosed=new Set(proj().modules.map(m=>m.id));render()">Collapse all</button></div></div>
+  ${p.modules.map(m=>{const c=closed.has(m.id); return `<div class="card" style="margin-bottom:12px"><div class="ch sclick" onclick="toggleSched('${m.id}')"><span class="gchev ${c?'':'open'}">${ic('m9 18 6-6-6-6')}</span><h3>${mlabel(m)}</h3><span class="muted text-sm">${m.tasks.filter(t=>!t.grp).length?m.tasks.filter(t=>!t.grp).length+' tasks · '+progress(m)+'%':'No plan yet'}</span><div class="acts" onclick="event.stopPropagation()">${isClient()?'':`<button class="btn sm" onclick="dAddTask('${m.id}')">${ic(I.plus)}Add Task</button>`}</div></div>${c?'':gantt(m,p)}</div>`;}).join('')}`;
+}
+function reqTable(reqs,o={}){
+  const p=proj(); const m$=money();
+  const rows=reqs.map(r=>{ const m=p.modules.find(x=>x.id===r.mod); const k=m.packages.find(x=>x.id===r.pkg); const i=FLOW.indexOf(r.status);
+    const act= r.status==='Pending'&&canApprove()?`<div class="actions"><button class="btn sm primary" onclick="setReq('${r.id}','Approved')">Approve</button><button class="btn sm destructive" onclick="setReq('${r.id}','Rejected')">Reject</button></div>`
+      : r.status==='Approved'&&state.role==='admin'?`<button class="btn sm" onclick="setReq('${r.id}','Ordered')">Mark Ordered</button>`
+      : r.status==='Ordered'&&['admin','site'].includes(state.role)?`<button class="btn sm" onclick="setReq('${r.id}','Delivered')">Mark Delivered</button>`:'';
+    return `<tr><td class="name">${r.id}<span class="sub">${dmy(r.raised)} · ${r.by}</span></td><td class="name">${r.item}<span class="sub">${o.module?'':mno(m)+' '+m.name+' · '}${k?k.name:''}</span></td><td class="num">${r.qty.toLocaleString('en-IN')} ${r.unit}</td>${m$?`<td class="num">${amt(r)?fmt(amt(r)):'<span class="muted">–</span>'}</td>`:''}<td>${dmy(r.need)}</td><td>${stBadge(r.status)}</td><td>${act}</td></tr>`; }).join('');
+  return `<div class="tw"><table><thead><tr><th>Request</th><th>Material</th><th class="num">Qty</th>${m$?'<th class="num">Value</th>':''}<th>Needed By</th><th>Status</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="7"><div class="empty">No requests.</div></td></tr>`}</tbody></table></div>`;
+}
+function vStock(el,p){
+  const all=data.requests.filter(r=>r.proj===p.id&&(state.modFilter==='all'||r.mod===state.modFilter)); const f=state.filter; const reqs=f==='All'?all:all.filter(r=>r.status===f);
+  el.innerHTML=`<div class="pagehead"><div><h1>Stock Requests</h1><p>${all.filter(r=>r.status==='Pending').length} pending</p></div><div class="acts"><button class="btn primary" onclick="dNewRequest()">${ic(I.plus)}New Request</button></div></div>
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div class="tabs">${['All',...FLOW,'Rejected'].map(s=>`<button class="${f===s?'on':''}" onclick="state.filter='${s}';render()">${s}</button>`).join('')}</div>
+  <select class="role" style="height:36px;margin-bottom:16px" onchange="state.modFilter=this.value;render()"><option value="all">All packages</option>${p.modules.map(m=>`<option value="${m.id}" ${state.modFilter===m.id?'selected':''}>${mno(m)} ${m.name}</option>`).join('')}</select></div>
+  <div class="card">${reqTable(reqs)}</div>`;
+}
+function setReq(id,s){ const r=data.requests.find(x=>x.id===id); r.status=s; render(); toast(`${id} ${s.toLowerCase()}`); }
+function vProjects(el){
+  const t0=data.projects.reduce((a,p)=>{const t=totals(p); a.alloc+=t.alloc; a.int+=t.int; a.c+=t.c; return a;},{alloc:0,int:0,c:0});
+  const active=data.projects.filter(p=>p.status==='Active').length;
+  const apPendAll=data.approvals.filter(a=>a.status==='Pending').length;
+  const billsPendAll=data.bills.filter(b=>b.status==='Submitted').length;
+  const stockPendAll=data.requests.filter(r=>r.status==='Pending').length;
+  const inProgAll=data.projects.reduce((a,p)=>a+p.modules.filter(m=>m.status==='In progress').length,0);
+  let summary;
+  if(money()) summary=`<div class="card statbar">
+    <div class="stat"><div class="l">Total Allocated</div><div class="v">${fmtS(t0.alloc)}</div><div class="s">Across ${data.projects.length} projects</div></div>
+    <div class="stat"><div class="l">Total Internal</div><div class="v">${fmtS(t0.int)}</div><div class="s">Margin ${fmtS(t0.alloc-t0.int)}</div></div>
+    <div class="stat"><div class="l">Committed</div><div class="v">${fmtS(t0.c)}</div><div class="s">${pct(t0.c,t0.int)}% of internal</div></div>
+    <div class="stat"><div class="l">Active Projects</div><div class="v">${active}</div><div class="s">of ${data.projects.length}</div></div></div>`;
+  else if(isClient()) summary=`<div class="card statbar">
+    <div class="stat"><div class="l">Total Contract Value</div><div class="v">${fmtS(t0.alloc)}</div><div class="s">Across ${data.projects.length} projects</div></div>
+    <div class="stat"><div class="l">Active Projects</div><div class="v">${active}</div><div class="s">of ${data.projects.length}</div></div>
+    <div class="stat"><div class="l">Awaiting Your Approval</div><div class="v">${apPendAll+billsPendAll}</div><div class="s">${apPendAll} samples · ${billsPendAll} bills</div></div></div>`;
+  else summary=`<div class="card statbar">
+    <div class="stat"><div class="l">Active Projects</div><div class="v">${active}</div><div class="s">of ${data.projects.length}</div></div>
+    <div class="stat"><div class="l">Packages in Progress</div><div class="v">${inProgAll}</div><div class="s">across all projects</div></div>
+    <div class="stat"><div class="l">Pending Requests</div><div class="v">${stockPendAll}</div><div class="s">awaiting approval</div></div></div>`;
+  el.innerHTML=`<div class="pagehead"><div><h1>All Projects</h1><p>${data.projects.length} projects</p></div><div class="acts">${money()?`<button class="btn primary" onclick="dAddProject()">${ic(I.plus)}New Project</button>`:''}</div></div>
+  ${summary}
+  <div class="projgrid">${data.projects.map(p=>{const t=totals(p); const prog=projProgress(p); const bud=pct(t.c,t.int);
+    return `<div class="card pcard" onclick="setProject('${p.id}')">
+      <div class="pctop"><div><h3>${p.name}</h3><div class="muted text-sm">${p.client}</div></div><span class="badge ${p.status==='Active'?'default':'secondary'}">${p.status}</span></div>
+      <div class="pcbars">
+        <div class="pcbar"><div class="pcbar-h"><span>Progress</span><b>${prog}%</b></div><div class="progress"><i style="width:${prog}%"></i></div></div>
+        ${money()?`<div class="pcbar"><div class="pcbar-h"><span>Budget used</span><b>${bud}%${bud>100?' <b class="flagmini">over</b>':''}</b></div><div class="progress"><i class="${bud>100?'over':''}" style="width:${Math.min(100,bud)}%"></i></div></div>`:''}
+      </div>
+      <div class="pcfoot muted text-xs">${p.modules.length} packages · ${fmtS(t.alloc)} ${money()?'allocated':'contract'}${p.start?' · Started '+dmy(p.start):' · Not started'}</div>
+    </div>`;}).join('')}</div>`;
+}
+function vUsers(el){
+  el.innerHTML=`<div class="pagehead"><div><h1>Users</h1><p>${data.team.length} users</p></div><div class="acts"><button class="btn primary" onclick="dInvite()">${ic(I.plus)}Invite User</button></div></div>
+  <div class="card"><div class="tw"><table><thead><tr><th>Name</th><th>Contact</th><th>Role</th><th></th></tr></thead><tbody>${data.team.map((u,i)=>`<tr><td><div style="display:flex;align-items:center;gap:10px"><div class="avatar">${u.n.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><span style="font-weight:500">${u.n}</span></div></td><td class="muted">${u.e}</td><td><select class="role" onchange="data.team[${i}].t=this.options[this.selectedIndex].text;data.team[${i}].r=this.value;toast('Role updated')"><option value="admin" ${u.r==='admin'?'selected':''}>Admin</option><option value="site" ${u.r==='site'?'selected':''}>Site Supervisor</option><option value="client" ${u.r==='client'?'selected':''}>Client</option></select></td><td style="text-align:right"><button class="btn sm ghost" onclick="toast('Removed')">Remove</button></td></tr>`).join('')}</tbody></table></div></div>`;
+}
+
+/* daily updates */
+function updateList(ups){
+  const p=proj();
+  return `<div class="ulist">${ups.map(u=>{const m=p.modules.find(x=>x.id===u.mod); return `<div class="upd"><div class="uh"><span class="ud">${dmy(u.date)}</span><span class="badge outline">${mno(m)} ${m.name}</span><span class="muted text-sm">${u.by}</span></div><div class="ut">${u.text}</div><div class="uph">${Array.from({length:Math.min(u.photos,4)},()=>'<i></i>').join('')}</div></div>`;}).join('')}</div>`;
+}
+function vUpdates(el,p){
+  const f=state.updFilter||'all'; const ups=data.updates.filter(u=>u.proj===p.id&&(f==='all'||u.mod===f));
+  el.innerHTML=`<div class="pagehead"><div><h1>Daily Updates</h1><p>Work done on site, posted by the site supervisor.</p></div><div class="acts">${isClient()?'':`<button class="btn primary" onclick="dPostUpdate()">${ic(I.plus)}Post Update</button>`}</div></div>
+  <div style="display:flex;gap:12px;margin-bottom:16px"><select class="role" style="height:36px" onchange="state.updFilter=this.value;render()"><option value="all">All packages</option>${p.modules.map(m=>`<option value="${m.id}" ${f===m.id?'selected':''}>${mno(m)} ${m.name}</option>`).join('')}</select></div>
+  <div class="card">${ups.length?updateList(ups):'<div class="empty">No updates yet.</div>'}</div>`;
+}
+function dPostUpdate(mid){
+  const p=proj(); mid=mid||(state.view==='module'?state.mod:p.modules[0].id);
+  openDialog('Post Daily Update','',`<div class="form">
+  ${F('Package',`<select id="a">${p.modules.map(m=>`<option value="${m.id}" ${m.id===mid?'selected':''}>${mno(m)} ${m.name}</option>`).join('')}</select>`)}${F('Date','<input id="b" type="date" value="2026-09-07">')}
+  <div class="full">${F('Work Done','<textarea id="c" placeholder="What was completed today, what is planned tomorrow, anything blocking"></textarea>')}</div>
+  <div class="full">${F('Photos','<input id="e" type="file" multiple style="padding:6px 10px">')}</div></div>`,'Post',()=>{
+    data.updates.unshift({id:'u'+Date.now(),proj:p.id,mod:val('a'),date:val('b'),by:data.team.find(t=>t.r===state.role).n.split(' ')[0],text:val('c')||'Update',photos:document.getElementById('e').files.length}); closeDialog(); go('updates'); toast('Update posted'); });
+}
+/* approvals */
+const apBadge=s=>({Pending:'<span class="badge outline">● Pending</span>',Approved:'<span class="badge default">✓ Approved</span>',Rejected:'<span class="badge secondary">✕ Rejected</span>'})[s];
+function approvalTable(list){
+  const p=proj();
+  return `<div class="tw"><table><thead><tr><th>Ref</th><th>Item</th><th>Type</th><th>Requested</th><th>Needed By</th><th>Status</th><th></th></tr></thead><tbody>
+  ${list.map(a=>{const m=p.modules.find(x=>x.id===a.mod); const k=m.packages.find(x=>x.id===a.pkg);
+    const act=a.status==='Pending'&&isClient()?`<div class="actions"><button class="btn sm primary" onclick="setAp('${a.id}','Approved')">Approve</button><button class="btn sm destructive" onclick="setAp('${a.id}','Rejected')">Reject</button></div>`:(!isClient()?`<button class="btn sm ghost" onclick="dApPhotos('${a.id}')">Add photos</button>`:'');
+    const ph=a.photos?`<div class="aph">${Array.from({length:Math.min(a.photos,4)},()=>'<i></i>').join('')}${a.photos>4?`<span class="more">+${a.photos-4}</span>`:''}</div>`:'';
+    return `<tr><td class="name">${a.id}<span class="sub">${a.by}</span></td><td class="name">${a.item}<span class="sub">${mno(m)} ${m.name}${k?' · '+k.name:''}${a.note?' · '+a.note:''}</span>${ph}</td><td><span class="badge outline">${a.type}</span></td><td>${dmy(a.requested)}</td><td>${dmy(a.need)}</td><td>${apBadge(a.status)}${a.decided?`<span class="sub muted text-xs">${dmy(a.decided)}</span>`:''}</td><td>${act}</td></tr>`;}).join('')||'<tr><td colspan="7"><div class="empty">Nothing here.</div></td></tr>'}</tbody></table></div>`;
+}
+function vApprovals(el,p){
+  const f=state.apFilter||'Pending'; const all=data.approvals.filter(a=>a.proj===p.id); const list=f==='All'?all:all.filter(a=>a.status===f);
+  el.innerHTML=`<div class="pagehead"><div><h1>Approvals</h1><p>${isClient()?'Samples, makes and drawings waiting for your sign-off.':'Client sign-offs on samples, makes and drawings.'}</p></div><div class="acts">${!isClient()?`<button class="btn primary" onclick="dNewApproval()">${ic(I.plus)}Request Approval</button>`:''}</div></div>
+  <div class="tabs">${['Pending','Approved','Rejected','All'].map(s=>`<button class="${f===s?'on':''}" onclick="state.apFilter='${s}';render()">${s}</button>`).join('')}</div>
+  <div class="card">${approvalTable(list)}</div>`;
+}
+function setAp(id,s){ const a=data.approvals.find(x=>x.id===id); a.status=s; a.decided='2026-09-07'; render(); toast(`${id} ${s.toLowerCase()}`); }
+function dNewApproval(){
+  const p=proj(); const mid=state.view==='module'?state.mod:p.modules[0].id;
+  openDialog('Request Approval','Sent to the client for sign-off.',`<div class="form">
+  ${F('Package',`<select id="a" onchange="pkgOpts()">${p.modules.map(m=>`<option value="${m.id}" ${m.id===mid?'selected':''}>${mno(m)} ${m.name}</option>`).join('')}</select>`)}${F('Phase','<select id="b"></select>')}
+  ${F('Type','<select id="c"><option>Material sample</option><option>Material</option><option>Drawing</option><option>Design</option><option>Variation</option></select>')}${F('Needed By','<input id="d" type="date" value="2026-09-14">')}
+  <div class="full">${F('Item','<input id="e" placeholder="Pool tile, ivory 300x300 anti-skid (Kajaria)">')}</div>
+  <div class="full">${F('Note','<textarea id="f" placeholder="Optional"></textarea>')}</div>
+  <div class="full">${F('Sample Photos','<input id="g" type="file" accept="image/*" multiple style="padding:6px 10px">')}</div></div>`,'Send',()=>{
+    data.approvals.unshift({id:'AP-'+String(data.approvals.length+1).padStart(3,'0'),proj:p.id,mod:val('a'),pkg:val('b'),type:val('c'),item:val('e')||'Item',by:data.team.find(t=>t.r===state.role).n.split(' ')[0],requested:'2026-09-07',need:val('d'),status:'Pending',note:val('f'),photos:document.getElementById('g').files.length}); closeDialog(); state.apFilter='Pending'; go('approvals'); toast('Approval request sent'); });
+  pkgOpts();
+}
+function dApPhotos(id){
+  const a=data.approvals.find(x=>x.id===id);
+  openDialog('Add Sample Photos',a.item,`<div class="form"><div class="full">${F('Photos','<input id="g" type="file" accept="image/*" multiple style="padding:6px 10px">')}</div></div>`,'Upload',()=>{ a.photos=(a.photos||0)+document.getElementById('g').files.length; closeDialog(); render(); toast('Photos added'); });
+}
+/* billing */
+const GST=18, RET=5, MAS=75;
+const bills=()=>data.bills.filter(b=>b.proj===state.proj);
+const factor=(m,pkgId)=>{ const k=m.packages.find(x=>x.id===pkgId); return k&&k.int? k.alloc/k.int : (m.internal? m.allocated/m.internal:1); };
+const phTasks=(m,k)=>m.tasks.filter(t=>!t.grp&&t.pkg===k.id);
+const phStatus=(m,k)=>{ if(k.billedIn){ const b=data.bills.find(x=>x.id===k.billedIn); return b&&b.status==='Paid'?'Paid':'Billed'; } if(k.done) return 'Billable'; const ts=phTasks(m,k); return ts.length&&ts.every(t=>t.p===100)?'Billable':'Pending'; };
+const phBadge=s=>({Pending:'<span class="badge secondary">In progress</span>',Billable:'<span class="badge outline">● Billable</span>',Billed:'<span class="badge outline">→ Billed</span>',Paid:'<span class="badge default">✓ Paid</span>'})[s];
+function billableItems(){
+  const p=proj(); const items=[];
+  data.requests.filter(r=>r.proj===p.id&&r.status==='Delivered'&&!r.billedIn&&amt(r)>0).forEach(r=>{ const m=p.modules.find(x=>x.id===r.mod); const client=Math.round(amt(r)*factor(m,r.pkg));
+    items.push({key:'r:'+r.id,type:'material',mod:m.id,pkg:r.pkg,desc:`${r.id} ${r.item}, ${r.qty} ${r.unit}`,cost:amt(r),client,pct:MAS}); });
+  p.modules.forEach(m=>m.packages.forEach(k=>{ if(phStatus(m,k)==='Billable') items.push({key:'m:'+m.id+':'+k.id,type:'milestone',mod:m.id,pkg:k.id,desc:`${k.name} complete`,cost:k.int||0,client:k.alloc,pct:100}); }));
+  return items;
+}
+const lineVal=l=>Math.round(l.client*l.pct/100);
+const lineCost=l=>Math.round(l.cost*l.pct/100);
+function billTotals(b){
+  const gross=b.lines.reduce((a,l)=>a+lineVal(l),0); const taxable=gross-(b.recovery||0); const ret=Math.round(taxable*RET/100); const gst=Math.round(taxable*GST/100);
+  const cost=b.lines.reduce((a,l)=>a+lineCost(l),0)-Math.round((b.recovery||0)*0.6);
+  return {gross,taxable,ret,gst,net:taxable-ret+gst,cost,margin:taxable-cost};
+}
+const billFiles=b=>(b.files||[]).length?`<div class="att">${b.files.map(f=>`<span class="chip" onclick="toast('Opening ${f.n}')">${ic(I.bill)}${f.n}<em>${f.s}</em></span>`).join('')}</div>`:'';
+function dBillUpload(id){
+  const b=data.bills.find(x=>x.id===id);
+  openDialog('Upload Bill Copy',`${b.id} · the client sees this file before approving.`,`<div class="form"><div class="full">${F('Bill PDF / image','<input id="g" type="file" accept="application/pdf,image/*" multiple style="padding:6px 10px">')}</div></div>`,'Upload',()=>{ const fs=[...document.getElementById('g').files]; b.files=(b.files||[]).concat(fs.length?fs.map(f=>({n:f.name,s:Math.max(1,Math.round(f.size/1024))+' KB'})):[{n:b.id+' Apex Studios Bill.pdf',s:'310 KB'}]); closeDialog(); render(); toast('Bill copy uploaded'); });
+}
+const billBadge=s=>({Draft:'<span class="badge secondary">Draft</span>',Submitted:'<span class="badge outline">● Submitted</span>',Certified:'<span class="badge outline">✓ Certified</span>',Paid:'<span class="badge default">✓ Paid</span>'})[s];
+function milestoneTable(m){
+  const ks=m.packages;
+  return `<div class="card">${ks.length?`<div class="tw"><table><thead><tr><th>Phase</th><th>Tasks</th><th class="num">Bill Amount</th><th>Status</th><th></th></tr></thead><tbody>
+  ${ks.map(k=>{const st=phStatus(m,k); const ts=phTasks(m,k); const done=ts.filter(t=>t.p===100).length; const b=k.billedIn?data.bills.find(x=>x.id===k.billedIn):null;
+    return `<tr><td class="name">${k.name}</td><td class="muted text-sm">${ts.length?`${done} of ${ts.length} done`:'No tasks linked'}</td><td class="num">${fmt(k.alloc)}</td><td>${phBadge(st)}${b?`<span class="sub muted text-xs">${b.id}</span>`:''}</td><td style="text-align:right">${st==='Pending'&&!ts.length&&money()?`<button class="btn sm" onclick="markPhaseDone('${m.id}','${k.id}')">Mark Complete</button>`:''}</td></tr>`;}).join('')}
+  <tr class="total"><td>Total</td><td></td><td class="num">${fmt(ks.reduce((a,k)=>a+k.alloc,0))}</td><td></td><td></td></tr></tbody></table></div>`:`<div class="empty">No phases yet.</div>`}</div>
+  <div class="card" style="margin-top:16px"><div class="ch"><h3>Material at Site</h3></div><div class="tw"><table><thead><tr><th>Material</th><th class="num">Cost</th><th class="num">Client Value</th><th class="num">Billable (${MAS}%)</th><th>Status</th></tr></thead><tbody>
+  ${data.requests.filter(r=>r.proj===state.proj&&r.mod===m.id&&r.status==='Delivered'&&amt(r)>0).map(r=>{const cv=Math.round(amt(r)*factor(m,r.pkg)); const b=r.billedIn?data.bills.find(x=>x.id===r.billedIn):null; return `<tr><td class="name">${r.item}<span class="sub">${r.id} · ${r.qty} ${r.unit}</span></td><td class="num">${fmt(amt(r))}</td><td class="num">${fmt(cv)}</td><td class="num">${fmt(Math.round(cv*MAS/100))}</td><td>${b?`<span class="badge ${b.status==='Paid'?'default':'outline'}">${b.id} · ${b.status}</span>`:'<span class="badge outline">● Billable</span>'}</td></tr>`;}).join('')||'<tr><td colspan="5"><div class="empty">Nothing delivered yet.</div></td></tr>'}</tbody></table></div></div>`;
+}
+function markPhaseDone(mid,kid){ const k=proj().modules.find(x=>x.id===mid).packages.find(x=>x.id===kid); k.done=true; render(); toast(k.name+' marked complete, now billable'); }
+function vBilling(el,p){
+  if(isClient()) return vBillsClient(el,p);
+  const bs=bills(); const items=billableItems(); const sel=state.billSel||(state.billSel=new Set(items.map(i=>i.key)));
+  const sum=(f)=>bs.filter(f).reduce((a,b)=>a+billTotals(b).net,0);
+  const billed=sum(b=>b.status!=='Draft'), received=sum(b=>b.status==='Paid'), outstanding=sum(b=>['Submitted','Certified'].includes(b.status));
+  const selItems=items.filter(i=>sel.has(i.key)); const selVal=selItems.reduce((a,i)=>a+lineVal(i),0); const selCost=selItems.reduce((a,i)=>a+lineCost(i),0);
+  const billableNow=items.reduce((a,i)=>a+lineVal(i),0);
+  el.innerHTML=`<div class="pagehead"><div><h1>Billing</h1><p>RA bills to ${p.client}. All values at client price, ex GST unless shown.</p></div></div>
+  <div class="card statbar">
+    <div class="stat"><div class="l">Billed to Date</div><div class="v">${fmtS(billed)}</div><div class="s">${bs.filter(b=>b.status!=='Draft').length} bills, incl. GST</div></div>
+    <div class="stat"><div class="l">Received</div><div class="v">${fmtS(received)}</div><div class="s">${bs.filter(b=>b.status==='Paid').length} paid</div></div>
+    <div class="stat"><div class="l">Outstanding</div><div class="v">${fmtS(outstanding)}</div><div class="s">Submitted or certified, not paid</div></div>
+    <div class="stat"><div class="l">Billable Now</div><div class="v">${fmtS(billableNow)}</div><div class="s">${items.length} items ready</div></div>
+  </div>
+  <div class="card" style="margin-bottom:20px"><div class="ch"><h3>Billable Now</h3><div class="acts"><span class="muted text-sm" style="align-self:center">${selItems.length} selected · ${fmt(selVal)} · margin ${fmt(selVal-selCost)}</span><button class="btn primary sm" ${selItems.length?'':'disabled style="opacity:.5"'} onclick="createBill()">${ic(I.plus)}Create Bill</button></div></div>
+  <div class="tw"><table><thead><tr><th style="width:36px"></th><th>Item</th><th>Package</th><th>Type</th><th class="num">Client Value</th><th class="num">Billable</th><th class="num">Margin</th></tr></thead><tbody>
+  ${items.map(i=>{const m=p.modules.find(x=>x.id===i.mod); return `<tr><td><input type="checkbox" ${sel.has(i.key)?'checked':''} onchange="toggleSel('${i.key}')"></td><td class="name">${i.desc}</td><td class="muted">${mno(m)} ${m.name}</td><td>${i.type==='material'?`<span class="badge outline">Material at site · ${MAS}%</span>`:'<span class="badge outline">Milestone</span>'}</td><td class="num">${fmt(i.client)}</td><td class="num">${fmt(lineVal(i))}</td><td class="num muted">${fmt(lineVal(i)-lineCost(i))}</td></tr>`;}).join('')||'<tr><td colspan="7"><div class="empty">Nothing billable yet. Items appear here when materials are delivered or milestones complete.</div></td></tr>'}</tbody></table></div></div>
+  <div class="card"><div class="ch"><h3>Bills</h3></div><div class="tw"><table><thead><tr><th>Bill</th><th>Date</th><th>Packages</th><th class="num">Taxable</th><th class="num">Net Payable</th><th class="num">Margin</th><th>Status</th><th></th></tr></thead><tbody>
+  ${bs.map(b=>{const t=billTotals(b); const pk=[...new Set(b.lines.map(l=>l.mod))].map(id=>mno(p.modules.find(x=>x.id===id))).join(', ');
+    const act= b.status==='Draft'?`<button class="btn sm primary" onclick="setBill('${b.id}','Submitted')">Submit</button>`: b.status==='Submitted'?`<button class="btn sm" onclick="setBill('${b.id}','Certified')">Mark Certified</button>`: b.status==='Certified'?`<button class="btn sm" onclick="setBill('${b.id}','Paid')">Mark Paid</button>`:'';
+    return `<tr><td class="name">${b.id}<span class="sub">${b.paid?'Paid '+dmy(b.paid):b.certified?'Certified '+dmy(b.certified):b.submitted?'Submitted '+dmy(b.submitted):'Draft'}</span>${billFiles(b)}</td><td>${dmy(b.date)}</td><td class="muted">${pk}</td><td class="num">${fmt(t.taxable)}</td><td class="num">${fmt(t.net)}</td><td class="num muted">${fmt(t.margin)} <span class="text-xs">(${pct(t.margin,t.taxable)}%)</span></td><td>${billBadge(b.status)}</td><td><div class="actions"><button class="btn sm ghost" onclick="dBill('${b.id}')">View</button><button class="btn sm ghost" onclick="dBillUpload('${b.id}')">Upload</button>${act}</div></td></tr>`;}).join('')||'<tr><td colspan="8"><div class="empty">No bills yet.</div></td></tr>'}</tbody></table></div></div>`;
+}
+function vBillsClient(el,p){
+  const bs=bills().filter(b=>b.status!=='Draft'); const sum=f=>bs.filter(f).reduce((a,b)=>a+billTotals(b).net,0);
+  el.innerHTML=`<div class="pagehead"><div><h1>Bills</h1><p>Running account bills from Apex Studios. Amounts include GST.</p></div></div>
+  <div class="card statbar">
+    <div class="stat"><div class="l">Bills Raised</div><div class="v">${fmtS(sum(()=>true))}</div><div class="s">${bs.length} bills</div></div>
+    <div class="stat"><div class="l">Awaiting Approval</div><div class="v">${fmtS(sum(b=>b.status==='Submitted'))}</div><div class="s">${bs.filter(b=>b.status==='Submitted').length} bills</div></div>
+    <div class="stat"><div class="l">Approved, Unpaid</div><div class="v">${fmtS(sum(b=>b.status==='Certified'))}</div><div class="s">${bs.filter(b=>b.status==='Certified').length} bills</div></div>
+    <div class="stat"><div class="l">Paid</div><div class="v">${fmtS(sum(b=>b.status==='Paid'))}</div><div class="s">${bs.filter(b=>b.status==='Paid').length} bills</div></div>
+  </div>
+  <div class="card"><div class="tw"><table><thead><tr><th>Bill</th><th>Date</th><th>Packages</th><th class="num">Taxable</th><th class="num">GST</th><th class="num">Net Payable</th><th>Status</th><th></th></tr></thead><tbody>
+  ${bs.map(b=>{const t=billTotals(b); const pk=[...new Set(b.lines.map(l=>l.mod))].map(id=>mno(p.modules.find(x=>x.id===id))+' '+p.modules.find(x=>x.id===id).name).join(', ');
+    const act=b.status==='Submitted'?`<button class="btn sm primary" onclick="setBill('${b.id}','Certified')">Approve</button>`:'';
+    return `<tr><td class="name">${b.id}<span class="sub">${b.paid?'Paid '+dmy(b.paid):b.certified?'Approved '+dmy(b.certified):'Submitted '+dmy(b.submitted)}</span>${billFiles(b)}</td><td>${dmy(b.date)}</td><td class="muted">${pk}</td><td class="num">${fmt(t.taxable)}</td><td class="num">${fmt(t.gst)}</td><td class="num">${fmt(t.net)}</td><td>${billBadge(b.status==='Certified'?'Certified':b.status).replace('Certified','Approved')}</td><td><div class="actions"><button class="btn sm ghost" onclick="dBill('${b.id}')">View</button>${act}</div></td></tr>`;}).join('')||'<tr><td colspan="8"><div class="empty">No bills yet.</div></td></tr>'}</tbody></table></div></div>`;
+}
+function toggleSel(k){ const s=state.billSel; s.has(k)?s.delete(k):s.add(k); render(); }
+function createBill(){
+  const p=proj(); const items=billableItems().filter(i=>state.billSel.has(i.key)); if(!items.length) return;
+  const id='RA-'+String(data.bills.length+1).padStart(3,'0');
+  // recover material-at-site already billed for phases completed in this bill
+  let recovery=0; const phs=new Set(items.filter(i=>i.type==='milestone').map(i=>i.mod+':'+i.pkg));
+  data.bills.filter(b=>b.proj===p.id).forEach(b=>b.lines.forEach(l=>{ if(l.type==='material'&&phs.has(l.mod+':'+l.pkg)&&!l.recovered){ recovery+=lineVal(l); l.recovered=true; } }));
+  const lines=items.map(i=>({type:i.type,mod:i.mod,pkg:i.pkg,desc:i.desc,cost:i.cost,client:i.client,pct:i.pct}));
+  data.bills.push({id,proj:p.id,date:'2026-09-07',status:'Draft',lines,recovery});
+  items.forEach(i=>{ if(i.type==='material') data.requests.find(r=>'r:'+r.id===i.key).billedIn=id; else { const m=p.modules.find(x=>x.id===i.mod); m.packages.find(x=>x.id===i.pkg).billedIn=id; } });
+  state.billSel=null; render(); toast(id+' created as draft'); dBill(id);
+}
+function setBill(id,s){ const b=data.bills.find(x=>x.id===id); b.status=s; const d='2026-09-07'; if(s==='Submitted') b.submitted=d; if(s==='Certified') b.certified=d; if(s==='Paid') b.paid=d; render(); toast(`${id} ${s.toLowerCase()}`); }
+function dBill(id){
+  const p=proj(); const b=data.bills.find(x=>x.id===id); const t=billTotals(b);
+  const row=(l,v,cls='')=>`<div class="brow ${cls}"><span>${l}</span><span class="num">${v}</span></div>`;
+  openDialog(`Bill ${b.id}`,`${p.client} · ${dmy(b.date)} · ${billBadge(b.status)}`,`
+  <div class="tw" style="border:1px solid hsl(var(--border));border-radius:8px"><table style="min-width:0"><thead><tr><th>Description</th><th class="num">Client Value</th><th class="num">%</th><th class="num">Amount</th></tr></thead><tbody>
+  ${b.lines.map(l=>`<tr><td>${l.desc}<span class="sub">${mno(p.modules.find(x=>x.id===l.mod))} ${p.modules.find(x=>x.id===l.mod).name}${l.type==='material'?' · material at site':''}</span></td><td class="num">${fmt(l.client)}</td><td class="num">${l.pct}%</td><td class="num">${fmt(lineVal(l))}</td></tr>`).join('')}</tbody></table></div>
+  <div class="bsum">
+    ${row('Gross',fmt(t.gross))}
+    ${b.recovery?row('Less material at site previously billed','-'+fmt(b.recovery).slice(1)):''}
+    ${row('Taxable value',fmt(t.taxable),'b')}
+    ${row(`Less retention ${RET}%`,'-'+fmt(t.ret).slice(1))}
+    ${row(`GST ${GST}%`,fmt(t.gst))}
+    ${row('Net payable',fmt(t.net),'b big')}
+  </div>
+  <div class="bfiles"><div class="ih">Bill copy</div>${(b.files||[]).length?billFiles(b):'<span class="muted text-sm">No file uploaded yet.</span>'}${isClient()?'':`<button class="btn sm ghost" style="margin-top:8px" onclick="closeDialog();dBillUpload('${b.id}')">Upload file</button>`}</div>
+  ${money()?`<div class="internal"><div class="ih">Internal · not on the client copy</div>${row('Cost in this bill',fmt(t.cost))}${row('Margin in this bill',`${fmt(t.margin)} <span class="muted text-xs">(${pct(t.margin,t.taxable)}%)</span>`,'b')}</div>`:''}`,
+  isClient()?'Download PDF':'Download Excel',()=>{ toast(isClient()?'PDF downloaded':'Excel generated in ApexStudios format'); });
+  document.querySelector('#dialog .df .btn:not(.primary)').textContent='Close';
+}
+
+/* dialogs */
+const F=(l,inner,hint='')=>`<div class="field"><label>${l}</label>${inner}${hint?`<div class="hint">${hint}</div>`:''}</div>`;
+function openDialog(title,desc,body,okLabel,onOk){
+  document.getElementById('dialog').innerHTML=`<div class="dh"><h2>${title}</h2>${desc?`<p>${desc}</p>`:''}</div><div class="db">${body}</div><div class="df"><button class="btn" onclick="closeDialog()">Cancel</button><button class="btn primary" id="dOk">${okLabel}</button></div>`;
+  document.getElementById('dOk').onclick=onOk; document.getElementById('ov').classList.add('open'); const f=document.querySelector('#dialog input,#dialog select'); if(f) f.focus();
+}
+function closeDialog(){ document.getElementById('ov').classList.remove('open'); }
+const val=id=>document.getElementById(id).value.trim();
+const num=id=>+val(id).replace(/[^\d]/g,'')||0;
+
+function dAddProject(){
+  openDialog('New Project','',`<div class="form">
+  <div class="full">${F('Project Name','<input id="a" placeholder="Model Villas Interiors">')}</div>
+  ${F('Client','<input id="b" value="T V Rao Housing Pvt Ltd">')}${F('Location','<input id="c" value="Ghanpur, Hyderabad">')}
+  ${F('Start Date','<input id="d" type="date">')}${F('Packages','<input id="e" placeholder="Interiors, MEP, Facade">','Comma separated')}</div>`,'Create',()=>{
+    const id='p'+Date.now(); const mods=val('e').split(',').map(s=>s.trim()).filter(Boolean).map((n,i)=>({id:id+'m'+i,name:n,allocated:0,internal:0,lead:'To assign',status:'Not started',packages:[],tasks:[]}));
+    data.projects.push({id,name:val('a')||'Untitled Project',client:val('b'),location:val('c'),start:val('d')||null,status:'Active',modules:mods}); closeDialog(); setProject(id); toast('Project created'); });
+}
+function dAddModule(){
+  openDialog('Add Package','',`<div class="form">
+  <div class="full">${F('Package Name','<input id="a" placeholder="Landscape">')}</div>
+  ${F('Allocated Budget','<input id="b" placeholder="₹">')}${F('Internal Budget','<input id="c" placeholder="₹">')}
+  <div class="full">${F('Lead','<select id="d"><option>Suresh K</option><option>Prakash R</option><option>To assign</option></select>')}</div></div>`,'Add',()=>{
+    proj().modules.push({id:'m'+Date.now(),name:val('a')||'New Package',allocated:num('b'),internal:num('c'),lead:val('d'),status:'Not started',packages:[],tasks:[]}); closeDialog(); render(); toast('Package added'); });
+}
+function dEditModule(mid){
+  const m=proj().modules.find(x=>x.id===mid);
+  openDialog('Edit Package','',`<div class="form">
+  <div class="full">${F('Package Name',`<input id="a" value="${m.name}">`)}</div>
+  ${F('Allocated Budget',`<input id="b" value="${m.allocated}">`)}${F('Internal Budget',`<input id="c" value="${m.internal}">`)}
+  ${F('Lead',`<input id="d" value="${m.lead}">`)}${F('Status',`<select id="e">${['Not started','Design','In progress','Completed'].map(s=>`<option ${m.status===s?'selected':''}>${s}</option>`).join('')}</select>`)}</div>`,'Save',()=>{
+    m.name=val('a'); m.allocated=num('b'); m.internal=num('c'); m.lead=val('d'); m.status=val('e'); closeDialog(); render(); toast('Saved'); });
+}
+function dAddTask(mid){
+  const m=proj().modules.find(x=>x.id===mid);
+  openDialog('Add Task',m.name,`<div class="form">
+  <div class="full">${F('Task','<input id="a" placeholder="Coping stone fixing">')}</div>
+  <div class="full">${F('Phase',`<select id="b">${m.packages.map(k=>`<option value="${k.id}">${k.name}</option>`).join('')}<option value="">None</option></select>`)}</div>
+  ${F('Owner','<input id="c" placeholder="Gang, vendor or client">')}${F('Start Week','<input id="d" type="number" value="6" min="1" max="14">')}
+  ${F('Duration (weeks)','<input id="e" type="number" value="2" min="1">')}</div>`,'Add',()=>{
+    m.tasks.push({t:val('a')||'New task',owner:val('c')||'To assign',w:+val('d')||1,d:+val('e')||1,p:0,pkg:val('b')}); closeDialog(); if(state.view==='module') state.tab='schedule'; render(); toast('Task added'); });
+}
+function dTask(i,mid){
+  const m=proj().modules.find(x=>x.id===mid); const t=m.tasks[i]; if(isClient()){ toast(`${t.t}: ${t.p}% complete`); return; }
+  openDialog(t.t,t.owner,`<div class="form">
+  <div class="full">${F('Progress',`<input id="a" type="range" min="0" max="100" step="10" value="${t.p}" oninput="document.getElementById('pv').textContent=this.value+'%'">`,`<span id="pv">${t.p}%</span>`)}</div>
+  ${F('Start Week',`<input id="b" type="number" value="${t.w}">`)}${F('Duration (weeks)',`<input id="c" type="number" value="${t.d}">`)}
+  <div class="full">${F('Note','<textarea placeholder="Optional"></textarea>')}</div></div>`,'Save',()=>{ t.p=+val('a'); t.w=+val('b')||t.w; t.d=+val('c')||t.d; closeDialog(); render(); toast('Saved'); });
+}
+function dNewRequest(mid){
+  const p=proj(); mid=mid||(state.view==='module'?state.mod:p.modules[0].id);
+  openDialog('New Stock Request','',`<div class="form">
+  ${F('Package',`<select id="a" onchange="pkgOpts()">${p.modules.map(m=>`<option value="${m.id}" ${m.id===mid?'selected':''}>${mno(m)} ${m.name}</option>`).join('')}</select>`)}${F('Phase','<select id="b"></select>')}
+  <div class="full">${F('Material','<input id="c" placeholder="Pool-grade vitrified tile 300x300" list="items"><datalist id="items"><option>Pool-grade vitrified tile 300x300, anti-skid</option><option>Dr. Fixit Pidifin 2K, 20 kg kit</option><option>Ultratech 53 grade cement, 50 kg</option><option>uPVC pipe 63 mm SCH 80, 3 m</option><option>Tile adhesive, pool grade, 20 kg</option><option>Epoxy grout, 5 kg</option></datalist>')}</div>
+  ${F('Quantity','<div class="row2"><input id="d" type="number" placeholder="0"><select id="e" style="flex:0 0 90px"><option>sft</option><option>nos</option><option>bag</option><option>kit</option><option>len</option><option>kg</option><option>rft</option></select></div>')}${F('Needed By','<input id="f" type="date" value="2026-09-15">')}
+  ${money()?F('Rate (₹ per unit)','<input id="g" type="number" placeholder="Optional">'):'<input type="hidden" id="g">'}
+  <div class="full">${F('Note','<textarea id="h" placeholder="Optional"></textarea>')}</div></div>`,'Submit',()=>{
+    const n=data.requests.length+15; data.requests.unshift({id:'SR-0'+n,proj:p.id,mod:val('a'),pkg:val('b'),item:val('c')||'Item',qty:+val('d')||0,unit:val('e'),rate:+val('g')||0,by:data.team.find(t=>t.r===state.role).n.split(' ')[0],need:val('f'),status:'Pending',raised:'2026-09-07'});
+    closeDialog(); state.filter='All'; go('stock'); toast('Request submitted'); });
+  pkgOpts();
+}
+function pkgOpts(){ const m=proj().modules.find(x=>x.id===val('a')); document.getElementById('b').innerHTML=m.packages.length?m.packages.map(k=>`<option value="${k.id}">${k.name}</option>`).join(''):'<option value="">None</option>'; }
+function dInvite(){
+  openDialog('Invite User','',`<div class="form"><div class="full">${F('Name','<input id="a">')}</div><div class="full">${F('Email or Phone','<input id="b">')}</div><div class="full">${F('Role','<select id="c"><option value="site">Site Supervisor</option><option value="admin">Admin</option><option value="client">Client</option></select>')}</div></div>`,'Send Invite',()=>{
+    const s=document.getElementById('c'); data.team.push({n:val('a')||'New user',r:s.value,t:s.options[s.selectedIndex].text,e:val('b')}); closeDialog(); render(); toast('Invite sent'); });
+}
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeDialog(); });
+render();
+</script>
+
+</body>
+</html>

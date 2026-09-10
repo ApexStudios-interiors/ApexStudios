@@ -1,7 +1,7 @@
 "use client";
 
 import { useApp } from "@/context/AppContext";
-import { ModuleT, Project } from "@/lib/types";
+import type { ModuleT, Project } from "@/lib/types";
 import { amt, factor, fmt, isMoney, phStatus, phTasks } from "@/lib/logic";
 import { MAS } from "@/lib/data";
 import { PhaseStatusBadge } from "@/components/domain/StatusBadges";
@@ -16,7 +16,9 @@ export function MilestoneTable({ project, module }: { project: Project; module: 
   const { data, role, markPhaseDone } = useApp();
   const ks = module.packages;
   const money = isMoney(role);
-  const materials = data.requests.filter((r) => r.proj === project.id && r.mod === module.id && r.status === "Delivered" && amt(r) > 0);
+  const materials = data.requests.filter(
+    (r) => r.proj === project.id && r.mod === module.id && r.status === "Delivered" && amt(r) > 0
+  );
 
   return (
     <>
@@ -41,7 +43,9 @@ export function MilestoneTable({ project, module }: { project: Project; module: 
                 return (
                   <tr key={k.id}>
                     <td className={td}>{k.name}</td>
-                    <td className={td + " text-muted-foreground text-sm"}>{ts.length ? `${done} of ${ts.length} done` : "No tasks linked"}</td>
+                    <td className={td + " text-muted-foreground text-sm"}>
+                      {ts.length ? `${done} of ${ts.length} done` : "No tasks linked"}
+                    </td>
                     <td className={tdNum}>{fmt(k.alloc)}</td>
                     <td className={td}>
                       <PhaseStatusBadge status={st} />

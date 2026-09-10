@@ -1,7 +1,7 @@
 "use client";
 
 import { useApp } from "@/context/AppContext";
-import { ModuleT, Project } from "@/lib/types";
+import type { ModuleT, Project } from "@/lib/types";
 import { committed, fmt, isClientRole, isMoney } from "@/lib/logic";
 import { Bar } from "@/components/ui/Bar";
 import { TableWrap } from "@/components/ui/TableWrap";
@@ -39,7 +39,9 @@ export function PhaseTable({ project, module }: { project: Project; module: Modu
       <tbody>
         {module.packages.map((k) => {
           const kc = committed(data, project.id, module, k.id);
-          const rq = data.requests.filter((r) => r.proj === project.id && r.mod === module.id && r.pkg === k.id).length;
+          const rq = data.requests.filter(
+            (r) => r.proj === project.id && r.mod === module.id && r.pkg === k.id
+          ).length;
           return (
             <tr key={k.id}>
               <td className={td}>{k.name}</td>

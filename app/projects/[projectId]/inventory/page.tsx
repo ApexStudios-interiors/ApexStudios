@@ -1,16 +1,15 @@
 "use client";
 
-import { useParams } from "next/navigation";
 import { useApp } from "@/context/AppContext";
+import { useProject } from "@/hooks/useProject";
 import { fmtS, inventoryFor, inventoryStatus, inventoryValue } from "@/lib/logic";
 import { InventoryTable } from "@/components/domain/InventoryTable";
 import { StatBar } from "@/components/ui/StatBar";
 import { Card } from "@/components/ui/Card";
 
 export default function InventoryPage() {
-  const params = useParams<{ projectId: string }>();
   const { data } = useApp();
-  const project = data.projects.find((p) => p.id === params.projectId)!;
+  const project = useProject();
   const items = inventoryFor(data, project.id);
 
   const totalValue = items.reduce((a, i) => a + inventoryValue(i), 0);

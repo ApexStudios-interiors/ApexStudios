@@ -1,0 +1,25 @@
+import type { Config } from "drizzle-kit";
+
+/**
+ * Drizzle generates nothing authoritative.
+ *
+ * `supabase/migrations/*.sql` is the source of truth for schema
+ * (`../AGENTS.md`, database rule 1). Drizzle's job here is typed access for
+ * service_role job handlers, generated types, and drift detection — `pnpm
+ * db:check-drift` fails CI when db/schema and the migration set disagree.
+ *
+ * DATABASE_URL authenticates as a privileged role and bypasses RLS, which is
+ * why it belongs to migrations and tooling and never to a request path (D11).
+ */
+export default {
+  schema: "./db/schema",
+  out: "./supabase/migrations",
+  dialect: "postgresql",
+  dbCredentials: {
+    // No default. D14 removed the local stack, so a fallback would silently
+    // point at a database that does not exist instead of saying so.
+    url: process.env.DATABASE_URL ?? "",
+  },
+  verbose: true,
+  strict: true,
+} satisfies Config;

@@ -1,6 +1,6 @@
-import { Stat, StatBar } from "@/components/ui/StatBar";
+import { type Stat, StatBar } from "@/components/ui/StatBar";
 import { fmtS, isClientRole, isMoney, pct } from "@/lib/logic";
-import { Role } from "@/lib/types";
+import type { Role } from "@/lib/types";
 
 export function BudgetStatBar({
   role,
@@ -24,7 +24,11 @@ export function BudgetStatBar({
     const rem = int - c;
     const stats: Stat[] = [
       { label: "Allocated Budget", value: fmtS(alloc), sub: "Client price, ex GST" },
-      { label: "Internal Budget", value: fmtS(int), sub: `Margin ${fmtS(alloc - int)} · ${pct(alloc - int, alloc)}%` },
+      {
+        label: "Internal Budget",
+        value: fmtS(int),
+        sub: `Margin ${fmtS(alloc - int)} · ${pct(alloc - int, alloc)}%`,
+      },
       { label: "Committed", value: fmtS(c), sub: `${pct(c, int)}% of internal` },
       {
         label: "Remaining",

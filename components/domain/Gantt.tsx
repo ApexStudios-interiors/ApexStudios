@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { ModuleT, Project } from "@/lib/types";
+import type { ModuleT, Project } from "@/lib/types";
 import { phTasks } from "@/lib/logic";
 import { useApp } from "@/context/AppContext";
 import { Icon } from "@/components/ui/Icon";
@@ -50,8 +50,14 @@ export function Gantt({ project, module }: { project: Project; module: ModuleT }
   }
 
   const groups = [
-    ...module.packages.map((k) => ({ id: k.id, name: k.name, tasks: phTasks(module, k) })).filter((g) => g.tasks.length),
-    { id: "other", name: "General", tasks: module.tasks.filter((t) => !module.packages.some((k) => k.id === t.pkg)) },
+    ...module.packages
+      .map((k) => ({ id: k.id, name: k.name, tasks: phTasks(module, k) }))
+      .filter((g) => g.tasks.length),
+    {
+      id: "other",
+      name: "General",
+      tasks: module.tasks.filter((t) => !module.packages.some((k) => k.id === t.pkg)),
+    },
   ].filter((g) => g.tasks.length);
 
   const toggle = (key: string) => {
@@ -67,7 +73,10 @@ export function Gantt({ project, module }: { project: Project; module: ModuleT }
 
   return (
     <div className="overflow-x-auto">
-      <div className="grid min-w-[960px]" style={{ gridTemplateColumns: `280px repeat(${WEEKS}, minmax(52px,1fr))` }}>
+      <div
+        className="grid min-w-[960px]"
+        style={{ gridTemplateColumns: `280px repeat(${WEEKS}, minmax(52px,1fr))` }}
+      >
         {start && (
           <>
             <div className="border-b border-border bg-muted/50 sticky left-0 z-[2]" />
@@ -96,7 +105,9 @@ export function Gantt({ project, module }: { project: Project; module: ModuleT }
             >
               {start ? (
                 <>
-                  <span className={`block text-sm font-bold leading-tight ${isNow ? "text-status-destructive" : "text-foreground"}`}>
+                  <span
+                    className={`block text-sm font-bold leading-tight ${isNow ? "text-status-destructive" : "text-foreground"}`}
+                  >
                     {wkDate(start, wk).getDate()}
                   </span>
                   <span className="block text-[11px] text-muted-foreground">W{wk}</span>
@@ -120,7 +131,10 @@ export function Gantt({ project, module }: { project: Project; module: ModuleT }
                 className="bg-muted/50 text-[13px] font-semibold px-2.5 py-1.5 sticky left-0 z-[1] border-b border-border flex items-center gap-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-muted/80"
               >
                 <span className="inline-grid place-items-center w-[18px] h-[18px] text-muted-foreground">
-                  <Icon name="chevronRight" className={`w-3.5 h-3.5 transition-transform ${isClosed ? "" : "rotate-90"}`} />
+                  <Icon
+                    name="chevronRight"
+                    className={`w-3.5 h-3.5 transition-transform ${isClosed ? "" : "rotate-90"}`}
+                  />
                 </span>
                 {g.name}
                 <span className="text-muted-foreground font-normal ml-2">
@@ -150,7 +164,10 @@ export function Gantt({ project, module }: { project: Project; module: ModuleT }
                         </div>
                       </div>
                       {weekRange.map((wk) => (
-                        <div key={wk} className={`relative border-b border-l border-border/60 min-h-[46px] ${wk === nowWk ? "bg-muted/60" : ""}`}>
+                        <div
+                          key={wk}
+                          className={`relative border-b border-l border-border/60 min-h-[46px] ${wk === nowWk ? "bg-muted/60" : ""}`}
+                        >
                           {wk === t.w && (
                             <div
                               onClick={() => {
@@ -158,15 +175,25 @@ export function Gantt({ project, module }: { project: Project; module: ModuleT }
                                   toast(`${t.t}: ${t.p}% complete`);
                                   return;
                                 }
-                                openDialog({ kind: "taskDetail", projectId: project.id, moduleId: module.id, taskIndex: idx });
+                                openDialog({
+                                  kind: "taskDetail",
+                                  projectId: project.id,
+                                  moduleId: module.id,
+                                  taskIndex: idx,
+                                });
                               }}
                               title={`${t.t}: ${t.p}%`}
                               className={`absolute top-[13px] h-5 rounded-md bg-primary/10 overflow-hidden cursor-pointer hover:outline-2 hover:outline-ring/40 ${
-                                late ? "outline-[1.5px] outline-dashed outline-foreground outline-offset-1" : ""
+                                late
+                                  ? "outline-[1.5px] outline-dashed outline-foreground outline-offset-1"
+                                  : ""
                               }`}
                               style={{ left: 3, width: `calc(${t.d * 100}% - 6px)` }}
                             >
-                              <div className="absolute inset-y-0 left-0 bg-primary" style={{ width: `${t.p}%` }} />
+                              <div
+                                className="absolute inset-y-0 left-0 bg-primary"
+                                style={{ width: `${t.p}%` }}
+                              />
                             </div>
                           )}
                         </div>

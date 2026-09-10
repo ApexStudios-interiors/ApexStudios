@@ -30,14 +30,29 @@ export function AddModuleDialog({ projectId }: { projectId: string }) {
       <div className="grid grid-cols-2 gap-3.5">
         <div className="col-span-2">
           <Field label="Package Name">
-            <input className={inputClass} placeholder="Landscape" value={name} onChange={(e) => setName(e.target.value)} />
+            <input
+              className={inputClass}
+              placeholder="Landscape"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </Field>
         </div>
         <Field label="Allocated Budget">
-          <input className={inputClass} placeholder="₹" value={allocated} onChange={(e) => setAllocated(e.target.value)} />
+          <input
+            className={inputClass}
+            placeholder="₹"
+            value={allocated}
+            onChange={(e) => setAllocated(e.target.value)}
+          />
         </Field>
         <Field label="Internal Budget">
-          <input className={inputClass} placeholder="₹" value={internal} onChange={(e) => setInternal(e.target.value)} />
+          <input
+            className={inputClass}
+            placeholder="₹"
+            value={internal}
+            onChange={(e) => setInternal(e.target.value)}
+          />
         </Field>
         <div className="col-span-2">
           <Field label="Lead">
