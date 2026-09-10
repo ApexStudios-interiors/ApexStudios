@@ -292,12 +292,12 @@ If the owner is subject to the base table's admin-only policy, then
 `v_package_client` — which must return rows to a *client* session — is evaluated
 against `packages_select_admin` (`using (is_admin())`) and returns **zero rows**.
 The client's Packages table would render silently empty. Nothing would error.
-**Answered:** PENDING — the spike cannot run without a database
-**Answer:** Not yet known.
-**Consequence:** This gates migration 0014 and the whole column-isolation design.
-The migrations are written as though the answer is yes, because that is what
-`02-lld.md` §4.3 specifies, and because nothing is applied yet an unapplied
-migration can be edited freely if the answer turns out to be no.
+**Answered:** 2026-09-10, by running `pnpm spike:d15` against `apex-dev`
+**Answer:** **PASS.** A definer view reads through `force row level security`
+while the base table stays closed to the same session:
+`v_spike_client` returned the row, `spike_costs` returned none.
+**Consequence:** Migration 0014 needs no design change. Proceed exactly as
+`02-lld.md` §4.3 specifies — the role-scoped views are trustworthy as written.
 
 Run it with `pnpm spike:d15` the moment `apex-dev` exists. It creates a
 throwaway table, a throwaway client user and a real signed-in session, asks the
@@ -370,11 +370,28 @@ Adding a unit later is a migration inserting a row, never a dashboard edit.
 
 ---
 
+### D18 — Supabase project region
+
+**Finding, not a question anyone was asked.** `architecture.md` §5.1 requires
+`apex-dev`/`apex-prod` in `ap-south-1` (Mumbai), co-located with Vercel's `bom1`
+for latency. The `apex-dev` project actually created resolves to the
+**ap-northeast-1 (Tokyo)** pooler, discovered while diagnosing a connection
+failure, not by inspecting the region at creation time.
+**Status:** Unresolved. Not blocking Build 02 — schema work does not depend on
+latency — but every query from a Mumbai-region Vercel deployment to a
+Tokyo-region database pays the cross-region round trip `architecture.md` §5.1
+specifically warns against (~200ms estimated per query when mismatched).
+**Recommendation:** recreate `apex-dev` in `ap-south-1` before Build 04 starts
+adding the queries that would actually feel this, and pick the region
+explicitly and confirm it at creation for `apex-prod` — the picker does not
+default to Mumbai.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |
 |---|---|---|---|
-| **D15 spike — definer views under `force row level security`.** Cannot run without a database. Gates migration 0014 and every non-admin surface. | Claude, on `apex-dev` | Builds 04–09 | 2026-09-09 |
 | **Apex Studios' legal identity — ON HOLD at Voola's request (2026-09-10).** legal_name, GSTIN, PAN and registered address are placeholders in the seed. `pnpm check:release` reports it; it is a hard gate on any production deploy, and deliberately not a failing unit test, because development is not blocked by it. | Voola | First real bill (Build 09), production deploy | 2026-09-10 |
 | CA confirmation: material-at-site as secured advance (D4) | Voola → CA | First real bill | 2026-09-09 |
 | CA confirmation: statutory retention period (A-5) | Voola → CA | Build 10 R2 lifecycle rules | 2026-09-09 |

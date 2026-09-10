@@ -84,10 +84,18 @@ set search_path = ''
 as $$
 begin
   update public.jobs set
+    -- Explicit casts are load-bearing, not stylistic. A CASE over untyped
+    -- string literals resolves its own result type to `text` first, and only
+    -- then gets assigned to `status` — but Postgres has no implicit cast from
+    -- text to a user-defined enum, so an uncast CASE here fails at call time
+    -- ("column status is of type job_status but expression is of type text"),
+    -- even though `create or replace function` accepts the body without
+    -- complaint: plpgsql does not fully type-check a function body until it
+    -- actually runs.
     status = case
-               when p_ok then 'succeeded'
-               when attempts >= max_attempts then 'failed'
-               else 'pending'
+               when p_ok then 'succeeded'::public.job_status
+               when attempts >= max_attempts then 'failed'::public.job_status
+               else 'pending'::public.job_status
              end,
     run_after = case
                   when p_ok then run_after

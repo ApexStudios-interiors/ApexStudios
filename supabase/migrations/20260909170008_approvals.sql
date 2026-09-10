@@ -23,7 +23,11 @@ create table public.approvals (
   decision_reason text,
   supersedes_id   uuid references public.approvals(id),
   created_at      timestamptz not null default now(),
+  -- created_by/updated_by are the standard 02-lld.md §1.3 audit pair, distinct
+  -- from requested_by and decided_by, which are the domain actors.
+  created_by      uuid references public.profiles(id),
   updated_at      timestamptz not null default now(),
+  updated_by      uuid references public.profiles(id),
   deleted_at      timestamptz,
   constraint ap_ref_uq unique (org_id, ref_no),
   constraint ap_reject_ck check (status <> 'rejected' or decision_reason is not null),

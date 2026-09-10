@@ -33,6 +33,11 @@ create table public.stock_requests (
   -- Set when MAS-billed. Prevents the same delivered material being billed twice.
   billed_on_bill_id uuid,
   created_at        timestamptz not null default now(),
+  -- created_by is separate from requested_by: requested_by is the domain actor
+  -- who raised the request; created_by is the standard audit column from
+  -- 02-lld.md §1.3, kept for consistency with every other business table even
+  -- though the two are the same profile on every row an application ever writes.
+  created_by        uuid references public.profiles(id),
   updated_at        timestamptz not null default now(),
   updated_by        uuid references public.profiles(id),
   deleted_at        timestamptz,

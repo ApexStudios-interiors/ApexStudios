@@ -34,7 +34,7 @@ const steps = [
     cmd: ["pnpm", "spike:d15"],
     note: "A FAIL here means migration 0014 must change before anything else is trusted.",
   },
-  { name: "Seed", cmd: ["psql", url, "-v", "ON_ERROR_STOP=1", "-f", "supabase/seed.sql"] },
+  { name: "Seed", cmd: ["pnpm", "db:seed"] },
   { name: "pgTAP: structural, policy matrix, seed invariants", cmd: ["pnpm", "test:rls"] },
   { name: "Integration tests", cmd: ["pnpm", "test:integration"] },
   { name: "Release readiness", cmd: ["pnpm", "check:release"], soft: true },

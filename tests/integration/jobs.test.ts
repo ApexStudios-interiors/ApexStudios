@@ -18,9 +18,13 @@ describe("jobs", () => {
     // One row, two claimants. Without `for update skip locked` both would get it
     // and the job would run twice — which is exactly what happens when two cron
     // ticks overlap.
+    // Distinct idempotency_key per row is required, not cosmetic:
+    // jobs_idem_uq is `unique nulls not distinct (name, idempotency_key)`, so
+    // 20 rows sharing one name and a null key would collide with each other
+    // before concurrency ever enters the picture.
     await sql`
-      insert into public.jobs (name, payload)
-      select 'test.concurrent', '{}'::jsonb from generate_series(1, 20)`;
+      insert into public.jobs (name, idempotency_key, payload)
+      select 'test.concurrent', gs::text, '{}'::jsonb from generate_series(1, 20) gs`;
 
     // Run the claims genuinely in parallel on separate connections.
     const a = connect();
@@ -43,8 +47,8 @@ describe("jobs", () => {
     for (let round = 0; round < 5; round++) {
       await sql`delete from public.jobs where name = 'test.loop'`;
       await sql`
-        insert into public.jobs (name, payload)
-        select 'test.loop', '{}'::jsonb from generate_series(1, 10)`;
+        insert into public.jobs (name, idempotency_key, payload)
+        select 'test.loop', gs::text, '{}'::jsonb from generate_series(1, 10) gs`;
       const a = connect();
       const b = connect();
       try {

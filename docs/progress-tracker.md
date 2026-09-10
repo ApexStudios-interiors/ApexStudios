@@ -86,26 +86,33 @@ Branch `build/01-foundations`, open as **PR #1**, CI green. Baseline tag `proto-
 
 ## Build 02 — Database
 
-Branch `build/02-database`. **Drafted, not verified.** Nothing has been applied to any
-database, because `apex-dev` does not exist yet and D14 removed the local alternative.
-Every SQL statement below is unrun.
+Branch `build/02-database`. **Verified end to end against `apex-dev`** as of 2026-09-10.
+Sixteen migrations applied, D15 spike PASSED, seeded, 28/28 pgTAP assertions pass, 18/18
+integration tests pass, drift check clean.
 
 | Step | Status | Notes |
 |---|---|---|
-| 2 Spike (definer view under `force` RLS) | ⛔ | Written and runnable as `pnpm spike:d15`. **Cannot run without a database.** Recorded as **D15**, not D14 — that number was taken by the Docker decision. Gates migration 0014. |
-| 3 / 4.1–4.7 Migrations 0001–0016 | 🟡 | All sixteen written, ~1,750 lines. Each table-creating file enables RLS, forces it, adds policies and indexes every policy column, in the same file — checked mechanically. No floating-point type anywhere. **Unapplied and unrun.** |
+| 2 Spike (definer view under `force` RLS) | ✅ | **PASS.** `v_spike_client` returned the row; `spike_costs` returned none to the same client session. Migration 0014 needs no design change. Recorded as D15. |
+| 3 / 4.1–4.7 Migrations 0001–0016 | ✅ | All sixteen applied to `apex-dev`. Two real bugs found only by running them, both fixed in the migration files and patched onto the live dev database directly rather than via a follow-up migration, since nothing downstream depends on these unmerged files yet: `stock_requests`/`approvals`/`daily_updates` were missing the standard `created_by`/`updated_by` pair from `02-lld.md` §1.3; `rpc_finish_job`'s `status` assignment used an untyped `CASE`, which Postgres resolves to `text` before the enum assignment, only failing at call time, not at `create function` time. |
 | 4.8 Drizzle schema and types | 🟡 | `db/schema/*` mirrors the migrations; `db/index.ts` carries the D11 rule. `db:types` needs a database. |
-| 4.9 Seed | 🟡 | `supabase/seed.sql`, fixed UUIDs, idempotent. Five stock-request statuses, four bill statuses, three approval outcomes, three inventory states, one fully complete phase. **Org legal identity on hold** — tracked by `pnpm check:release`, not by a red test suite. |
-| 4.10 CI database stages | 🟡 | Added: migrations, seed, pgTAP, integration, drift. Fails loudly when `SUPABASE_DB_URL` is absent rather than skipping — a quietly absent RLS stage looks green. |
-| 5.1 pgTAP policy suite | 🟡 | 14 assertions over the policy matrix and the role-scoped views. Unrun. |
-| 5.2 Structural pgTAP | 🟡 | 6 catalogue assertions: RLS enabled and forced, every table has a policy, every definer function pins `search_path`, no floating point, append-only tables have no write policy. Unrun. |
-| 5.3 Integration tests | 🟡 | T-16, T-21, T-24, backoff, and the constraint set. Separate suite (`pnpm test:integration`) that errors without a database rather than skipping. Unrun. |
-| 5.4 Seed invariants | ✅ / 🟡 | The placeholder guard runs today and **fails, by design**. The data invariants are pgTAP and unrun. |
+| 4.9 Seed | ✅ / 🟡 | Applied cleanly to `apex-dev`. One bug: `AP-002`'s `approval_type` was seeded as `'material'`, which is not a value of that enum (`'material_sample'` is) — fixed. **Org legal identity on hold**, tracked by `pnpm check:release`, correctly not blocking anything else. |
+| 4.10 CI database stages | ✅ | Migrations, seed, pgTAP, integration, drift, all now exercised locally and passing. `psql` and `supabase test db` both replaced — see findings below. |
+| 5.1 pgTAP policy suite | ✅ | 14/14 pass. |
+| 5.2 Structural pgTAP | ✅ | 6/6 pass. |
+| 5.3 Integration tests | ✅ | 18/18 pass, across four files (jobs, constraints, rollup, drift). Three genuine test bugs found and fixed — see below. |
+| 5.4 Seed invariants | ✅ | 8/8 pass. The placeholder assertion was removed from this suite — it duplicated, and conflicted with, the deliberate soft-hold design in `pnpm check:release` (see below). |
 
-### What was found while drafting
+### What was found by actually running it, that drafting alone could not catch
 
 | Finding | Where |
 |---|---|
+| **`supabase test db` needs Docker unconditionally**, even against a remote `--db-url` — its own `--help` lists a `--network-id` flag, the tell that it always shells out to a container. Direct conflict with D14. Replaced with `scripts/run-pgtap.mjs`, which runs each test file through the project's own `postgres` driver and parses pgTAP's `finish()` output as plain TAP text — no Docker, no new dependency. | `scripts/run-pgtap.mjs` |
+| **`psql` is not guaranteed to exist** on a developer machine — it did not exist in the environment this was first run in. `scripts/db-seed.mjs` replaces the `psql -f seed.sql` call with the same `postgres` driver already a project dependency. | `scripts/db-seed.mjs` |
+| **The legal-identity placeholder check existed in two places** — the blocking pgTAP suite and the soft `check:release` script — after being moved to the latter last session. Left in pgTAP it defeated the entire point of the move: a hard-fail assertion for a business decision on hold. Removed from pgTAP, with a comment explaining why it isn't there. | `supabase/tests/02_seed_invariants_test.sql` |
+| **Two schema bugs surfaced only by running the migrations**, not by reading them: `stock_requests`, `approvals` and `daily_updates` were missing the standard `created_by`/`updated_by` audit pair `02-lld.md` §1.3 requires of every business table; `rpc_finish_job`'s enum assignment used an untyped `CASE`, which plpgsql does not catch at `create function` time. | migrations 0007, 0008, 0009, 0012 |
+| **Three integration-test bugs**, also only visible under a real connection: two concurrency tests inserted many rows sharing one `(name, null idempotency_key)`, which collided with the very uniqueness guarantee `jobs_idem_uq` provides (`nulls not distinct`); the generated-column test compared a JS `Date`'s locale `toString()` against an ISO substring, which fails depending on the runner's timezone even when the actual date is correct. | `tests/integration/jobs.test.ts`, `constraints.test.ts` |
+| **The pooler's hostname is per-project, not derivable from the project ref or a region guess** — `aws-0-<region>` is not a reliable pattern; connecting needs the exact host from the dashboard's Connect panel. | environment setup |
+| **`apex-dev` is in ap-northeast-1 (Tokyo), not ap-south-1 (Mumbai)** as `architecture.md` §5.1 specifies. Recorded as D18. Not blocking Build 02; will cost real latency once Build 04 adds per-page queries against a Mumbai-region Vercel deployment. | D18 |
 | **Project code is now constrained, not just conventional.** `BHEL-NCH` confirmed; `projects_code_ck` enforces upper-case alphanumeric groups, 3–20 characters. A typo at project creation is permanent, because it is already in the bill numbers by the time anyone notices. | migration 0004, D16 |
 | **The unit list became a lookup table.** Nine confirmed codes, referenced by both `inventory_items.unit` and `stock_requests.unit`. Free text over a closed vocabulary lets `bag` and `bags` become two materials that never reconcile, in a table whose quantity feeds a bill. Deviates from `02-lld.md` §3.4, which is amended in the same PR. | migration 0006, D17 |
 | **RA-001's transcribed total was wrong.** The prototype's two lines sum to ₹89,877.75, not the ₹1,19,837 first written. Caught by recomputing rather than trusting the transcription; the corrected net matches the prototype's own displayed ₹1,01,562. | `supabase/seed.sql` |
@@ -115,17 +122,14 @@ Every SQL statement below is unrun.
 | **The prototype has only three of five stock-request statuses** and three of four bill statuses. Two requests and two bills added so Builds 07 and 09 have every state to develop against. | `supabase/seed.sql` |
 | **ESLint flat config caught my own violations**: 25 non-null assertions in the tests I wrote, and the D11 rule blocked the drift test's legitimate schema import. Fixed properly rather than exempted, apart from one narrow, reasoned exemption for `tests/integration/**`. | — |
 
-### Blocked on
-
-Everything in Build 02 §0 that has not been supplied:
+### Still open
 
 | Needed | Blocks |
 |---|---|
-| **`apex-dev` Supabase project** and `DATABASE_URL` | The spike, migrations, pgTAP, integration tests, drift check — all of it |
-| **Apex Studios' legal identity**: legal name, GSTIN, PAN, registered address — **ON HOLD at Voola's request, 2026-09-10** | The `orgs` seed row. Reported by `pnpm check:release` and a hard gate on production deploy; deliberately not a failing unit test, so development is not blocked |
-| ~~Project code convention~~ | **Resolved 2026-09-10: `BHEL-NCH`.** Now enforced by a check constraint (D16) |
-| ~~Real inventory unit list~~ | **Resolved 2026-09-10.** Nine codes, now a `units` lookup table both quantity columns reference (D17) |
+| **Apex Studios' legal identity**: legal name, GSTIN, PAN, registered address — **ON HOLD at Voola's request, 2026-09-10** | The `orgs` seed row. Reported by `pnpm check:release` and a hard gate on production deploy; deliberately not a failing unit test |
+| **Region mismatch (D18)**: `apex-dev` is in Tokyo, not Mumbai | Build 04 latency; recommend recreating before then |
 | Default billing constants confirmed as defaults (18 / 5 / 75 / 0 assumed) | New-project defaults only |
+| `apex-prod` project, Pro upgrade, preview branching | Later builds |
 
 ## Build 03 — Auth and RBAC
 Not started. Needs the transactional email provider for client magic links.

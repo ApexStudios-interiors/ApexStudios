@@ -157,7 +157,7 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           pnpm exec supabase db push --db-url "$SUPABASE_DB_URL"
-          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/seed.sql
+          pnpm db:seed
 
       - name: RLS and structural tests (pgTAP)
         env:

@@ -86,8 +86,12 @@ describe("schema constraints", () => {
                 returning id, end_date`,
       "inserted task"
     );
+    // postgres.js parses `date` as a JS Date at UTC midnight; String(Date)
+    // renders it in the local zone ("...GMT+0530...") rather than as
+    // YYYY-MM-DD, so compare via toISOString() instead of a substring check
+    // against the platform-dependent Date.toString() format.
     // 5 Jan + (3 * 7) - 1 = 25 Jan
-    expect(String(t.end_date)).toContain("2026-01-25");
+    expect((t.end_date as Date).toISOString().slice(0, 10)).toBe("2026-01-25");
     await sql`delete from public.tasks where id = ${t.id}`;
   });
 });

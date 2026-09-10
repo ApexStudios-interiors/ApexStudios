@@ -11,7 +11,11 @@ create table public.daily_updates (
   body        text not null,
   author_id   uuid not null references public.profiles(id),
   created_at  timestamptz not null default now(),
+  -- created_by/updated_by are the standard 02-lld.md §1.3 audit pair, distinct
+  -- from author_id, the domain actor whose diary entry this is.
+  created_by  uuid references public.profiles(id),
   updated_at  timestamptz not null default now(),
+  updated_by  uuid references public.profiles(id),
   deleted_at  timestamptz
 );
 
