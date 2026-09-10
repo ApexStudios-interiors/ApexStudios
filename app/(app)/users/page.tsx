@@ -3,13 +3,12 @@
 import { useApp } from "@/context/AppContext";
 import { initials } from "@/lib/logic";
 import type { Role } from "@/lib/types";
+import { ROLE_LABEL } from "@/lib/rbac/roles";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Card } from "@/components/ui/Card";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, th } from "@/components/ui/table";
-
-const ROLE_LABEL: Record<Role, string> = { admin: "Admin", site: "Site Supervisor", client: "Client" };
 
 export default function UsersPage() {
   const { data, openDialog, updateTeamRole, toast } = useApp();

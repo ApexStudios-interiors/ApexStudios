@@ -21,7 +21,7 @@
     "db:push": "supabase db push",
     "db:reset": "node scripts/db-reset.mjs",
     "db:migration": "supabase migration new",
-    "db:types": "supabase gen types typescript --linked > db/types.ts",
+    "db:types": "node scripts/gen-types.mjs",
     "db:diff": "supabase db diff --linked",
     "db:config-push": "supabase config push",
     "db:check-drift": "vitest run --config vitest.integration.mts tests/integration/drift.test.ts",

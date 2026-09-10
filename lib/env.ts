@@ -26,6 +26,11 @@ const serverSchema = z.object({
   // Guards every /api/cron/* route. 32 bytes base64 is 44 characters.
   CRON_SECRET: z.string().min(32),
 
+  // Signs the impersonation cookie (build/03-auth-and-rbac.md §2.9, D20).
+  // HMAC key only — never sent anywhere, never used for anything but proving
+  // this application issued the cookie it is currently reading back.
+  SESSION_SECRET: z.string().min(32),
+
   // A blank line in .env is an empty string, not undefined. Treat it as absent
   // so `SENTRY_DSN=` reads as "Sentry off" rather than "malformed URL".
   SENTRY_DSN: z.preprocess((v) => (v === "" ? undefined : v), z.url().optional()),

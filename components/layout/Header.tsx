@@ -2,7 +2,7 @@
 
 import { usePathname, useParams } from "next/navigation";
 import { useApp } from "@/context/AppContext";
-import { sectionFromPath } from "@/lib/nav";
+import { sectionFromPath } from "@/lib/rbac/nav";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { NotificationsMenu } from "@/components/layout/NotificationsMenu";
 import { SearchBar } from "@/components/layout/SearchBar";

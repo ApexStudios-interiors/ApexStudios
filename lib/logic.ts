@@ -13,10 +13,13 @@ import type {
 } from "./types";
 import { CR, GST, L, MAS, RET } from "./data";
 
-export const isMoney = (role: Role) => role === "admin";
+// D8: owner sees everything admin sees, plus user/billing-constant management
+// handled separately in lib/rbac/permissions.ts. Every "admin" check below is
+// paired with owner for that reason.
+export const isMoney = (role: Role) => role === "admin" || role === "owner";
 export const isClientRole = (role: Role) => role === "client";
 export const isSiteRole = (role: Role) => role === "site";
-export const canApprove = (role: Role) => role === "admin";
+export const canApprove = (role: Role) => role === "admin" || role === "owner";
 
 export function fmt(n?: number | null): string {
   if (n == null) return "–";
@@ -364,7 +367,7 @@ export function buildSearchResults(data: AppData, role: Role, query: string): Se
     });
   }
 
-  if (role === "admin") {
+  if (role === "admin" || role === "owner") {
     data.team.forEach((t, idx) => {
       if (match(t.n)) {
         results.push({ id: "user-" + idx, category: "Users", text: t.n, sub: t.t, href: "/users" });

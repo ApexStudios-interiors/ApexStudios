@@ -140,3 +140,67 @@ Not started. Needs the transactional email provider for client magic links.
 
 ## Builds 04–10
 Not started.
+
+
+---
+
+## Build 03 — Authentication, Session, RBAC & User Administration
+
+Branch `build/03-auth-and-rbac`. **Verified end to end**: real password sign-in for staff, a
+real magic-link-equivalent sign-in for the client role (no SMTP needed for this, see below),
+all three Playwright login journeys passing against `apex-dev` from a real production build,
+38/38 pgTAP, 18/18 integration tests, 42/42 unit tests, typecheck/lint/format/build all clean.
+
+### What shipped
+
+| Area | Status | Notes |
+|---|---|---|
+| Custom access token hook | 🟡 | Function created and applied (migration 0017). **Not registered with GoTrue** — that needs `supabase config push`, which needs `SUPABASE_ACCESS_TOKEN` (see Build 02's carried-forward blocker). `config.toml` is correctly configured and ready to push the moment that token exists. Until then, `auth_role()`/`auth_org()` fall back to a table read on every request — slower, not insecure, exactly as designed. |
+| `lib/supabase/{server,client,admin}.ts` | ✅ | Import restriction proven to fire against a real page. |
+| `middleware.ts` | ✅ | Session refresh, request id, unauthenticated redirect. Deliberately no authorization logic. |
+| `lib/auth/session.ts` | ✅ | `getSession`/`requireSession`/`requireRole`/`requireProjectAccess`. Role/org read from the JWT claim first, table fallback second — matching `auth_role()`'s own coalesce order, so the app layer and RLS are never inconsistently stale. |
+| `lib/rbac/{roles,permissions,nav}.ts` | ✅ | `CAN` ties to `01-hld.md` §7.1 with a row-for-row test. `nav.ts` replaces `lib/nav.ts`; `ALLOWED_SECTIONS` is now derived, not duplicated. |
+| `lib/safe-action.ts` | ✅ | Five guarded clients, full `02-lld.md` §10 error mapping. |
+| `(auth)` route group | ✅ | Staff login (+TOTP challenge step), client magic link, callback (handles both `?code=` and `?token_hash=&type=`), error page, logout. |
+| Route restructuring | ✅ | Introduced `app/(app)/` and `app/(auth)/` — a real structural change, not optional: auth screens cannot share a shell built for a signed-in session. URLs unchanged; a mechanical `git mv`. |
+| `SessionProvider`, Sidebar real identity | ✅ | Real name/role/initials. "Switch role" replaced by "Preview as" (owner/admin) + "Sign out". |
+| Impersonation (D20) | ✅ | Signed, 15-minute httpOnly cookie; `rpc_log_impersonation` audits start/stop and re-checks `is_admin()` server-side; persistent non-dismissible banner. Read-shaping only — `requireRole` never consults it, by construction, so a write path cannot be fooled by it. |
+| `app/(app)/forbidden.tsx`, `error.tsx` | ✅ | `next.config.ts` needed `experimental.authInterrupts: true` for `forbidden()` to work at all — off by default in Next 16. |
+| User administration | ⛔ | **Not built this pass.** `features/users/actions.ts` (invite/setRole/deactivate/membership) and `lib/auth/admin.ts` are not written. Scoped out to keep this already-large build shippable; tracked below as the first item for the next session. |
+| Tests | 🟡 | pgTAP (hook + is_admin/is_member_of edge cases) and unit (CAN-vs-HLD) done. Integration: T-15 (role revocation) and the orphan-cleanup/owner-only assertions from §3.2 not yet written — same reason as user administration above. Playwright: all three real login journeys, plus an unauthenticated-access spec, both passing. |
+
+### Real bugs found only by actually signing in
+
+| Finding | Where |
+|---|---|
+| **Seeded `auth.users` rows failed every sign-in** with a generic 500 ("Database error querying schema"), not an invalid-credentials error. Cause: `confirmation_token`, `recovery_token`, `email_change` and `email_change_token_new` were `NULL` — fine by the column's schema, fatal to GoTrue's own login query, which expects `''`. Invisible from `admin.createUser()` (which sets these correctly) and invisible from reading the seed SQL; only surfaced by actually trying to sign in. Fixed live on `apex-dev` and in `supabase/seed.sql`. | `supabase/seed.sql` |
+| **The Supabase client generic's `Database` type silently collapsed queries to `never`** without `Relationships: []` on every table/view — `GenericTable`/`GenericView` require it, and TypeScript's failure mode here is total, not a clear error at the missing field. | `scripts/gen-types.mjs` |
+| **A fourth D14 (no-Docker) conflict**: `supabase gen types typescript` also shells out to Docker unconditionally, even with `--db-url`. Extended the same introspection-based generator pattern from Build 02 to also emit real `Functions` signatures (needed once `rpc_log_impersonation` existed to call). | `scripts/gen-types.mjs` |
+| **Admin-generated magic links use GoTrue's implicit flow** (tokens in a URL fragment), which a server-side route can never see — fragments never leave the browser. The fix generalizes past the test: `/auth/callback` now accepts Supabase's `token_hash`+`type` verification shape alongside `?code=`, which is the documented, no-fragment alternative — real users benefit too, not just the Playwright fixture. | `app/(auth)/auth/callback/route.ts` |
+| **ESLint's `no-restricted-imports` pattern-matched `@/db` as a prefix**, not an exact string — a narrow carve-out for the connection-free generated type file didn't work as written. Resolved by moving the file to `lib/supabase/database.types.ts`, architecturally cleaner anyway since nothing in `db/` ever needed it. | `eslint.config.mjs`, `lib/supabase/database.types.ts` |
+| **`components/ui/DialogShell.tsx`'s `Field` never associated its label with its input** (no `htmlFor`/`id`) — invisible until a real accessibility-driven test (`getByLabel`) needed to find the field. Added as an optional, backward-compatible prop. | `components/ui/DialogShell.tsx` |
+| **Widening `Role` to include `owner`** would have silently broken `isMoney`/`canApprove` and four other exact `role === "admin"` checks across the existing prototype code, hiding financial data from a real owner session. Audited every `role ===` site in the codebase before widening the type; fixed each one found. | `lib/logic.ts`, `components/layout/Sidebar.tsx`, `components/domain/ReqTable.tsx` |
+
+### A stated scope deviation, not a silent one
+
+`app/(app)/projects/[projectId]/layout.tsx` does **not** call `requireProjectAccess` yet, though
+build/03 §2.8 step 4 asks for it. The URL's `projectId` is still the **mock** AppContext id
+("bhel"), not a real database row — Build 04 hasn't migrated this route's data source yet.
+Wiring the real membership check now would 403 every site/client session on every project route,
+since "bhel" never matches an actual `projects` row. The session-presence check is real; the
+membership check is deferred to land together with Build 04's real project ids. Recorded in the
+file itself, not just here.
+
+### Decisions
+
+D19 (phone OTP: deferred) and D20 (impersonation: build it) both recorded, answered.
+
+### Still open going into Build 04
+
+| Item | Blocks |
+|---|---|
+| `features/users/actions.ts`, `lib/auth/admin.ts` — user administration | The `app/(app)/users` page still runs on `AppContext` mocks |
+| T-15 and the remaining §3.2 integration assertions | Full confidence in role-revocation and orphan-cleanup |
+| `SUPABASE_ACCESS_TOKEN` — still needed to actually register the hook, and for any future `config push` | The hook staying on its (safe, slower) fallback path indefinitely |
+| Per-IP/per-email rate-limit refinement beyond Supabase's project-level limits | Nothing blocking; a stated refinement |
+| `requireProjectAccess` real enforcement | Arrives with Build 04's project id migration |

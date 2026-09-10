@@ -13,6 +13,7 @@ import type {
   Task,
 } from "@/lib/types";
 import { billableItems, lineVal } from "@/lib/logic";
+import { ROLE_LABEL } from "@/lib/rbac/roles";
 
 const TODAY_ISO = "2026-09-07";
 
@@ -92,9 +93,23 @@ function clone<T>(v: T): T {
   return typeof structuredClone === "function" ? structuredClone(v) : JSON.parse(JSON.stringify(v));
 }
 
-export function AppProvider({ children }: { children: React.ReactNode }) {
+export function AppProvider({
+  children,
+  initialRole,
+}: {
+  children: React.ReactNode;
+  /**
+   * The EFFECTIVE role: the real session's role, or the previewed role while
+   * an owner/admin has impersonation active (D20). Locked in from the real
+   * session at app/(app)/layout.tsx — build/03-auth-and-rbac.md §2.8 step 2.
+   * `setRole` stays on the context (nothing calls it any more; the Sidebar's
+   * old free-form switcher is gone) so no component's imports change until
+   * Build 09 deletes the field for good.
+   */
+  initialRole: Role;
+}) {
   const [data, setData] = useState<AppData>(() => clone(seedData));
-  const [role, setRole] = useState<Role>("admin");
+  const [role, setRole] = useState<Role>(initialRole);
   const [lastProjectId, setLastProjectId] = useState("bhel");
   const [dialog, setDialog] = useState<DialogState>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -419,8 +434,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const inviteUser = useCallback((u: { name: string; email: string; role: Role }) => {
     setData((prev) => {
       const next = clone(prev);
-      const label = { admin: "Admin", site: "Site Supervisor", client: "Client" }[u.role];
-      next.team.push({ n: u.name || "New user", r: u.role, t: label, e: u.email });
+      next.team.push({ n: u.name || "New user", r: u.role, t: ROLE_LABEL[u.role], e: u.email });
       return next;
     });
   }, []);

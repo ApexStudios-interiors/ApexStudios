@@ -1,4 +1,12 @@
-export type Role = "admin" | "site" | "client";
+// D8: owner sits above admin. Every place that branches on role and does not
+// re-export from lib/rbac/roles.ts must treat owner as a superset of admin —
+// lib/logic.ts's isMoney/canApprove and every exact `role === "admin"` check
+// elsewhere were audited and paired with owner when this was widened
+// (build/03-auth-and-rbac.md). A NEW exact-match "admin" check added later
+// needs the same pairing; this is exactly what @typescript-eslint's exhaustive
+// switch checks and this file's own re-export from lib/rbac/roles catch.
+import type { Role } from "@/lib/rbac/roles";
+export type { Role };
 
 export interface Package {
   id: string;

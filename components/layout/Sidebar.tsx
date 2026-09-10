@@ -2,12 +2,16 @@
 
 import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useRef, useState, useTransition } from "react";
+import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
+import { useSession } from "@/components/auth/SessionProvider";
+import { signOut } from "@/features/auth/actions";
+import { startPreview } from "@/features/auth/impersonation-actions";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { initials } from "@/lib/logic";
-import { ALLOWED_SECTIONS, type Section, sectionFromPath } from "@/lib/nav";
-import type { Role } from "@/lib/types";
+import { ALLOWED_SECTIONS, type Section, sectionFromPath } from "@/lib/rbac/nav";
+import { ROLE_LABEL } from "@/lib/rbac/roles";
 import { useClickOutside } from "@/hooks/useClickOutside";
 
 const NAV_ITEMS: { key: Section; label: string; icon: IconName; href: (id: string) => string }[] = [
@@ -21,30 +25,36 @@ const NAV_ITEMS: { key: Section; label: string; icon: IconName; href: (id: strin
   { key: "billing", label: "Billing", icon: "bill", href: (id) => `/projects/${id}/billing` },
 ];
 
-const ROLE_OPTIONS: { value: Role; label: string }[] = [
-  { value: "admin", label: "Admin" },
+/** D20: which roles owner/admin may preview a project as. */
+const PREVIEW_OPTIONS: { value: "client" | "site"; label: string }[] = [
   { value: "site", label: "Site Supervisor" },
   { value: "client", label: "Client" },
 ];
 
 export function Sidebar() {
-  const { data, role, setRole } = useApp();
+  // `role` here is the EFFECTIVE role (impersonated role while previewing) —
+  // exactly what nav filtering should use. `session` is the REAL identity:
+  // real name, real role, whether a preview is active. Never mix the two up.
+  const { data, role } = useApp();
+  const session = useSession();
   const pathname = usePathname();
   const params = useParams<{ projectId?: string; moduleId?: string }>();
   const [modsOpen, setModsOpen] = useState(true);
   const [projectsMenuOpen, setProjectsMenuOpen] = useState(false);
-  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const projectsMenuRef = useRef<HTMLDivElement>(null);
-  const roleMenuRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const [signOutPending, startSignOut] = useTransition();
+  const preview = useAction(startPreview, { onSuccess: () => setUserMenuOpen(false) });
 
   useClickOutside(projectsMenuRef, () => setProjectsMenuOpen(false), projectsMenuOpen);
-  useClickOutside(roleMenuRef, () => setRoleMenuOpen(false), roleMenuOpen);
+  useClickOutside(userMenuRef, () => setUserMenuOpen(false), userMenuOpen);
 
   const isHome = pathname === "/";
   const project = params?.projectId ? (data.projects.find((p) => p.id === params.projectId) ?? null) : null;
   const allowed = ALLOWED_SECTIONS[role];
 
-  const user = data.team.find((t) => t.r === role);
+  const canPreview = session.role === "owner" || session.role === "admin";
 
   return (
     <aside className="bg-sidebar border-r border-border flex flex-col sticky top-0 self-start h-screen overflow-auto p-3">
@@ -212,7 +222,7 @@ export function Sidebar() {
         </>
       )}
 
-      {role === "admin" && (
+      {(role === "admin" || role === "owner") && (
         <div className="shrink-0">
           <div className="text-[11px] font-semibold text-muted-foreground px-2 pt-3.5 pb-1.5 uppercase tracking-wider">
             Studio
@@ -234,37 +244,46 @@ export function Sidebar() {
         </div>
       )}
 
-      <div className="shrink-0 relative mt-auto" ref={roleMenuRef}>
-        {roleMenuOpen && (
+      <div className="shrink-0 relative mt-auto" ref={userMenuRef}>
+        {userMenuOpen && (
           <div className="absolute left-2 right-2 bottom-full mb-2 z-20 bg-card border border-border rounded-lg shadow-lg py-1">
-            <div className="px-3 pt-1.5 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-              Switch role
-            </div>
-            {ROLE_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => {
-                  setRole(opt.value);
-                  setRoleMenuOpen(false);
-                }}
-                className="flex items-center justify-between gap-2 w-full text-left px-3 py-2 text-[13px] text-foreground hover:bg-accent"
-              >
-                <span className={role === opt.value ? "font-semibold" : ""}>{opt.label}</span>
-                {role === opt.value && <Icon name="check" className="w-3.5 h-3.5" />}
-              </button>
-            ))}
+            {canPreview && project && !session.impersonating && (
+              <>
+                <div className="px-3 pt-1.5 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  Preview as
+                </div>
+                {PREVIEW_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    disabled={preview.isPending}
+                    onClick={() => preview.execute({ role: opt.value, projectId: project.id })}
+                    className="flex items-center justify-between gap-2 w-full text-left px-3 py-2 text-[13px] text-foreground hover:bg-accent disabled:opacity-50"
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+                <div className="border-t border-border my-1" />
+              </>
+            )}
+            <button
+              disabled={signOutPending}
+              onClick={() => startSignOut(() => signOut())}
+              className="flex items-center gap-2 w-full text-left px-3 py-2 text-[13px] text-foreground hover:bg-accent disabled:opacity-50"
+            >
+              {signOutPending ? "Signing out…" : "Sign out"}
+            </button>
           </div>
         )}
         <button
-          onClick={() => setRoleMenuOpen((v) => !v)}
+          onClick={() => setUserMenuOpen((v) => !v)}
           className="flex items-center gap-2.5 w-full text-left pt-3 pb-2 px-2 border-t border-border hover:bg-accent rounded-md outline-none focus-visible:bg-accent"
         >
           <div className="w-[30px] h-[30px] rounded-full bg-muted grid place-items-center text-[11.5px] font-semibold flex-none">
-            {initials(user?.n ?? "")}
+            {initials(session.fullName)}
           </div>
           <div className="min-w-0">
-            <div className="font-semibold text-[13px] leading-tight truncate">{user?.n ?? ""}</div>
-            <div className="text-[11.5px] text-muted-foreground">{user?.t ?? ""}</div>
+            <div className="font-semibold text-[13px] leading-tight truncate">{session.fullName}</div>
+            <div className="text-[11.5px] text-muted-foreground">{ROLE_LABEL[session.role]}</div>
           </div>
           <Icon
             name="chevronRight"

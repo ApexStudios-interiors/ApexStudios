@@ -38,16 +38,27 @@ on conflict (id) do nothing;
 -- Build 03 replaces this with real invitations; there is no public sign-up
 -- (01-hld.md §6), so this is a development affordance, not the real path.
 -- Password for every seeded account: apex-dev-only
+-- The four empty-string columns below are NOT cosmetic. GoTrue's own sign-in
+-- query fails with a generic "Database error querying schema" (a 500, not an
+-- invalid-credentials error) when confirmation_token, recovery_token,
+-- email_change or email_change_token_new are NULL rather than ''. A row
+-- created through auth.admin.createUser() never has this problem — Go sets
+-- these explicitly — which is exactly what made this invisible until the
+-- first real sign-in attempt against a seeded account
+-- (build/03-auth-and-rbac.md, found while building the Playwright login
+-- journeys). Confirmed by fixing it live on apex-dev, then here.
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
   email_confirmed_at, created_at, updated_at,
-  raw_app_meta_data, raw_user_meta_data
+  raw_app_meta_data, raw_user_meta_data,
+  confirmation_token, recovery_token, email_change, email_change_token_new
 )
 select
   v.id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
   v.email, extensions.crypt('apex-dev-only', extensions.gen_salt('bf')),
   now(), now(), now(),
-  '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb
+  '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb,
+  '', '', '', ''
 from (values
   ('00000000-0000-4000-8000-0000000000d1'::uuid, 'hello@beapex.in'),
   ('00000000-0000-4000-8000-0000000000d2'::uuid, 'suresh@beapex.in'),
