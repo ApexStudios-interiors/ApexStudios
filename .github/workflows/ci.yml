@@ -156,10 +156,7 @@ jobs:
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          # --debug surfaces the real connection/auth error. It never prints
-          # SUPABASE_DB_URL itself — GitHub masks the secret in logs regardless,
-          # and the CLI's debug output describes the failure, not the DSN.
-          pnpm exec supabase db push --db-url "$SUPABASE_DB_URL" --debug
+          pnpm exec supabase db push --db-url "$SUPABASE_DB_URL"
           pnpm db:seed
 
       - name: RLS and structural tests (pgTAP)
