@@ -97,6 +97,20 @@ const eslintConfig = defineConfig([
     ignores: [
       "db/**",
       "lib/jobs/handlers/**",
+      // The claim/finish/reap primitives (rpc_claim_jobs, rpc_finish_job, and
+      // a plain reap update) are all service_role-only by design (migration
+      // 0012's own grants) — a cron invocation authenticates via
+      // CRON_SECRET, not a Supabase session, so it has no RLS-scoped identity
+      // to act as. This is the same "background jobs run as service_role"
+      // carve-out lib/supabase/admin.ts documents, just not literally inside
+      // handlers/ — build/06-files-jobs-daily-updates.md's own layout puts
+      // the runner one level up from its handlers.
+      "lib/jobs/runner.ts",
+      // Same reasoning as lib/jobs/runner.ts, one door over: called only by
+      // .github/workflows/backup-nightly.yml (Bearer CRON_SECRET, checked
+      // first thing), never by a user session, to record an outcome in
+      // `jobs` — a table with no user-writable path at all.
+      "app/api/backup/report/route.ts",
       "drizzle.config.ts",
       // The health probe issues `select 1` and reads no application data, so
       // there is nothing for RLS to protect. It is listed here rather than
@@ -127,6 +141,10 @@ const eslintConfig = defineConfig([
       // task row it created. Every assertion still runs through a real
       // signed-in session.
       "e2e/schedule-journey.spec.ts",
+      // Same exemption: TEST CLEANUP only (deleting the daily update the
+      // site journey creates). Every assertion runs through a real
+      // signed-in session.
+      "e2e/updates-journey.spec.ts",
     ],
     rules: { "no-restricted-imports": ["error", { patterns: [...RLS_BYPASS] }] },
   },

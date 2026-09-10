@@ -241,6 +241,20 @@ export function Sidebar() {
             />
             Users
           </Link>
+          <Link
+            href="/ops/jobs"
+            className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md px-2 py-[7px] cursor-pointer text-[13.5px] ${
+              pathname === "/ops/jobs"
+                ? "bg-accent font-semibold text-foreground"
+                : "font-medium text-foreground hover:bg-accent"
+            }`}
+          >
+            <Icon
+              name="box"
+              className={`w-4 h-4 flex-none ${pathname === "/ops/jobs" ? "text-foreground" : "text-muted-foreground"}`}
+            />
+            Failed Jobs
+          </Link>
         </div>
       )}
 

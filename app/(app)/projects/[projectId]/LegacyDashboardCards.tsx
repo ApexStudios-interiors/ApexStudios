@@ -5,36 +5,38 @@ import { useApp } from "@/context/AppContext";
 import { ApprovalTable } from "@/components/domain/ApprovalTable";
 import { ReqTable } from "@/components/domain/ReqTable";
 import { UpdateList } from "@/components/domain/UpdateList";
+import type { UpdateDTO } from "@/features/updates/queries";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 
 /**
- * The three dashboard cards not yet converted off `AppContext`
+ * The two dashboard cards not yet converted off `AppContext`
  * (build/04-projects-packages-phases.md §4.4 step 2):
  *   TODO(build-07): Pending Approvals — features/approvals/ lands there.
- *   TODO(build-08): Pending Requests and Latest Updates — features/stock/ and
- *   features/updates/ land there.
- * Everything above this component on the dashboard page is already real
- * data; this is the one client boundary left, matching the prototype's own
- * JSX exactly (build/04-projects-packages-phases.md §4.4: "Its JSX does not
- * change").
+ *   TODO(build-08): Pending Requests — features/stock/ lands there.
+ * Latest Updates is real data now (build/06-files-jobs-daily-updates.md
+ * §4.2) — fetched server-side by the page and passed down as `updates`,
+ * since this component is a client boundary for the other two cards but has
+ * no reason to fetch updates itself.
  *
  * Does NOT use `useProject()` — that hook throws for a project id absent
  * from the mock array, and a project created through the real `createProject`
  * action has no entry there and never will. Found live: creating a project
  * and landing on its own dashboard crashed to the generic error boundary.
- * These three cards simply have nothing to show for such a project, the same
- * honest answer `useLegacyModule` already gives the package tabs still on
- * AppContext.
+ * The two still-mock cards simply have nothing to show for such a project,
+ * the same honest answer `useLegacyModule` already gives the package tabs
+ * still on AppContext.
  */
 export function LegacyDashboardCards({
   projectId,
   isClient,
   isSite,
+  updates,
 }: {
   projectId: string;
   isClient: boolean;
   isSite: boolean;
+  updates: UpdateDTO[];
 }) {
   const router = useRouter();
   const { data } = useApp();
@@ -43,7 +45,6 @@ export function LegacyDashboardCards({
 
   const pending = data.requests.filter((r) => r.proj === project.id && r.status === "Pending");
   const apPending = data.approvals.filter((a) => a.proj === project.id && a.status === "Pending");
-  const updates = data.updates.filter((u) => u.proj === project.id).slice(0, 3);
 
   return (
     <>
@@ -89,7 +90,7 @@ export function LegacyDashboardCards({
               </Button>
             </div>
           </CardHeader>
-          <UpdateList project={project} updates={updates} />
+          <UpdateList updates={updates} />
         </Card>
       )}
     </>

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getClientBillingStats, getProjectHeader, getSiteStockStats } from "@/features/projects/queries";
 import { getPackagesForProject, type PackagesForProject } from "@/features/packages/queries";
+import { getUpdatesForProject } from "@/features/updates/queries";
 import { BudgetStatBar } from "@/components/domain/BudgetStatBar";
 import { StatBar } from "@/components/ui/StatBar";
 import { ModuleTable } from "@/components/domain/ModuleTable";
@@ -29,6 +30,7 @@ export default async function ProjectDashboardPage({ params }: { params: Promise
   if (!header) notFound();
 
   const packages = await getPackagesForProject(session, projectId);
+  const { items: latestUpdates } = await getUpdatesForProject(session, projectId);
   const effectiveRole = session.impersonating?.role ?? session.role;
   const isMoney = effectiveRole === "owner" || effectiveRole === "admin";
   const isClient = effectiveRole === "client";
@@ -84,7 +86,12 @@ export default async function ProjectDashboardPage({ params }: { params: Promise
         <ModuleTable projectId={projectId} data={packages} projectProgressPct={header.progressPct} />
       </Card>
 
-      <LegacyDashboardCards projectId={projectId} isClient={isClient} isSite={!isMoney && !isClient} />
+      <LegacyDashboardCards
+        projectId={projectId}
+        isClient={isClient}
+        isSite={!isMoney && !isClient}
+        updates={latestUpdates.slice(0, 3)}
+      />
     </div>
   );
 }

@@ -176,16 +176,21 @@ try {
   }
   lines.push("    };");
 
-  // Only SECURITY DEFINER functions granted to `authenticated` are callable
-  // through the RLS-scoped client — anything else (service_role-only RPCs like
-  // rpc_claim_jobs) is deliberately absent here; calling those through this
-  // client would fail at the database regardless of what TypeScript allows.
+  // Functions granted to `authenticated` OR `service_role` — the two clients
+  // that ever call an RPC (lib/supabase/server.ts and lib/supabase/admin.ts
+  // respectively, both typed with this same Database type). Build 06 is the
+  // first build where that second half matters: lib/jobs/runner.ts's
+  // claim/finish calls go through the admin client on purpose (migration
+  // 0012's rpc_claim_jobs/rpc_finish_job are service_role-only), so excluding
+  // them here would just move the type error to a real, working call.
+  // anon-only exposure (there is none, deliberately) would still be excluded.
   const functions = await sql`
     select p.proname as name, p.oid::text as oid
       from pg_proc p
       join pg_namespace n on n.oid = p.pronamespace
      where n.nspname = 'public'
-       and has_function_privilege('authenticated', p.oid, 'EXECUTE')
+       and (has_function_privilege('authenticated', p.oid, 'EXECUTE')
+            or has_function_privilege('service_role', p.oid, 'EXECUTE'))
      order by p.proname`;
 
   const params = await sql`

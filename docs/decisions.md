@@ -595,6 +595,80 @@ as a Build 05 regression.
 
 ---
 
+### D26 — Where `backup.nightly` actually runs (the build file calls this "D17")
+
+`build/06-files-jobs-daily-updates.md` §3.6 names this decision "D17" — a stale reference to an
+earlier draft's numbering; D17 was already claimed by the inventory unit vocabulary during
+Build 02 (this file's own D17 entry, above). Recorded here as D26, the next free number, with
+this note so anyone cross-referencing the build file's own text can still find it.
+
+**Question:** `01-hld.md` §10.2 and `architecture.md` §7.2 specify a nightly `pg_dump` to R2 from
+a Vercel cron route. A Vercel serverless function cannot do this: no `pg_dump` binary in the
+runtime, and the function timeout is far shorter than a growing logical dump. Where should it
+actually run?
+**Answered:** 2026-09-12 by Voola
+**Answer:** A scheduled GitHub Actions workflow (option A of the three the build file laid out).
+`ubuntu-latest` has a real `pg_dump`; the workflow dumps, gzips, uploads to `apex-backups` with a
+backup-scoped AWS CLI credential, then calls `POST /api/backup/report` (Bearer `CRON_SECRET`) so
+the outcome still lands in the `jobs` table and the Admin ops page, the same as every other job.
+**Consequence:** `backup.nightly` is absent from `vercel.json`'s crons on purpose. A second,
+independent check — `/api/cron/backup.verify`, a real Vercel cron at 02:30 IST — `HeadObject`s
+the expected key in `apex-backups` and lets a missing object throw; that failure landing the job
+in `failed` on the Admin ops page IS the alert the build file's own requirement asks for ("assert
+an object was actually written, not merely that the handler did not throw"). `architecture.md`
+§7.2 and `01-hld.md` §10.2 are amended to match. **Not live-verified**: no real Cloudflare R2
+account exists yet (see the "R2/Vercel not provisioned" row below) — the workflow, the route and
+the job are all written and structurally correct, but no real backup object has actually been
+written or checked by either piece yet.
+
+### Build 06 prerequisites answered
+
+**Question:** `build/06-files-jobs-daily-updates.md` §0 requires real Cloudflare R2 buckets (with
+CORS), Vercel Pro, and a real `CRON_SECRET` — none of which exist (`.env.local`'s `R2_*` and
+`CRON_SECRET` are Build 01's own fake-but-valid-shaped local placeholders, not real credentials).
+It also asks for explicit confirmation on antivirus scanning and the daily-update edit window.
+**Answered:** 2026-09-12 by Voola
+**Answer:**
+- R2/Vercel Pro/a real `CRON_SECRET`: not set up yet. Proceed without them — write and fully
+  test everything that doesn't require live infrastructure, and flag the rest as unverified.
+- A-4 (antivirus scanning) was already answered 2026-09-09: out of scope for v1, confirmed
+  explicitly. Not re-litigated here; carried forward unchanged.
+- The daily-update 24-hour edit window: already implemented exactly as `02-lld.md` §3.7
+  specifies, in `daily_updates`' own `du_update_author` RLS policy since Build 02
+  (migration 0009) — `created_at > now() - interval '24 hours'`. This build's own pgTAP suite
+  asserts the literal SQL predicate so it cannot silently drift. Confirmed correct as built,
+  not reopened.
+**Consequence:** Every exit-criteria item needing a live bucket, Vercel Pro, or a real cron
+invocation (CORS from a real browser, a thumbnail appearing within 60 seconds on a preview
+deployment, the reaper firing on a killed job, a 12 MB JPEG rejected at presign, no public bucket
+access, EXIF absence on a real generated thumbnail, a real backup object existing) is reported as
+unverified rather than assumed — the same honest treatment Build 01 gave its own unmet §0.4 items.
+See "Still open" below for exactly what unblocks each one.
+
+### D27 — Build 06 visual-baseline findings
+
+Comparing the converted Daily Updates surfaces against `proto-v1` surfaced two differences:
+
+1. **Every seeded update shows no photos**, where the baseline shows 2–6 grey placeholder boxes
+   per entry. `supabase/seed.sql`'s own `daily_updates` insert (Build 02) never created matching
+   `attachments` rows for these four entries — there was no upload pipeline yet to create them
+   with, and now that there is, there's no real R2 bucket to have actually uploaded anything to
+   (this build's own prerequisites gap). Confirmed live: all four seeded updates have zero
+   attachment rows. Accepted as correct given the current infrastructure, not a code bug —
+   revisit once a real R2 account exists and the four originals can be backfilled with real
+   photos, or leave them as the historical record they are.
+2. **The package badge was missing its number prefix** ("Swimming Pool" instead of "01 Swimming
+   Pool") — a real, fixable gap: the prototype's `UpdateList` always rendered `mno(project, m)`
+   (lib/logic.ts's zero-padded module index) ahead of the name, and the first real version of
+   `features/updates/queries.ts` dropped it. Fixed by carrying `seq_no` through
+   `fetchPackageNames`/`UpdateDTO` and re-adding the same zero-padded prefix.
+
+Separately, not a finding so much as an expected consequence: adding an admin-only "Failed Jobs"
+sidebar link (build §3.7) shifts every admin-viewed screenshot by a few pixels, since the sidebar
+renders on every page. All admin baselines were refreshed together for this one, deliberate reason.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |
@@ -605,3 +679,6 @@ as a Build 05 regression.
 | CA sign-off: the five tax questions in `01-hld.md` §8.4 | Voola → CA | Build 09 go-live | 2026-09-09 |
 | DPDP Act 2023 obligation set (`architecture.md` §12) | Voola → counsel | Launch | 2026-09-09 |
 | No TOTP enrollment UI exists (D22) — an owner/admin account cannot pass `requireAalForRole`'s AAL2 check anywhere outside the dev-only workaround in `e2e/global-setup.ts`. Every `adminAction`-guarded Server Action is unreachable by a real admin user until this is built. | — | Any real admin using a real account | 2026-09-10 |
+| **No real Cloudflare R2 account exists** — three private buckets (`apex-prod`/`apex-preview`/`apex-backups`), CORS on the first two, two separate API tokens (app-scoped and backups-scoped), lifecycle rules, an 8 GB storage alert (build §0.1). Blocks every live check of the upload pipeline: CORS from a real browser, a real presigned PUT/GET round-trip, a real generated thumbnail (and its EXIF-absence check), the orphan sweep actually deleting anything, and both backup pieces (the GitHub Actions write and `backup.verify`'s read) ever running for real. | Voola | Build 06's own live verification; Build 08 (approval photos); Build 09 (bill PDFs) | 2026-09-12 |
+| **Vercel is not on Pro** — the Hobby tier allows only a couple of cron invocations per day at fixed times, so the per-minute `jobs.drain` (and this build's whole "Queued" job design) does not run for real without it. | Voola | Build 06's own live verification of the drain | 2026-09-12 |
+| **`CRON_SECRET` and the R2 credential env vars are still Build 01's fake-but-valid-shaped local placeholders**, not real values. Once the R2 account above exists: as Vercel Production/Preview env vars — `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY` (app-scoped, read-only on `apex-backups` too — see D26/`.env.example`), `R2_BUCKET`, `R2_BACKUP_BUCKET`, `CRON_SECRET`; as GitHub Actions repo secrets for `.github/workflows/backup-nightly.yml` — `SUPABASE_DB_URL`, `R2_ACCOUNT_ID`, `R2_BACKUP_BUCKET`, `R2_BACKUP_ACCESS_KEY_ID`/`R2_BACKUP_SECRET_ACCESS_KEY` (the write-scoped pair, distinct from the app's), `APP_URL`, and the same `CRON_SECRET` as Vercel's. | Voola | Everything in the two rows above | 2026-09-12 |

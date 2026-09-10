@@ -1,21 +1,44 @@
-"use client";
-
-import { useState } from "react";
-import { useApp } from "@/context/AppContext";
-import { useProject } from "@/hooks/useProject";
-import { isClientRole, mno } from "@/lib/logic";
+import { notFound } from "next/navigation";
+import { requireSession } from "@/lib/auth/session";
+import { getProjectHeader } from "@/features/projects/queries";
+import { getUpdatesForProject } from "@/features/updates/queries";
+import { getPackageOptions } from "@/features/updates/actions";
 import { UpdateList } from "@/components/domain/UpdateList";
+import { PackageFilterSelect } from "@/components/domain/PackageFilterSelect";
+import { OpenDialogButton } from "@/components/domain/OpenDialogButton";
 import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { Empty } from "@/components/ui/Empty";
+import Link from "next/link";
 
-export default function UpdatesPage() {
-  const { data, role, openDialog } = useApp();
-  const project = useProject();
-  const [filter, setFilter] = useState("all");
+/**
+ * build/06-files-jobs-daily-updates.md §4.2: the timeline, the package
+ * filter dropdown, and "+ Post Update" hidden for the client role. A plain
+ * Server Component reading `searchParams` for both the filter and
+ * pagination — `PackageFilterSelect` is the one client boundary, a
+ * `<select>` that navigates on change; "Load more" is a plain link.
+ */
+export default async function UpdatesPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ package?: string; cursor?: string }>;
+}) {
+  const { projectId } = await params;
+  const { package: packageId, cursor } = await searchParams;
+  const session = await requireSession();
 
-  const updates = data.updates.filter((u) => u.proj === project.id && (filter === "all" || u.mod === filter));
+  const header = await getProjectHeader(session, projectId);
+  if (!header) notFound();
+
+  const [page, packages] = await Promise.all([
+    getUpdatesForProject(session, projectId, { packageId, cursor }),
+    getPackageOptions(projectId),
+  ]);
+
+  const effectiveRole = session.impersonating?.role ?? session.role;
+  const isClient = effectiveRole === "client";
+  const basePath = `/projects/${projectId}/updates`;
 
   return (
     <div>
@@ -27,36 +50,33 @@ export default function UpdatesPage() {
           </p>
         </div>
         <div className="ml-auto flex gap-2">
-          {!isClientRole(role) && (
-            <Button
-              variant="primary"
-              onClick={() => openDialog({ kind: "postUpdate", projectId: project.id })}
-            >
+          {!isClient && (
+            <OpenDialogButton dialog={{ kind: "postUpdate", projectId }} variant="primary">
               <Icon name="plus" className="w-[15px] h-[15px]" />
               Post Update
-            </Button>
+            </OpenDialogButton>
           )}
         </div>
       </div>
 
       <div className="flex gap-3 mb-4">
-        <select
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className="h-9 border border-input rounded-lg bg-background px-2 text-[13px]"
-        >
-          <option value="all">All packages</option>
-          {project.modules.map((m) => (
-            <option key={m.id} value={m.id}>
-              {mno(project, m)} {m.name}
-            </option>
-          ))}
-        </select>
+        <PackageFilterSelect basePath={basePath} packages={packages} value={packageId ?? ""} />
       </div>
 
       <Card>
-        {updates.length ? <UpdateList project={project} updates={updates} /> : <Empty>No updates yet.</Empty>}
+        <UpdateList updates={page.items} />
       </Card>
+
+      {page.nextCursor && (
+        <div className="mt-3 text-center">
+          <Link
+            href={`${basePath}?${packageId ? `package=${packageId}&` : ""}cursor=${page.nextCursor}`}
+            className="text-[13px] text-muted-foreground underline"
+          >
+            Load more
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

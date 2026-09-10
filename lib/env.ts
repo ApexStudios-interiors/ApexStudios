@@ -22,6 +22,13 @@ const serverSchema = z.object({
   R2_ACCESS_KEY_ID: z.string().min(1),
   R2_SECRET_ACCESS_KEY: z.string().min(1),
   R2_BUCKET: z.string().min(1),
+  // build/06 D17: backup.verify's own HeadObject check that a real nightly
+  // backup object exists — read-only (Head/List), never write/delete, on the
+  // separately-scoped apex-backups bucket. build §0.1's "the app token
+  // genuinely cannot write to the backup bucket" is a write/delete
+  // restriction; a read-only credential for THIS one check is the documented
+  // exception, not a bypass of it (docs/decisions.md D17).
+  R2_BACKUP_BUCKET: z.string().min(1),
 
   // Guards every /api/cron/* route. 32 bytes base64 is 44 characters.
   CRON_SECRET: z.string().min(32),

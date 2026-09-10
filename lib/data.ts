@@ -591,48 +591,10 @@ export const seedData: AppData = {
       files: [],
     },
   ],
-  updates: [
-    {
-      id: "u4",
-      proj: "00000000-0000-4000-8000-0000000000c1",
-      mod: "00000000-0000-4000-8000-0000000000e1",
-      date: "2026-09-07",
-      by: "Ravi",
-      text: "Second coat of Pidifin on pool floor and walls done, 1,600 sft. Balance tank first coat started. Ponding test planned for Thursday.",
-      men: 6,
-      photos: 4,
-    },
-    {
-      id: "u3",
-      proj: "00000000-0000-4000-8000-0000000000c1",
-      mod: "00000000-0000-4000-8000-0000000000e1",
-      date: "2026-09-06",
-      by: "Ravi",
-      text: "First coat waterproofing completed on main pool walls. Kids pool surface prep finished. Two honeycomb patches repaired near the deep end.",
-      men: 7,
-      photos: 6,
-    },
-    {
-      id: "u2",
-      proj: "00000000-0000-4000-8000-0000000000c1",
-      mod: "00000000-0000-4000-8000-0000000000e1",
-      date: "2026-09-05",
-      by: "Ravi",
-      text: "Cement received, 120 bags. Surface grinding and cleaning complete on main pool. Started primer.",
-      men: 5,
-      photos: 3,
-    },
-    {
-      id: "u1",
-      proj: "00000000-0000-4000-8000-0000000000c1",
-      mod: "00000000-0000-4000-8000-0000000000e2",
-      date: "2026-09-04",
-      by: "Ravi",
-      text: "Scaffolding vendor measured the north face. Plaster repair marking done with the architect.",
-      men: 2,
-      photos: 2,
-    },
-  ],
+  // `updates` is gone (build/06-files-jobs-daily-updates.md §4.2) — Daily
+  // Updates reads real data now, and supabase/seed.sql's own daily_updates
+  // insert carries these same four entries forward verbatim (its own
+  // comment cross-references this array's history).
   approvals: [
     {
       id: "AP-004",
