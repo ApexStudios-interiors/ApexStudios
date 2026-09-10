@@ -1,27 +1,21 @@
-"use client";
-
-import { useApp } from "@/context/AppContext";
-import type { ModuleT, Project } from "@/lib/types";
-import { committed, fmt, isClientRole, isMoney } from "@/lib/logic";
+import type { PhasesForPackage } from "@/features/packages/queries";
 import { Bar } from "@/components/ui/Bar";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, trTotal } from "@/components/ui/table";
 import { Empty } from "@/components/ui/Empty";
+import { formatINR } from "@/lib/money";
 
-export function PhaseTable({ project, module }: { project: Project; module: ModuleT }) {
-  const { data, role } = useApp();
-  const money = isMoney(role);
-  const client = isClientRole(role);
-  const c = committed(data, project.id, module);
-
-  if (!module.packages.length) return <Empty>No phases yet.</Empty>;
+/** Props instead of `useApp()` — the phase-level counterpart of ModuleTable's
+ *  same conversion (build/04-projects-packages-phases.md §4.4 step 5). */
+export function PhaseTable({ data }: { data: PhasesForPackage }) {
+  if (!data.phases.length) return <Empty>No phases yet.</Empty>;
 
   return (
     <TableWrap>
       <thead>
         <tr>
           <th className={th}>Phase</th>
-          {money ? (
+          {data.role === "money" ? (
             <>
               <th className={thNum}>Allocated</th>
               <th className={thNum}>Internal</th>
@@ -29,7 +23,7 @@ export function PhaseTable({ project, module }: { project: Project; module: Modu
               <th className={thNum}>Remaining</th>
               <th className={th}>Used</th>
             </>
-          ) : client ? (
+          ) : data.role === "client" ? (
             <th className={thNum}>Contract Value</th>
           ) : (
             <th className={th}>Requests</th>
@@ -37,47 +31,43 @@ export function PhaseTable({ project, module }: { project: Project; module: Modu
         </tr>
       </thead>
       <tbody>
-        {module.packages.map((k) => {
-          const kc = committed(data, project.id, module, k.id);
-          const rq = data.requests.filter(
-            (r) => r.proj === project.id && r.mod === module.id && r.pkg === k.id
-          ).length;
-          return (
-            <tr key={k.id}>
-              <td className={td}>{k.name}</td>
-              {money || client ? (
-                <td className={tdNum}>{fmt(k.alloc)}</td>
-              ) : (
-                <td className={td}>{rq || <span className="text-muted-foreground">–</span>}</td>
-              )}
-              {money && (
-                <>
-                  <td className={tdNum}>{fmt(k.int)}</td>
-                  <td className={tdNum}>{kc ? fmt(kc) : <span className="text-muted-foreground">–</span>}</td>
-                  <td className={tdNum + (k.int - kc < 0 ? " font-bold" : "")}>{fmt(k.int - kc)}</td>
-                  <td className={td}>
-                    <Bar value={kc} of={k.int} />
-                  </td>
-                </>
-              )}
-            </tr>
-          );
-        })}
-        {money ? (
+        {data.phases.map((p) => (
+          <tr key={p.id}>
+            <td className={td}>{p.name}</td>
+            {p.role === "money" ? (
+              <>
+                <td className={tdNum}>{formatINR(p.allocated)}</td>
+                <td className={tdNum}>{formatINR(p.internal)}</td>
+                <td className={tdNum}>
+                  {p.committed ? formatINR(p.committed) : <span className="text-muted-foreground">–</span>}
+                </td>
+                <td className={tdNum + (p.remaining < 0 ? " font-bold" : "")}>{formatINR(p.remaining)}</td>
+                <td className={td}>
+                  <Bar value={p.committed} of={p.internal} />
+                </td>
+              </>
+            ) : p.role === "client" ? (
+              <td className={tdNum}>{formatINR(p.contractValue)}</td>
+            ) : (
+              <td className={td}>{p.requests || <span className="text-muted-foreground">–</span>}</td>
+            )}
+          </tr>
+        ))}
+        {data.role === "money" ? (
           <tr className={trTotal}>
             <td className={td}>Total</td>
-            <td className={tdNum}>{fmt(module.packages.reduce((a, k) => a + k.alloc, 0))}</td>
-            <td className={tdNum}>{fmt(module.packages.reduce((a, k) => a + k.int, 0))}</td>
-            <td className={tdNum}>{fmt(c)}</td>
-            <td className={tdNum}>{fmt(module.internal - c)}</td>
+            <td className={tdNum}>{formatINR(data.totals.allocated)}</td>
+            <td className={tdNum}>{formatINR(data.totals.internal)}</td>
+            <td className={tdNum}>{formatINR(data.totals.committed)}</td>
+            <td className={tdNum}>{formatINR(data.totals.internal - data.totals.committed)}</td>
             <td className={td}>
-              <Bar value={c} of={module.internal} />
+              <Bar value={data.totals.committed} of={data.totals.internal} />
             </td>
           </tr>
-        ) : client ? (
+        ) : data.role === "client" ? (
           <tr className={trTotal}>
             <td className={td}>Total</td>
-            <td className={tdNum}>{fmt(module.packages.reduce((a, k) => a + k.alloc, 0))}</td>
+            <td className={tdNum}>{formatINR(data.totals.allocated)}</td>
           </tr>
         ) : null}
       </tbody>

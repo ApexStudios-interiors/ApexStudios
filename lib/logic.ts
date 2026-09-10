@@ -61,39 +61,20 @@ export function amt(r: StockRequest): number {
   return (r.rate || 0) * (r.qty || 0);
 }
 
-export function committed(data: AppData, projId: string, m: ModuleT, pkg?: string): number {
-  return data.requests
-    .filter(
-      (r) =>
-        r.proj === projId &&
-        r.mod === m.id &&
-        (!pkg || r.pkg === pkg) &&
-        ["Approved", "Ordered", "Delivered"].includes(r.status)
-    )
-    .reduce((a, r) => a + amt(r), 0);
-}
-
-export function totals(data: AppData, p: Project) {
-  let alloc = 0,
-    int = 0,
-    c = 0;
-  p.modules.forEach((m) => {
-    alloc += m.allocated;
-    int += m.internal || 0;
-    c += committed(data, p.id, m);
-  });
-  return { alloc, int, c };
-}
+// `committed`, `totals` and `projProgress` were deleted here
+// (build/04-projects-packages-phases.md §6): all three had zero remaining
+// callers once the portfolio page, dashboard, ModuleTable and ProjectCard
+// moved to real data. `progress`, `factor`, `fmt` and `fmtS` stay — the build
+// file's own instruction to delete all seven was checked against actual
+// callers, not followed literally; those four are still load-bearing for
+// pages this build does not convert (Schedule, Billing, Inventory, and the
+// package-detail tabs still on AppContext). See docs/decisions.md D21 for
+// the record of this correction.
 
 export function progress(m: ModuleT): number {
   const ts = m.tasks;
   const d = ts.reduce((a, t) => a + t.d, 0);
   return d ? Math.round(ts.reduce((a, t) => a + t.p * t.d, 0) / d) : 0;
-}
-
-export function projProgress(p: Project): number {
-  const a = p.modules.reduce((x, m) => x + m.allocated, 0);
-  return a ? Math.round(p.modules.reduce((x, m) => x + progress(m) * m.allocated, 0) / a) : 0;
 }
 
 export function factor(m: ModuleT, pkgId?: string): number {

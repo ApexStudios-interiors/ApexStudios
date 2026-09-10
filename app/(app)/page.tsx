@@ -1,94 +1,92 @@
-"use client";
-
-import { useApp } from "@/context/AppContext";
-import { fmtS, isClientRole, isMoney, pct, totals } from "@/lib/logic";
+import { requireSession } from "@/lib/auth/session";
+import { getPortfolio } from "@/features/projects/queries";
 import { StatBar } from "@/components/ui/StatBar";
 import { ProjectCard } from "@/components/domain/ProjectCard";
-import { Button } from "@/components/ui/Button";
+import { OpenDialogButton } from "@/components/domain/OpenDialogButton";
 import { Icon } from "@/components/ui/Icon";
+import { formatINRCompact } from "@/lib/money";
 
-export default function HomePage() {
-  const { data, role, openDialog } = useApp();
-  const money = isMoney(role);
-  const client = isClientRole(role);
-
-  const t0 = data.projects.reduce(
-    (a, p) => {
-      const t = totals(data, p);
-      a.alloc += t.alloc;
-      a.int += t.int;
-      a.c += t.c;
-      return a;
-    },
-    { alloc: 0, int: 0, c: 0 }
-  );
-  const active = data.projects.filter((p) => p.status === "Active").length;
-  const apPendAll = data.approvals.filter((a) => a.status === "Pending").length;
-  const billsPendAll = data.bills.filter((b) => b.status === "Submitted").length;
-  const stockPendAll = data.requests.filter((r) => r.status === "Pending").length;
-  const inProgAll = data.projects.reduce(
-    (a, p) => a + p.modules.filter((m) => m.status === "In progress").length,
-    0
-  );
+/**
+ * build/04-projects-packages-phases.md §4.4 step 1. Server Component: reads
+ * via getPortfolio, passes the DTO into ProjectCard as props. Dynamic by
+ * virtue of requireSession()'s cookies() read (§4.6: no full-route caching —
+ * this page is role-scoped, and a cached response would serve one role's
+ * numbers to another).
+ */
+export default async function HomePage() {
+  const session = await requireSession();
+  const portfolio = await getPortfolio(session);
 
   return (
     <div>
       <div className="flex items-start gap-4 flex-wrap mb-[22px]">
         <div>
           <h1 className="text-[26px] font-bold tracking-tight">All Projects</h1>
-          <p className="mt-1 text-muted-foreground text-[13.5px]">{data.projects.length} projects</p>
+          <p className="mt-1 text-muted-foreground text-[13.5px]">{portfolio.projects.length} projects</p>
         </div>
         <div className="ml-auto flex gap-2">
-          {money && (
-            <Button variant="primary" onClick={() => openDialog({ kind: "addProject" })}>
+          {portfolio.role === "money" && (
+            <OpenDialogButton dialog={{ kind: "addProject" }} variant="primary">
               <Icon name="plus" className="w-[15px] h-[15px]" />
               New Project
-            </Button>
+            </OpenDialogButton>
           )}
         </div>
       </div>
 
-      {money ? (
+      {portfolio.role === "money" ? (
         <StatBar
           stats={[
             {
               label: "Total Allocated",
-              value: fmtS(t0.alloc),
-              sub: `Across ${data.projects.length} projects`,
+              value: formatINRCompact(portfolio.stats.totalAllocated),
+              sub: `Across ${portfolio.projects.length} projects`,
             },
-            { label: "Total Internal", value: fmtS(t0.int), sub: `Margin ${fmtS(t0.alloc - t0.int)}` },
-            { label: "Committed", value: fmtS(t0.c), sub: `${pct(t0.c, t0.int)}% of internal` },
-            { label: "Active Projects", value: active, sub: `of ${data.projects.length}` },
+            {
+              label: "Total Internal",
+              value: formatINRCompact(portfolio.stats.totalInternal),
+              sub: `Margin ${formatINRCompact(Number(portfolio.stats.totalAllocated) - Number(portfolio.stats.totalInternal))}`,
+            },
+            { label: "Committed", value: formatINRCompact(portfolio.stats.committed), sub: "of internal" },
+            { label: "Active Projects", value: portfolio.stats.activeProjects, sub: `of ${portfolio.projects.length}` },
           ]}
         />
-      ) : client ? (
+      ) : portfolio.role === "client" ? (
         <StatBar
           stats={[
             {
               label: "Total Contract Value",
-              value: fmtS(t0.alloc),
-              sub: `Across ${data.projects.length} projects`,
+              value: formatINRCompact(portfolio.stats.totalContractValue),
+              sub: `Across ${portfolio.projects.length} projects`,
             },
-            { label: "Active Projects", value: active, sub: `of ${data.projects.length}` },
             {
-              label: "Awaiting Your Approval",
-              value: apPendAll + billsPendAll,
-              sub: `${apPendAll} samples · ${billsPendAll} bills`,
+              label: "Active Projects",
+              value: portfolio.stats.activeProjects,
+              sub: `of ${portfolio.projects.length}`,
             },
+            { label: "Awaiting Your Approval", value: portfolio.stats.awaitingApproval, sub: "samples & bills" },
           ]}
         />
       ) : (
         <StatBar
           stats={[
-            { label: "Active Projects", value: active, sub: `of ${data.projects.length}` },
-            { label: "Packages in Progress", value: inProgAll, sub: "across all projects" },
-            { label: "Pending Requests", value: stockPendAll, sub: "awaiting approval" },
+            {
+              label: "Active Projects",
+              value: portfolio.stats.activeProjects,
+              sub: `of ${portfolio.projects.length}`,
+            },
+            {
+              label: "Packages in Progress",
+              value: portfolio.stats.packagesInProgress,
+              sub: "across all projects",
+            },
+            { label: "Pending Requests", value: portfolio.stats.pendingRequests, sub: "awaiting approval" },
           ]}
         />
       )}
 
       <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
-        {data.projects.map((p) => (
+        {portfolio.projects.map((p) => (
           <ProjectCard key={p.id} project={p} />
         ))}
       </div>

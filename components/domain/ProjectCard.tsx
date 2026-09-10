@@ -1,18 +1,17 @@
-"use client";
-
 import Link from "next/link";
-import { useApp } from "@/context/AppContext";
-import type { Project } from "@/lib/types";
-import { dmy, fmtS, isMoney, pct, projProgress, totals } from "@/lib/logic";
+import type { ProjectCardDTO } from "@/features/projects/queries";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { formatINRCompact } from "@/lib/money";
+import { dmy } from "@/lib/logic";
 
-export function ProjectCard({ project }: { project: Project }) {
-  const { data, role } = useApp();
-  const t = totals(data, project);
-  const prog = projProgress(project);
-  const bud = pct(t.c, t.int);
-  const money = isMoney(role);
+/**
+ * Props instead of `useApp()` (build/04-projects-packages-phases.md §4.4 step
+ * 1). `budgetUsedPct` is `null` for anyone but admin — its own presence is the
+ * money gate, not a role check re-derived here.
+ */
+export function ProjectCard({ project }: { project: ProjectCardDTO }) {
+  const bud = project.budgetUsedPct;
 
   return (
     <Link href={`/projects/${project.id}`} className="block">
@@ -34,13 +33,13 @@ export function ProjectCard({ project }: { project: Project }) {
           <div>
             <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
               <span>Progress</span>
-              <b className="text-foreground font-semibold">{prog}%</b>
+              <b className="text-foreground font-semibold">{project.progressPct}%</b>
             </div>
             <div className="progress-track">
-              <i style={{ width: `${prog}%` }} />
+              <i style={{ width: `${project.progressPct}%` }} />
             </div>
           </div>
-          {money && (
+          {bud != null && (
             <div>
               <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
                 <span>Budget used</span>
@@ -56,7 +55,9 @@ export function ProjectCard({ project }: { project: Project }) {
         </div>
 
         <div className="text-xs text-muted-foreground pt-0.5">
-          {project.modules.length} packages · {fmtS(t.alloc)} {money ? "allocated" : "contract"}
+          {project.packageCount} packages ·{" "}
+          {project.headlineAmount != null ? formatINRCompact(project.headlineAmount) : "–"}{" "}
+          {bud != null ? "allocated" : "contract"}
           {project.start ? ` · Started ${dmy(project.start)}` : " · Not started"}
         </div>
       </Card>

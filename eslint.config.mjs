@@ -22,6 +22,10 @@ const RLS_BYPASS = [
   },
 ];
 
+/** The same RLS_BYPASS patterns, shaped for @typescript-eslint/no-restricted-imports
+ *  (which understands `allowTypeImports`, unlike core no-restricted-imports). */
+const RLS_BYPASS_TS = RLS_BYPASS.map((p) => ({ ...p, allowTypeImports: false }));
+
 /** service.ts stays framework-free so the domain can be lifted out (HLD §4.2). */
 const NO_FRAMEWORK = [
   {
@@ -31,12 +35,23 @@ const NO_FRAMEWORK = [
   },
 ];
 
-/** Components take props; they never reach the data layer themselves. */
+/**
+ * Components take props; they never reach the data layer themselves.
+ *
+ * `allowTypeImports: true` — a component still needs a query's DTO TYPE for
+ * its own prop shape (build/04-projects-packages-phases.md §4.4 step 5: "a
+ * discriminated union on role" typed against exactly what the query
+ * returns). A type-only import is erased at compile time; there is no
+ * runtime call into queries.ts for the rule to actually be guarding against.
+ * This needs @typescript-eslint/no-restricted-imports — the core ESLint rule
+ * has no such option and would block the type import too.
+ */
 const NO_DATA_LAYER = [
   {
     group: ["**/features/*/queries", "@/features/*/queries"],
     message:
       "code-standards §1: components never query the database. Take the data as a prop from a Server Component that called queries.ts.",
+    allowTypeImports: true,
   },
 ];
 
@@ -98,6 +113,13 @@ const eslintConfig = defineConfig([
       // privileged connection, because a privileged connection reports a broken
       // policy as working. Those live in supabase/tests (pgTAP).
       "tests/integration/**",
+      // Its own journeys run through real signed-in Playwright sessions, same
+      // as every other e2e spec — the direct connection here is TEST CLEANUP
+      // only (deleting the project the admin journey creates), not part of
+      // any assertion. Scoped to this one file rather than e2e/** so the rule
+      // still holds everywhere an e2e spec might be tempted to skip the real
+      // session for convenience.
+      "e2e/packages-journey.spec.ts",
     ],
     rules: { "no-restricted-imports": ["error", { patterns: [...RLS_BYPASS] }] },
   },
@@ -118,7 +140,10 @@ const eslintConfig = defineConfig([
   {
     files: ["components/**/*.{ts,tsx}"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [...RLS_BYPASS, ...NO_DATA_LAYER] }],
+      // core no-restricted-imports has no allowTypeImports; disabled here so
+      // the @typescript-eslint version (which does) is the only one active.
+      "no-restricted-imports": "off",
+      "@typescript-eslint/no-restricted-imports": ["error", { patterns: [...RLS_BYPASS_TS, ...NO_DATA_LAYER] }],
     },
   },
 

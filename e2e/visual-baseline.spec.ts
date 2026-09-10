@@ -15,8 +15,10 @@ import { expect, test } from "@playwright/test";
 
 type Role = "admin" | "site" | "client";
 
-const PROJECT = "bhel";
-const MODULE = "pool";
+// Build 04 re-keyed every mock id to its real database UUID (lib/data.ts's own
+// header comment explains why) — these two constants have to track that.
+const PROJECT = "00000000-0000-4000-8000-0000000000c1"; // BHEL Nagnar Club House
+const MODULE = "00000000-0000-4000-8000-0000000000e1"; // Swimming Pool
 
 /** Routes, and which roles may reach each one. */
 const ROUTES: { name: string; path: string; roles: Role[] }[] = [
@@ -26,8 +28,10 @@ const ROUTES: { name: string; path: string; roles: Role[] }[] = [
   { name: "project-dashboard", path: `/projects/${PROJECT}`, roles: ["admin", "site", "client"] },
   { name: "project-packages", path: `/projects/${PROJECT}/packages`, roles: ["admin", "site", "client"] },
   {
+    // Build 04: /packages/:moduleId now redirects to its default tab
+    // (02-lld.md §8.1) — the bare URL is no longer where this route settles.
     name: "package-detail",
-    path: `/projects/${PROJECT}/packages/${MODULE}`,
+    path: `/projects/${PROJECT}/packages/${MODULE}/budget`,
     roles: ["admin", "site", "client"],
   },
   { name: "project-schedule", path: `/projects/${PROJECT}/schedule`, roles: ["admin", "site", "client"] },

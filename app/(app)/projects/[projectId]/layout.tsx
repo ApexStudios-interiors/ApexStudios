@@ -1,24 +1,31 @@
-import { requireSession } from "@/lib/auth/session";
+import { requireSession, requireProjectAccess } from "@/lib/auth/session";
 import { ProjectShell } from "./ProjectShell";
 
 /**
- * DEVIATION from build/03-auth-and-rbac.md §2.8 step 4, recorded here rather
- * than silently applied.
+ * build/03-auth-and-rbac.md §2.8 step 4's real check, landing now as that
+ * deviation note promised: `requireProjectAccess(session, projectId)` reads
+ * real `project_members` rows against a real database project id. That was
+ * deferred because `projectId` fed `context/AppContext.tsx`'s mock data
+ * ("bhel", "arch") until this build re-keyed every mock id to its matching
+ * real UUID (lib/data.ts's own header comment) — a mismatch here would have
+ * 403'd every site/client session on every project route.
  *
- * The step asks for `requireProjectAccess(session, projectId)` in this
- * layout. That call checks real `project_members` rows against a real
- * database project id — but `projectId` here is still the URL param feeding
- * `context/AppContext.tsx`'s MOCK data ("bhel", "arch"), because Build 04
- * has not yet replaced this route's data source with real queries. Wiring
- * the real check now would 403 every site/client session on every project
- * route, since "bhel" never matches an actual `projects` row — a functional
- * regression, not a security improvement.
- *
- * What this layout does today: confirm a session exists (requireSession).
- * The membership check itself lands in Build 04, at the same time the project
- * id space becomes real — see docs/progress-tracker.md.
+ * `ProjectShell` no longer gates on the mock data's own existence check for
+ * the same reason: a project created through the real `createProject` action
+ * has no entry in the static mock array and never will, so that check always
+ * said "not found" for a genuinely real, genuinely accessible project. The
+ * real not-found case is now `getProjectHeader` returning null in the page
+ * itself (notFound()); this layer's job is authorization, not existence.
  */
-export default async function ProjectLayout({ children }: { children: React.ReactNode }) {
-  await requireSession();
+export default async function ProjectLayout({
+  children,
+  params,
+}: {
+  children: React.ReactNode;
+  params: Promise<{ projectId: string }>;
+}) {
+  const { projectId } = await params;
+  const session = await requireSession();
+  await requireProjectAccess(session, projectId);
   return <ProjectShell>{children}</ProjectShell>;
 }

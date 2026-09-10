@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/Badge";
-import type { AppData, ApprovalStatus, BillStatus, ModuleT, RequestStatus } from "@/lib/types";
-import { type InventoryStatus, type PhaseStatus, committed } from "@/lib/logic";
+import type { ApprovalStatus, BillStatus, RequestStatus } from "@/lib/types";
+import { type InventoryStatus, type PhaseStatus } from "@/lib/logic";
 
 export function RequestStatusBadge({ status }: { status: RequestStatus }) {
   switch (status) {
@@ -54,11 +54,26 @@ export function PhaseStatusBadge({ status }: { status: PhaseStatus }) {
   }
 }
 
-export function ModuleStatusBadge({ data, projId, m }: { data: AppData; projId: string; m: ModuleT }) {
-  const c = committed(data, projId, m);
-  if (m.internal && c > m.internal) return <Badge variant="destructive">Over budget</Badge>;
-  if (m.status === "In progress") return <Badge variant="default">In progress</Badge>;
-  return <Badge variant="secondary">{m.status}</Badge>;
+/**
+ * `status` is the raw package_status enum value (used for the "in_progress"
+ * comparison so this doesn't depend on packageStatusLabel's wording);
+ * `statusLabel` is what actually renders. `isOverBudget` only exists on the
+ * admin DTO — a client or site row simply doesn't have committed/internal
+ * figures to be over, so the prop is optional rather than defaulted to a
+ * meaningless `false`.
+ */
+export function ModuleStatusBadge({
+  status,
+  statusLabel,
+  isOverBudget,
+}: {
+  status: string;
+  statusLabel: string;
+  isOverBudget?: boolean;
+}) {
+  if (isOverBudget) return <Badge variant="destructive">Over budget</Badge>;
+  if (status === "in_progress") return <Badge variant="default">{statusLabel}</Badge>;
+  return <Badge variant="secondary">{statusLabel}</Badge>;
 }
 
 export function InventoryStatusBadge({ status }: { status: InventoryStatus }) {
