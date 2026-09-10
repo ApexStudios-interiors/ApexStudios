@@ -9,7 +9,11 @@ Legend: ✅ done and verified · 🟡 done, but something is unverified or defer
 
 ## Build 01 — Foundations
 
-Branch `build/01-foundations`, open as **PR #1**, CI green. Baseline tag `proto-v1` at commit `e52d6cc`.
+Branch `build/01-foundations`. Opened as PR #1, CI green (see the run log below).
+**Merged into `main` via PR #2's squash**, not its own: `build/02-database` was branched from
+`build/01-foundations` before #1 was merged separately, so #2's squash carried this branch's
+full content into `main` in one commit. PR #1 was closed unmerged as redundant rather than
+merged on top, which would have been a no-op. Baseline tag `proto-v1` at commit `e52d6cc`.
 
 | Step | Status | Notes |
 |---|---|---|
