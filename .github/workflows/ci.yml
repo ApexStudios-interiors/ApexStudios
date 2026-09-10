@@ -14,6 +14,13 @@ name: CI
 # The database, RLS, integration and e2e stages are added in Build 02 and
 # Build 10, when they have content.
 #
+# Node 22, every job (package.json's engines already allows >=20): the
+# Build 04 integration suite instantiates a real supabase-js client, whose
+# realtime module reaches for a native WebSocket global that Node only ships
+# by default from 22 onward — found live when this CI job, still pinned to
+# 20, failed with "Node.js detected but native WebSocket not found" on a
+# suite that ran fine locally (Node 24).
+#
 # ┌──────────────────────────────────────────────────────────────────────────┐
 # │ THE RLS STAGE IS BLOCKING BY POLICY.                                     │
 # │                                                                          │
@@ -51,7 +58,7 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install
@@ -104,7 +111,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # docs/architecture.md §6.5: high and critical are a build failure.
@@ -136,7 +143,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
@@ -202,7 +209,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:release
