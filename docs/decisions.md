@@ -498,6 +498,103 @@ is where it belongs — flagging it is this build's job, building it is not.
 
 ---
 
+### D23 — Build 05 prerequisites (week convention, drag-to-reschedule, task progress authority, start dates)
+
+**Question:** `build/05-schedule-and-progress.md` §0 raises four items before the Gantt can move
+to real dates: plain weeks vs. a working-day calendar, whether drag-to-reschedule should be added,
+whether Site (not just Admin) may set task progress to 100% — the action that makes a phase
+billable — and whether the seeded project start dates are correct.
+**Answered:** 2026-09-11 by Voola
+**Answer:**
+- Plain seven-day weeks, no holiday calendar, no working-day logic. A task's bar may include
+  Sundays; the "late" flag ignores public holidays.
+- Drag-to-reschedule stays excluded. Dates are edited through the Task Detail dialog only.
+- Site keeps the authority to set task progress to 100%, matching `01-hld.md` §7.1 as already
+  specified — not narrowed to Admin only.
+- The seeded start dates are correct and final: BHEL Nagnar Club House 24 Aug 2026, BHEL Nagnar
+  Entrance Arch 1 Sep 2026.
+**Consequence:** Build 05 proceeds exactly as `02-lld.md` §3.3 and §8.3 already specify — none of
+the four items changes anything already designed, they were confirmations, not redirections.
+**Still open:** whether Apex has an existing schedule (MS Project or a spreadsheet) for either
+project to import. None has been provided as of this build; Build 05 proceeds on the assumption
+that tasks are entered by hand, and Build 10's task importer is scoped only if a real file
+surfaces later.
+
+### D24 — Finding from Build 05: a site user could never create a task
+
+**A site role has never been able to create a task, since Build 02.** `trg_tasks_check_ancestry`
+(`02-lld.md` §3.3's denormalised-ancestry guard, "the RLS shortcut becomes a lie" if it drifts)
+validates a new task's `package_id`/`project_id` by reading `phases` — but `phases` is admin-only
+on select (`phases_select_admin`), and the trigger function was plain `SECURITY INVOKER`. For any
+caller but admin, the trigger's own lookup returned nothing under RLS and it raised
+`NOT_FOUND: phase ... does not exist` for a phase that genuinely existed and that the caller was a
+real member of. Found live while building `createTask` for Build 05 — `siteAction` (owner/admin/
+site) is exactly the guard `02-lld.md` §7 specifies, and the very first site-role smoke test hit
+this. Fixed by making the trigger `SECURITY DEFINER`: it is validating a structural invariant with
+values the client does not control, not exposing `phases` data to the caller, so bypassing RLS for
+this one internal check is correct, not a workaround. `supabase/tests/04_schedule_test.sql` and
+`tests/integration/schedule.test.ts` both assert this directly so it cannot regress silently again.
+
+### D25 — Two visual-baseline diffs in the Schedule Gantt, both accepted (not bugs)
+
+Comparing the real-data `project-schedule` render against the frozen `proto-v1` screenshot
+surfaced two differences. Both are pre-existing, already-documented consequences of the real
+schema being stricter than the mock data, not new defects:
+
+1. **Every task shows "To assign" instead of a name** ("Suresh K", "Sai Waterproofing", "Tiling
+   gang A", "Procurement", "OEM", "Client", …). `tasks.owner_profile_id` is a real FK to
+   `profiles(id)`; every one of the prototype's owner strings is an informal vendor/gang label or
+   a role placeholder, none of which is a real user account. `supabase/seed.sql`'s task insert
+   (Build 02) never populated `owner_profile_id` for exactly this reason — confirmed live against
+   `apex-dev`: all 13 seeded tasks on the Pool package have `owner_profile_id is null`. This is the
+   same "vendor name unrepresentable as a profile" finding as D21's package-lead case, applied to
+   tasks. `ownerName: null` rendering as "To assign" (`features/schedule/queries.ts`'s
+   `toScheduleTask`) is correct, not a bug to fix.
+2. **The baseline's "General" phase group (Tile sample approval, Handover) is absent.** The
+   prototype represented these two tasks with no `pkg`, i.e. not attached to any phase. The real
+   schema has `tasks.phase_id not null` — there is no "General"/unassigned bucket to represent.
+   `seed.sql`'s own comment (Build 02, §4.9) already documents attaching them to the phase they
+   obviously belong to: "Tile sample approval" to Pool tiling, "Handover" to Testing, commissioning
+   and handover. Confirmed live: both tasks exist in `apex-dev` under exactly those two real
+   phases. They render inside those phases' groups instead of a separate "General" group, which is
+   the correct and more accurate structure, not a missing group.
+
+Both are called out in Build 05's PR with the actual/baseline screenshots rather than silently
+updating the baseline over them.
+
+A fourth finding, this one a real fix, not an accepted difference: every week-cell in a Gantt row
+is `position: relative` (Gantt.tsx, unchanged since Build 01), so a task bar's own overflow past
+its first week — `width: calc(durationWeeks*100% - 6px)`, absolutely positioned — visually
+extends across later weeks' cells but sits BELOW them in paint order (same-level positioned
+siblings stack by DOM order, and later weeks come later in the DOM). Two consequences, both
+confirmed live via `elementFromPoint` and a real Playwright click, not a screenshot: (1) every
+multi-week bar was only clickable/hoverable in its first ~one-week segment — the rest silently
+swallowed the click, for every task, every role, since Build 01; (2) the "today" column's grey
+highlight (`bg-muted/60`), being a later cell for any bar that starts before today's week, painted
+OVER that portion of the bar, cutting a visible grey patch into it. Neither shows up in a routine
+screenshot diff for a bar that doesn't span today's column, which is why it survived four builds.
+Fixed by giving only the bar's own starting cell `z-10` (`components/domain/Gantt.tsx`) so it
+paints above its row's later cells without changing anything else's stacking. Confirmed
+`git diff main` on this file is otherwise identical to the frozen prototype's own markup — this
+bug predates Build 05 and predates real dates entirely; it was simply never exercised by a click
+on a multi-week bar, or caught by a screenshot of a bar spanning the then-current week, until this
+build's own Playwright journeys did both.
+
+A third, unrelated diff surfaced on `project-dashboard`, `project-packages` and `package-detail`
+(all pre-existing routes, untouched by Build 05's own code): the Swimming Pool package's
+"Progress" showed 16% against a frozen baseline of 14%. Verified by hand against the current,
+unmodified `apex-dev` data before touching anything: `packages.progress_pct`'s trigger
+(`supabase/migrations/20260909170016_triggers_rollup.sql`) computes
+`round(sum(duration_weeks * progress_pct) / sum(duration_weeks))` over the package's 13 seeded
+tasks — `(2×100 + 3×100) / 32 = 15.625`, which rounds to **16**, not 14. The database is correct
+and the seed data is untouched since Build 02 (all 13 tasks share one `created_at`, the seed
+run's own timestamp, with no leftover or orphaned rows from this build's smoke-testing). The old
+baseline was simply captured against a stale value at some earlier point and never re-verified
+against the trigger's own arithmetic. Refreshed to the correct, verified 16% rather than treated
+as a Build 05 regression.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |

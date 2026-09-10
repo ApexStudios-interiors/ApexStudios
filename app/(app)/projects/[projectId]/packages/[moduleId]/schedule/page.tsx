@@ -1,18 +1,35 @@
-"use client";
-
-import { useLegacyModule } from "@/hooks/useLegacyModule";
+import { notFound } from "next/navigation";
+import { requireSession } from "@/lib/auth/session";
+import { getScheduleForPackage } from "@/features/schedule/queries";
 import { Gantt } from "@/components/domain/Gantt";
 import { Card } from "@/components/ui/Card";
-import { Empty } from "@/components/ui/Empty";
 
-/** Still AppContext — Build 06 converts this tab. */
-export default function PackageScheduleTab() {
-  const { project, module: mod } = useLegacyModule();
-  if (!mod) return <Empty>Not available yet for a package created outside the demo data.</Empty>;
+/** build/05-schedule-and-progress.md §3.5 step 2: the same Gantt, scoped to
+ *  one package, now a real route with its own loading.tsx (Build 04 §4.4). */
+export default async function PackageScheduleTab({
+  params,
+}: {
+  params: Promise<{ projectId: string; moduleId: string }>;
+}) {
+  const { projectId, moduleId } = await params;
+  const session = await requireSession();
+  const schedule = await getScheduleForPackage(session, projectId, moduleId);
+  if (!schedule) notFound();
+
+  const effectiveRole = session.impersonating?.role ?? session.role;
+  const canEdit = effectiveRole !== "client";
 
   return (
     <Card>
-      <Gantt project={project} module={mod} />
+      <Gantt
+        projectId={projectId}
+        packageId={moduleId}
+        phases={schedule.phases}
+        projectStart={schedule.projectStart ?? ""}
+        viewport={schedule.viewport}
+        monthHeaders={schedule.monthHeaders}
+        canEdit={canEdit}
+      />
     </Card>
   );
 }

@@ -1415,6 +1415,19 @@ export type Database = {
         };
         Returns: unknown;
       };
+      rpc_mark_phase_complete: {
+        Args: {
+          p_phase_id: string;
+        };
+        Returns: unknown;
+      };
+      rpc_set_task_progress: {
+        Args: {
+          p_task_id: string;
+          p_pct: number;
+        };
+        Returns: unknown;
+      };
       trg_set_updated_at: {
         Args: Record<string, never>;
         Returns: unknown;

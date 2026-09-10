@@ -29,11 +29,7 @@ export function DialogHost() {
       return <AddTaskDialog projectId={dialog.projectId} moduleId={dialog.moduleId} />;
     case "taskDetail":
       return (
-        <TaskDetailDialog
-          projectId={dialog.projectId}
-          moduleId={dialog.moduleId}
-          taskIndex={dialog.taskIndex}
-        />
+        <TaskDetailDialog projectId={dialog.projectId} moduleId={dialog.moduleId} taskId={dialog.taskId} />
       );
     case "newRequest":
       return <NewRequestDialog projectId={dialog.projectId} moduleId={dialog.moduleId} />;

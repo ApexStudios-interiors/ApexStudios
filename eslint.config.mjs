@@ -120,6 +120,13 @@ const eslintConfig = defineConfig([
       // still holds everywhere an e2e spec might be tempted to skip the real
       // session for convenience.
       "e2e/packages-journey.spec.ts",
+      // Same exemption, same reason: the site journey's progress mutation has
+      // a real commercial side effect (a phase's billing_status) that no
+      // client-session call can undo (D21's soft-delete RETURNING gotcha
+      // applies here too), and the admin journey's cleanup just deletes the
+      // task row it created. Every assertion still runs through a real
+      // signed-in session.
+      "e2e/schedule-journey.spec.ts",
     ],
     rules: { "no-restricted-imports": ["error", { patterns: [...RLS_BYPASS] }] },
   },

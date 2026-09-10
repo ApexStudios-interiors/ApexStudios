@@ -35,6 +35,15 @@ const ROUTES: { name: string; path: string; roles: Role[] }[] = [
     roles: ["admin", "site", "client"],
   },
   { name: "project-schedule", path: `/projects/${PROJECT}/schedule`, roles: ["admin", "site", "client"] },
+  {
+    // build/05-schedule-and-progress.md §3.5 step 2: a new route, not present
+    // in proto-v1 (the prototype's Schedule tab lived only at the project
+    // level). No prior baseline exists for it — this run establishes one,
+    // it does not compare against a frozen prototype image.
+    name: "package-schedule",
+    path: `/projects/${PROJECT}/packages/${MODULE}/schedule`,
+    roles: ["admin", "site", "client"],
+  },
   { name: "project-updates", path: `/projects/${PROJECT}/updates`, roles: ["admin", "site", "client"] },
   { name: "project-inventory", path: `/projects/${PROJECT}/inventory`, roles: ["admin", "site"] },
   { name: "project-stock", path: `/projects/${PROJECT}/stock`, roles: ["admin", "site"] },

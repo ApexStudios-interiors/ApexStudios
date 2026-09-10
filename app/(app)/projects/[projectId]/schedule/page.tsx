@@ -1,89 +1,22 @@
-"use client";
+import { notFound } from "next/navigation";
+import { requireSession } from "@/lib/auth/session";
+import { getProjectHeader } from "@/features/projects/queries";
+import { getScheduleForProject } from "@/features/schedule/queries";
+import { ScheduleCards } from "./ScheduleCards";
 
-import { useState } from "react";
-import { useApp } from "@/context/AppContext";
-import { useProject } from "@/hooks/useProject";
-import { dmy, isClientRole, mno, progress } from "@/lib/logic";
-import { Gantt } from "@/components/domain/Gantt";
-import { Card, CardHeader } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
+/** build/05-schedule-and-progress.md §3.5 step 1: one collapsible card per
+ *  package, "{n} tasks · {progress}%" or "No plan yet". Expansion state is
+ *  client state (`ScheduleCards`); the data itself is server-fetched here. */
+export default async function SchedulePage({ params }: { params: Promise<{ projectId: string }> }) {
+  const { projectId } = await params;
+  const session = await requireSession();
 
-export default function SchedulePage() {
-  const { role, openDialog } = useApp();
-  const project = useProject();
-  const client = isClientRole(role);
+  const header = await getProjectHeader(session, projectId);
+  if (!header) notFound();
 
-  const [closed, setClosed] = useState<Set<string>>(
-    () => new Set(project.modules.filter((m) => !m.tasks.length).map((m) => m.id))
-  );
+  const schedule = await getScheduleForProject(session, projectId);
+  const effectiveRole = session.impersonating?.role ?? session.role;
+  const canEdit = effectiveRole !== "client";
 
-  const toggle = (id: string) => {
-    setClosed((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  return (
-    <div>
-      <div className="flex items-start gap-4 flex-wrap mb-[22px]">
-        <div>
-          <h1 className="text-[26px] font-bold tracking-tight">Schedule</h1>
-          <p className="mt-1 text-muted-foreground text-[13.5px]">
-            {project.start ? `Started ${dmy(project.start)}` : "Not started"}
-          </p>
-        </div>
-        <div className="ml-auto flex gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setClosed(new Set())}>
-            Expand all
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setClosed(new Set(project.modules.map((m) => m.id)))}
-          >
-            Collapse all
-          </Button>
-        </div>
-      </div>
-
-      {project.modules.map((m) => {
-        const isClosed = closed.has(m.id);
-        const taskCount = m.tasks.length;
-        return (
-          <Card key={m.id} className="mb-3">
-            <CardHeader className="cursor-pointer select-none hover:bg-muted/80" onClick={() => toggle(m.id)}>
-              <span className="inline-grid place-items-center w-[18px] h-[18px] text-muted-foreground">
-                <Icon
-                  name="chevronRight"
-                  className={`w-3.5 h-3.5 transition-transform ${isClosed ? "" : "rotate-90"}`}
-                />
-              </span>
-              <h3>
-                {mno(project, m)} {m.name}
-              </h3>
-              <span className="text-muted-foreground text-sm">
-                {taskCount ? `${taskCount} tasks · ${progress(m)}%` : "No plan yet"}
-              </span>
-              <div className="ml-auto flex gap-2" onClick={(e) => e.stopPropagation()}>
-                {!client && (
-                  <Button
-                    size="sm"
-                    onClick={() => openDialog({ kind: "addTask", projectId: project.id, moduleId: m.id })}
-                  >
-                    <Icon name="plus" className="w-[15px] h-[15px]" />
-                    Add Task
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            {!isClosed && <Gantt project={project} module={m} />}
-          </Card>
-        );
-      })}
-    </div>
-  );
+  return <ScheduleCards projectId={projectId} header={header} schedule={schedule} canEdit={canEdit} />;
 }

@@ -70,12 +70,12 @@ export function amt(r: StockRequest): number {
 // pages this build does not convert (Schedule, Billing, Inventory, and the
 // package-detail tabs still on AppContext). See docs/decisions.md D21 for
 // the record of this correction.
-
-export function progress(m: ModuleT): number {
-  const ts = m.tasks;
-  const d = ts.reduce((a, t) => a + t.d, 0);
-  return d ? Math.round(ts.reduce((a, t) => a + t.p * t.d, 0) / d) : 0;
-}
+//
+// `progress` (task-duration-weighted package progress from mock data) is
+// gone too, deleted in build/05-schedule-and-progress.md once its one
+// caller — the project-level Schedule page — moved to real data. `phTasks`
+// and `phStatus` below stay: MilestoneTable's Billing tab still needs them
+// until Build 09.
 
 export function factor(m: ModuleT, pkgId?: string): number {
   const k = m.packages.find((x) => x.id === pkgId);
