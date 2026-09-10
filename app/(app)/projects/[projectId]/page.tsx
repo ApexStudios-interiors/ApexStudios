@@ -1,165 +1,143 @@
-"use client";
-
-import { useRouter } from "next/navigation";
-import { useApp } from "@/context/AppContext";
-import { useProject } from "@/hooks/useProject";
-import {
-  bills,
-  billTotals,
-  dmy,
-  fmtS,
-  isClientRole,
-  isMoney,
-  isSiteRole,
-  projProgress,
-  totals,
-} from "@/lib/logic";
+import { notFound } from "next/navigation";
+import { requireSession } from "@/lib/auth/session";
+import { getClientBillingStats, getProjectHeader, getSiteStockStats } from "@/features/projects/queries";
+import { getPackagesForProject, type PackagesForProject } from "@/features/packages/queries";
 import { BudgetStatBar } from "@/components/domain/BudgetStatBar";
 import { StatBar } from "@/components/ui/StatBar";
 import { ModuleTable } from "@/components/domain/ModuleTable";
-import { ApprovalTable } from "@/components/domain/ApprovalTable";
-import { ReqTable } from "@/components/domain/ReqTable";
-import { UpdateList } from "@/components/domain/UpdateList";
+import { OpenDialogButton } from "@/components/domain/OpenDialogButton";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { LegacyDashboardCards } from "./LegacyDashboardCards";
+import { dmy } from "@/lib/logic";
+import { formatINRCompact } from "@/lib/money";
 
-export default function ProjectDashboardPage() {
-  const router = useRouter();
-  const { data, role, openDialog } = useApp();
-  const project = useProject();
+/**
+ * build/04-projects-packages-phases.md §4.4 step 2. Stat row and Packages
+ * table come from the database. `LegacyDashboardCards` is the one client
+ * boundary left on this page — Pending Approvals, Pending Requests and Latest
+ * Updates still read AppContext (TODO(build-07): Approvals off AppContext.
+ * TODO(build-08): Stock Requests and Daily Updates off AppContext) — a Server
+ * Component can render a Client Component directly, so the rest of this page
+ * stays server-rendered around it.
+ */
+export default async function ProjectDashboardPage({ params }: { params: Promise<{ projectId: string }> }) {
+  const { projectId } = await params;
+  const session = await requireSession();
 
-  const t = totals(data, project);
-  const pending = data.requests.filter((r) => r.proj === project.id && r.status === "Pending");
-  const bs = bills(data, project.id);
-  const billedNet = bs.filter((b) => b.status !== "Draft").reduce((a, b) => a + billTotals(b).net, 0);
-  const paidNet = bs.filter((b) => b.status === "Paid").reduce((a, b) => a + billTotals(b).net, 0);
-  const apPending = data.approvals.filter((a) => a.proj === project.id && a.status === "Pending");
-  const updates = data.updates.filter((u) => u.proj === project.id).slice(0, 3);
+  const header = await getProjectHeader(session, projectId);
+  if (!header) notFound();
 
-  const money = isMoney(role);
-  const client = isClientRole(role);
-  const site = isSiteRole(role);
+  const packages = await getPackagesForProject(session, projectId);
+  const effectiveRole = session.impersonating?.role ?? session.role;
+  const isMoney = effectiveRole === "owner" || effectiveRole === "admin";
+  const isClient = effectiveRole === "client";
 
   return (
     <div>
       <div className="flex items-start gap-4 flex-wrap mb-[22px]">
         <div>
-          <h1 className="text-[26px] font-bold tracking-tight">{project.name}</h1>
+          <h1 className="text-[26px] font-bold tracking-tight">{header.name}</h1>
           <p className="mt-1 text-muted-foreground text-[13.5px]">
-            {project.client} · {project.location}
-            {project.start ? ` · Started ${dmy(project.start)}` : ""}
+            {header.client} · {header.location}
+            {header.start ? ` · Started ${dmy(header.start)}` : ""}
           </p>
         </div>
         <div className="ml-auto flex gap-2">
-          {money && (
-            <Button onClick={() => openDialog({ kind: "addModule", projectId: project.id })}>
+          {isMoney && (
+            <OpenDialogButton dialog={{ kind: "addModule", projectId }}>
               <Icon name="plus" className="w-[15px] h-[15px]" />
               Add Package
-            </Button>
+            </OpenDialogButton>
           )}
-          {!client && (
-            <Button
-              variant="primary"
-              onClick={() => openDialog({ kind: "newRequest", projectId: project.id })}
-            >
+          {!isClient && (
+            <OpenDialogButton dialog={{ kind: "newRequest", projectId }} variant="primary">
               <Icon name="plus" className="w-[15px] h-[15px]" />
               Stock Request
-            </Button>
+            </OpenDialogButton>
           )}
         </div>
       </div>
 
-      {money || client ? (
+      {packages.role === "money" ? (
         <BudgetStatBar
-          role={role}
-          alloc={t.alloc}
-          int={t.int}
-          c={t.c}
-          prog={projProgress(project)}
-          extraStats={[
-            { label: "Bills Raised", value: fmtS(billedNet), sub: `incl. GST · ${fmtS(paidNet)} paid` },
-            {
-              label: "Awaiting Your Approval",
-              value: apPending.length + bs.filter((b) => b.status === "Submitted").length,
-              sub: `${apPending.length} samples · ${bs.filter((b) => b.status === "Submitted").length} bills`,
-            },
-          ]}
+          role="money"
+          alloc={packages.totals.allocated}
+          int={packages.totals.internal}
+          c={packages.totals.committed}
+          prog={header.progressPct}
+        />
+      ) : packages.role === "client" ? (
+        <ClientDashboardStats
+          projectId={projectId}
+          alloc={packages.totals.allocated}
+          prog={header.progressPct}
         />
       ) : (
-        <StatBar
-          stats={[
-            {
-              label: "Packages in Progress",
-              value: project.modules.filter((m) => m.status === "In progress").length,
-              sub: `of ${project.modules.length}`,
-            },
-            { label: "Pending Requests", value: pending.length, sub: "awaiting approval" },
-            {
-              label: "To Receive",
-              value: data.requests.filter((r) => r.proj === project.id && r.status === "Ordered").length,
-              sub: "ordered, not yet on site",
-            },
-          ]}
-        />
+        <SiteDashboardStats projectId={projectId} packages={packages} />
       )}
 
       <Card>
         <CardHeader>
           <h3>Packages</h3>
         </CardHeader>
-        <ModuleTable project={project} />
+        <ModuleTable projectId={projectId} data={packages} projectProgressPct={header.progressPct} />
       </Card>
 
-      {apPending.length > 0 && !site && (
-        <Card className="mt-5">
-          <CardHeader>
-            <h3>Pending Approvals</h3>
-            <div className="ml-auto flex gap-2 items-center">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push(`/projects/${project.id}/approvals`)}
-              >
-                View all
-              </Button>
-            </div>
-          </CardHeader>
-          <ApprovalTable project={project} list={apPending} />
-        </Card>
-      )}
-
-      {pending.length > 0 && !client && (
-        <Card className="mt-5">
-          <CardHeader>
-            <h3>Pending Requests</h3>
-            <div className="ml-auto flex gap-2 items-center">
-              <Button variant="ghost" size="sm" onClick={() => router.push(`/projects/${project.id}/stock`)}>
-                View all
-              </Button>
-            </div>
-          </CardHeader>
-          <ReqTable project={project} reqs={pending} />
-        </Card>
-      )}
-
-      {updates.length > 0 && (
-        <Card className="mt-5">
-          <CardHeader>
-            <h3>Latest Updates</h3>
-            <div className="ml-auto flex gap-2 items-center">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push(`/projects/${project.id}/updates`)}
-              >
-                View all
-              </Button>
-            </div>
-          </CardHeader>
-          <UpdateList project={project} updates={updates} />
-        </Card>
-      )}
+      <LegacyDashboardCards projectId={projectId} isClient={isClient} isSite={!isMoney && !isClient} />
     </div>
+  );
+}
+
+async function ClientDashboardStats({
+  projectId,
+  alloc,
+  prog,
+}: {
+  projectId: string;
+  alloc: number;
+  prog: number;
+}) {
+  const { billedNet, paidNet, billsSubmitted, approvalsPending } = await getClientBillingStats(projectId);
+  return (
+    <BudgetStatBar
+      role="client"
+      alloc={alloc}
+      int={0}
+      c={0}
+      prog={prog}
+      extraStats={[
+        {
+          label: "Bills Raised",
+          value: formatINRCompact(billedNet),
+          sub: `incl. GST · ${formatINRCompact(paidNet)} paid`,
+        },
+        {
+          label: "Awaiting Your Approval",
+          value: approvalsPending + billsSubmitted,
+          sub: `${approvalsPending} samples · ${billsSubmitted} bills`,
+        },
+      ]}
+    />
+  );
+}
+
+async function SiteDashboardStats({
+  projectId,
+  packages,
+}: {
+  projectId: string;
+  packages: Extract<PackagesForProject, { role: "site" }>;
+}) {
+  const { pendingRequests, toReceive } = await getSiteStockStats(projectId);
+  const inProgress = packages.packages.filter((p) => p.status === "in_progress").length;
+  return (
+    <StatBar
+      stats={[
+        { label: "Packages in Progress", value: inProgress, sub: `of ${packages.packages.length}` },
+        { label: "Pending Requests", value: pendingRequests, sub: "awaiting approval" },
+        { label: "To Receive", value: toReceive, sub: "ordered, not yet on site" },
+      ]}
+    />
   );
 }

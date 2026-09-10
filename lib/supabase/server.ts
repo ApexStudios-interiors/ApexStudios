@@ -40,6 +40,17 @@ export async function createClient() {
           }
         },
       },
+      // Found live: a project created by a Server Action, then read on the
+      // very next request (the redirect after creating it), came back as "not
+      // found" — reproducible only inside Next.js, not against Postgres/
+      // PostgREST directly. Next.js patches the global `fetch` its App Router
+      // runtime uses to add its own Data Cache, defaulting to `force-cache`
+      // for a fetch made during rendering; supabase-js's default fetch is that
+      // same patched global, so every PostgREST request this client makes was
+      // silently eligible for Next's cache despite this being a per-request,
+      // RLS-scoped client with no business ever serving a cached response
+      // across requests. Explicit `cache: "no-store"` opts every request out.
+      global: { fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }) },
     }
   );
 }

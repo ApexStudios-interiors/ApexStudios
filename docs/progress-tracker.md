@@ -191,6 +191,8 @@ since "bhel" never matches an actual `projects` row. The session-presence check 
 membership check is deferred to land together with Build 04's real project ids. Recorded in the
 file itself, not just here.
 
+**Resolved in Build 04**: `requireProjectAccess` is now wired into that layout.
+
 ### Decisions
 
 D19 (phone OTP: deferred) and D20 (impersonation: build it) both recorded, answered.
@@ -204,3 +206,54 @@ D19 (phone OTP: deferred) and D20 (impersonation: build it) both recorded, answe
 | `SUPABASE_ACCESS_TOKEN` — still needed to actually register the hook, and for any future `config push` | The hook staying on its (safe, slower) fallback path indefinitely |
 | Per-IP/per-email rate-limit refinement beyond Supabase's project-level limits | Nothing blocking; a stated refinement |
 | `requireProjectAccess` real enforcement | Arrives with Build 04's project id migration |
+
+---
+
+## Build 04 — Projects, Packages & Phases
+
+Branch `build/04-projects-packages`. **Verified end to end**: real admin create/edit/read
+journeys against `apex-dev` from a real production build (Playwright, all three roles), 60/60
+visual-baseline screenshots passing against `proto-v1` (documented differences only), 39/39
+pgTAP, 26/26 integration tests, 60/60 unit tests, typecheck/lint/build all clean.
+
+### What shipped
+
+| Area | Status | Notes |
+|---|---|---|
+| `features/projects/{schema,service,queries,actions}.ts` | ✅ | Three role-shaped portfolio/dashboard query functions, `createProject` (atomic via `rpc_create_project`), `updateProject`, `setProjectStatus`, `addProjectMember`, plus `getClientOptions` for the New Project dialog. |
+| `features/packages/{schema,service,queries,actions}.ts` | ✅ | `getPackagesForProject`/`getPackageDetail`/`getPhasesForPackage`, each three role-shaped implementations, not one query with a role ternary. `createPackage`, `updatePackage` (optimistic concurrency on `updated_at`), `createPhase`, `updatePhase`, plus `getStaffOptions`/`getPackageForEdit` for the dialogs. |
+| Portfolio, dashboard, packages list, package-detail Budget tab | ✅ | Real Server Components. `ModuleTable`, `PhaseTable`, `ProjectCard`, `BudgetStatBar` take props, discriminated on `role`, instead of `useApp()`. |
+| Package tabs → routes | ✅ | `packages/[moduleId]/{budget,schedule,updates,stock,billing}`, shared header/stat-row/tab-bar in `layout.tsx`, `[moduleId]/page.tsx` redirects to `/budget`. Schedule, Updates, Stock and Billing stay on `AppContext` (`LegacyModuleTab`/`useLegacyModule` pattern) until Builds 05–09. |
+| `AddProjectDialog`, `AddModuleDialog`, `EditModuleDialog` | ✅ | react-hook-form + the same zod schema the action parses. Gained fields the mock system never needed: a Project Code input, and real Client/Lead dropdowns fetched from the database instead of hard-coded names. |
+| Missing `v_phase_site` view, `v_client_name` view | ✅ | New migrations — see Decisions below. |
+| `lib/money`, `formatINR`/`formatINRCompact` | ✅ | Wired into every converted component; the sanctioned `.00` visual diff. |
+| `lib/logic.ts` cleanup | ✅ | `committed`, `totals`, `projProgress` deleted (all three reached zero callers after conversion). `progress`, `factor`, `fmt`, `fmtS` kept — still load-bearing for Schedule/Billing/Inventory and the not-yet-converted package tabs. The build file's instruction to delete all seven was checked against actual callers, not followed literally. |
+| Tests | ✅ | pgTAP: `v_phase_site`/`v_phase_client` column omission, `v_client_name` shape, both re-asserting T-11. Unit: T-16 (both the task-duration and the package-allocation weighting), `v_package_rollup.committed`'s status filter, `fn_cost_to_client_factor`'s fallback chain — all as pure oracles for the SQL. Integration: real client-SDK sessions (not pgTAP) proving `v_package_client`/`v_phase_client`/`v_phase_site` actually return rows with the right columns for each role. Playwright: one full journey per role, admin's exercising real create/edit through the real UI. |
+
+### Real bugs found only by actually running it
+
+| Finding | Where |
+|---|---|
+| **`v_phase_client` and `v_phase_site` returned zero rows for every non-admin session, always**, since Build 02. Both joined `v_phase_billing`, which is deliberately `security_invoker = on`; reached through another (definer) view, that join re-evaluates RLS as the original caller, who has no `SELECT` on `phases`/`tasks` at all. Fixed by computing `is_complete` inline against `tasks`, the same pattern `v_package_site` already used. | `supabase/migrations/20260910180004_fix_phase_role_views.sql`, D21 |
+| **PostgREST serializes `numeric` and `int8` as JSON numbers, not strings** — the type generator assumed both are always strings, copying `postgres.js`'s own (correct, for that driver) behaviour. | `scripts/gen-types.mjs`, D21 |
+| **Any soft delete through the Supabase client fails RLS** on a table whose `SELECT` policy filters `deleted_at is null` (nearly every table) — PostgREST always executes `UPDATE ... RETURNING`, and Postgres enforces the `SELECT` policy against the post-write row. No build has shipped a soft-delete action yet, so nothing depends on this today. | D21 |
+| **Every Supabase client read was silently eligible for Next.js's fetch cache.** A project created by a Server Action, then read on the very next request, came back "not found" — reproducible only inside Next.js. Fixed with an explicit `cache: "no-store"` fetch override. Could have been silently affecting every read since Build 03. | `lib/supabase/server.ts`, D22 |
+| **`ProjectShell.tsx`'s existence check and `LegacyDashboardCards`' `useProject()` call both crashed for any project without a mock-data entry** — which is every project the real `createProject` action creates, permanently. Fixed alongside wiring in the real `requireProjectAccess` check Build 03 had deferred to this build. | `app/(app)/projects/[projectId]/{layout,ProjectShell}.tsx`, `LegacyDashboardCards.tsx`, D22 |
+| **A native `<select>`'s "unassigned" option submits `""`, and `z.uuid().optional()` rejects it outright** — failed at client-side validation, silently, before either dialog's submit handler ran. | `features/packages/schema.ts`, D22 |
+| **No TOTP enrollment UI exists, and `requireAalForRole` hard-requires AAL2 for owner/admin unconditionally** — every `adminAction`-guarded Server Action was unreachable by the seeded admin account. Dev-only fix in `e2e/global-setup.ts`; the real enrollment UI remains an open gap (D22, "Still open" table in `docs/decisions.md`). | `e2e/global-setup.ts`, `e2e/totp.ts`, D22 |
+| **The portfolio's project ordering was nondeterministic.** `supabase/seed.sql`'s multi-row `INSERT` gives every row the identical `now()` for `created_at` (Postgres evaluates it once per statement), so `order by created_at` had nothing to break the tie with — reordered by `start_date`, a real distinct value. | `features/projects/queries.ts` |
+| **The prototype's "To assign" placeholder for an unset package lead was rendered unconditionally**; the real query returned `null` and the component omitted the line entirely — a real, if minor, visual diff caught by the `proto-v1` baseline. | `features/packages/queries.ts`, `components/domain/ModuleTable.tsx` |
+
+### Decisions
+
+D21 (schema/view findings) and D22 (this build's runtime findings) both recorded. Neither is a
+question anyone was asked — both are findings.
+
+### Still open going into Build 05
+
+| Item | Blocks |
+|---|---|
+| TOTP enrollment UI (D22) | A real admin/owner account cannot use any admin-gated action today |
+| Schedule, Updates, Stock, Billing package tabs — still `AppContext` | Builds 05–09, in that order per the build sequence |
+| `markPhaseComplete` | Deferred to Build 05, where the "phase has no tasks" precondition can be tested |
+| A vendor-name lead (e.g. "Laxmi Multi Services" in the prototype) has no real representation — `lead_profile_id` only points at staff profiles | Cosmetic; not blocking |

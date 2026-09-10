@@ -1,30 +1,36 @@
-"use client";
-
 import Link from "next/link";
-import { useApp } from "@/context/AppContext";
-import type { AppData, Project } from "@/lib/types";
-import { committed, fmt, isMoney, isClientRole, mno, progress, projProgress, totals } from "@/lib/logic";
+import type { PackagesForProject } from "@/features/packages/queries";
 import { Bar } from "@/components/ui/Bar";
 import { ModuleStatusBadge } from "@/components/domain/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, trClick, trTotal, sub } from "@/components/ui/table";
+import { formatINR } from "@/lib/money";
 
-export function ModuleTable({ project }: { project: Project }) {
-  const { data, role } = useApp();
-  const t = totals(data, project);
-  const money = isMoney(role);
-  const client = isClientRole(role);
-  const openRequests = (data: AppData, m: string) =>
-    data.requests.filter(
-      (r) => r.proj === project.id && r.mod === m && ["Pending", "Approved", "Ordered"].includes(r.status)
-    ).length;
-
+/**
+ * Props instead of `useApp()` (build/04-projects-packages-phases.md §4.4 step
+ * 5). The column set per role comes straight from `data`'s own discriminated
+ * union — a site row has no `internal` field to render even if someone tried,
+ * so this cannot compile the leak, not just avoid rendering it.
+ */
+export function ModuleTable({
+  projectId,
+  data,
+  projectProgressPct,
+}: {
+  projectId: string;
+  data: PackagesForProject;
+  /** `projects.progress_pct` (trigger-maintained: the allocated-weighted mean
+   *  of exactly these packages, per 20260909170016_triggers_rollup.sql) — read
+   *  from the project row the page already fetched, not recomputed here.
+   *  AGENTS.md: a derived value is stored in exactly one place. */
+  projectProgressPct: number;
+}) {
   return (
     <TableWrap>
       <thead>
         <tr>
           <th className={th}>Package</th>
-          {money ? (
+          {data.role === "money" ? (
             <>
               <th className={thNum}>Allocated</th>
               <th className={thNum}>Internal</th>
@@ -32,7 +38,7 @@ export function ModuleTable({ project }: { project: Project }) {
               <th className={thNum}>Remaining</th>
               <th className={th}>Used</th>
             </>
-          ) : client ? (
+          ) : data.role === "client" ? (
             <th className={thNum}>Contract Value</th>
           ) : (
             <>
@@ -45,72 +51,70 @@ export function ModuleTable({ project }: { project: Project }) {
         </tr>
       </thead>
       <tbody>
-        {project.modules.map((m) => {
-          const c = committed(data, project.id, m);
-          return (
-            <tr key={m.id} className={trClick}>
-              <td className={td}>
-                <Link
-                  href={`/projects/${project.id}/packages/${m.id}`}
-                  className="font-medium hover:underline"
-                >
-                  <span className="inline-block min-w-[22px] mr-1.5 text-muted-foreground tabular-nums font-medium">
-                    {mno(project, m)}
-                  </span>
-                  {m.name}
-                </Link>
-                <span className={sub} style={{ paddingLeft: 22 }}>
-                  {m.lead}
-                </span>
-              </td>
-              {money || client ? (
-                <td className={tdNum}>{fmt(m.allocated)}</td>
-              ) : (
-                <>
-                  <td className={td}>{m.packages.length}</td>
-                  <td className={td}>{openRequests(data, m.id)}</td>
-                </>
-              )}
-              {money && (
-                <>
-                  <td className={tdNum}>{fmt(m.internal)}</td>
-                  <td className={tdNum}>{fmt(c)}</td>
-                  <td className={tdNum + (m.internal - c < 0 ? " font-bold" : "")}>{fmt(m.internal - c)}</td>
-                  <td className={td}>
-                    <Bar value={c} of={m.internal} />
-                  </td>
-                </>
-              )}
-              <td className={td}>
-                <Bar value={progress(m)} of={100} />
-              </td>
-              <td className={td}>
-                <ModuleStatusBadge data={data} projId={project.id} m={m} />
-              </td>
-            </tr>
-          );
-        })}
-        {money ? (
-          <tr className={trTotal}>
-            <td className={td}>Total</td>
-            <td className={tdNum}>{fmt(t.alloc)}</td>
-            <td className={tdNum}>{fmt(t.int)}</td>
-            <td className={tdNum}>{fmt(t.c)}</td>
-            <td className={tdNum}>{fmt(t.int - t.c)}</td>
+        {data.packages.map((p) => (
+          <tr key={p.id} className={trClick}>
             <td className={td}>
-              <Bar value={t.c} of={t.int} />
+              <Link href={`/projects/${projectId}/packages/${p.id}`} className="font-medium hover:underline">
+                <span className="inline-block min-w-[22px] mr-1.5 text-muted-foreground tabular-nums font-medium">
+                  {String(p.seqNo).padStart(2, "0")}
+                </span>
+                {p.name}
+              </Link>
+              <span className={sub} style={{ paddingLeft: 22 }}>
+                {p.lead}
+              </span>
+            </td>
+            {p.role === "money" ? (
+              <>
+                <td className={tdNum}>{formatINR(p.allocated)}</td>
+                <td className={tdNum}>{formatINR(p.internal)}</td>
+                <td className={tdNum}>{formatINR(p.committed)}</td>
+                <td className={tdNum + (p.remaining < 0 ? " font-bold" : "")}>{formatINR(p.remaining)}</td>
+                <td className={td}>
+                  <Bar value={p.committed} of={p.internal} />
+                </td>
+              </>
+            ) : p.role === "client" ? (
+              <td className={tdNum}>{formatINR(p.contractValue)}</td>
+            ) : (
+              <>
+                <td className={td}>{p.phaseCount}</td>
+                <td className={td}>{p.openRequests}</td>
+              </>
+            )}
+            <td className={td}>
+              <Bar value={p.progressPct} of={100} />
             </td>
             <td className={td}>
-              <Bar value={projProgress(project)} of={100} />
+              <ModuleStatusBadge
+                status={p.status}
+                statusLabel={p.statusLabel}
+                isOverBudget={p.role === "money" ? p.isOverBudget : undefined}
+              />
+            </td>
+          </tr>
+        ))}
+        {data.role === "money" ? (
+          <tr className={trTotal}>
+            <td className={td}>Total</td>
+            <td className={tdNum}>{formatINR(data.totals.allocated)}</td>
+            <td className={tdNum}>{formatINR(data.totals.internal)}</td>
+            <td className={tdNum}>{formatINR(data.totals.committed)}</td>
+            <td className={tdNum}>{formatINR(data.totals.remaining)}</td>
+            <td className={td}>
+              <Bar value={data.totals.committed} of={data.totals.internal} />
+            </td>
+            <td className={td}>
+              <Bar value={projectProgressPct} of={100} />
             </td>
             <td className={td} />
           </tr>
-        ) : client ? (
+        ) : data.role === "client" ? (
           <tr className={trTotal}>
             <td className={td}>Total</td>
-            <td className={tdNum}>{fmt(t.alloc)}</td>
+            <td className={tdNum}>{formatINR(data.totals.allocated)}</td>
             <td className={td}>
-              <Bar value={projProgress(project)} of={100} />
+              <Bar value={projectProgressPct} of={100} />
             </td>
             <td className={td} />
           </tr>

@@ -54,10 +54,28 @@ function tsType(pgType, enumNames) {
     timetz: "string",
     interval: "string",
     inet: "string",
-    numeric: "string", // never a JS number — see db/schema/columns.ts
+    // A JS number, not a string. This differs from db/schema/columns.ts's own
+    // comment ("never a JS number"), which is correct for postgres.js (the
+    // driver Drizzle and this project's Node scripts use, which returns
+    // numeric as text to avoid a float round-trip) — but PostgREST, which is
+    // what @supabase/ssr's client actually talks to, serializes numeric as a
+    // JSON number instead; there is no separate decimal type in JSON. Verified
+    // against a live query, not assumed. It is not a precision bug for this
+    // schema specifically: numeric(14,2)'s largest value, 9999999999999.99, is
+    // well inside a double's exact-integer range (2^53), so it round-trips
+    // exactly — but lib/money's formatINR still accepts number | string | Decimal
+    // for this reason, and never assumes one input shape end to end.
+    numeric: "number",
     int2: "number",
     int4: "number",
-    int8: "string", // bigint/bigserial: string by default in postgres.js
+    // A JS number, not a string — same PostgREST-vs-postgres.js split as
+    // `numeric` above, verified the same way (a live query against
+    // v_package_site's count(*) columns, which are bigint). postgres.js
+    // returns bigint as text to avoid silently losing precision past 2^53;
+    // PostgREST has no such caution and serializes it as a JSON number. Not a
+    // precision risk for any bigint in this schema — every one is a row count
+    // or a sequence value, nowhere near 2^53.
+    int8: "number",
     float4: "number",
     float8: "number",
     bool: "boolean",

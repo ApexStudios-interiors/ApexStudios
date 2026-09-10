@@ -414,6 +414,90 @@ and stop. The banner is persistent and not dismissible while active.
 
 ---
 
+### D21 — Findings from Build 04 (Projects/Packages/Phases)
+
+Three things discovered while building the first real-data queries, none blocking this build but
+each worth a future build not rediscovering the hard way.
+
+**PostgREST serializes `numeric` and `int8` as JSON numbers, not strings.** `scripts/gen-types.mjs`
+assumed both are always strings, copying `postgres.js`'s own driver behaviour (used elsewhere in
+this codebase, e.g. Drizzle and Node scripts, which really does return them as text). Verified live
+against `v_package_rollup` and `v_package_site`'s count columns: both come back as plain numbers
+over PostgREST. Fixed in the generator with a comment; not a precision risk for this schema —
+`numeric(14,2)`'s largest value and every `int8` here (row counts, sequence values) are well inside
+a double's exact-integer range.
+
+**`v_phase_client` and `v_phase_site` returned zero rows for every non-admin session, always** —
+found live, not by a test, while wiring the Budget/Phases tab. Both joined `v_phase_billing` for
+`is_complete`; `v_phase_billing` is deliberately `security_invoker = on` (0013's own comment: so its
+own admin-only policy applies to a *direct* query), but that means the join re-evaluates RLS as the
+original caller when reached through another (definer) view — a client or site session has no
+`SELECT` on `phases`/`tasks` at all, so the join always contributed zero rows regardless of the
+outer view's own `is_member_of()` filter. Fixed by computing `is_complete` inline against `tasks`
+in both views, the same pattern `v_package_site` already used for its own counts. This had shipped
+in Build 02 and gone uncaught because nothing queried it until this build.
+
+**Any soft delete through the Supabase client will fail RLS on a table whose `SELECT` policy
+filters `deleted_at is null`** — which is nearly every table (`code-standards.md`'s soft-delete
+rule). Postgres enforces the table's `SELECT` policy against the post-write row whenever `RETURNING`
+is used, and PostgREST always executes `UPDATE ... RETURNING`, so a plain
+`.update({ deleted_at: now() })` gets `42501: new row violates row-level security policy`, even with
+`Prefer: return=minimal`. Confirmed live against `packages`. No build has shipped a soft-delete
+action yet, so nothing depends on this today, but the first one that does (removing a project
+member, cancelling a stock request, Build 10's retention purge) needs either a `security definer`
+RPC for the delete itself, or a policy restructure — not a plain client-side `.update()`.
+
+### D22 — Findings from Build 04's admin Playwright journey
+
+The admin create/edit journey (build/04-projects-packages-phases.md §5) was the first thing in
+this codebase to actually create a project through the UI and immediately read it back. Every one
+of these was invisible until that happened.
+
+**Every Supabase client read was silently eligible for Next.js's fetch cache.** A project created
+by a Server Action, then read on the very next request (the redirect to its own dashboard), came
+back as "not found" — reproducible only inside Next.js, not against Postgres or PostgREST
+directly (verified with a standalone script: create-then-immediate-read worked every time outside
+the app). Next's App Router patches the global `fetch` to add its own Data Cache, defaulting to
+`force-cache` for a fetch made during rendering; `@supabase/ssr`'s client uses that same ambient
+`fetch` with no override. `lib/supabase/server.ts` now passes `global: { fetch: (input, init) =>
+fetch(input, { ...init, cache: "no-store" }) }` — every request through this client is per-session
+and RLS-scoped, and had no business being cached across requests regardless of this specific bug.
+**This could have been silently affecting every read in the app since Build 03**; it only surfaced
+now because nothing before this build did a write-then-immediate-read within one running server
+process in a test.
+
+**`app/(app)/projects/[projectId]/layout.tsx` never got the real access check Build 03 promised
+it.** Its own deviation note said `requireProjectAccess` was deferred until project ids became
+real (this build). It's wired in now. `ProjectShell.tsx`'s client-side `exists` check — against
+`AppContext`'s mock `data.projects` array — is gone with it: a project created through the real
+`createProject` action has no entry there and never will, so that check said "not found" for a
+project that was genuinely real and genuinely accessible, and `LegacyDashboardCards.tsx`'s
+`useProject()` call (which *throws* on the same mismatch) crashed the whole dashboard to the
+generic error boundary. Both now treat "no mock entry" as "nothing to show," not "doesn't exist" —
+the same posture `useLegacyModule` already took for package tabs.
+
+**A native `<select>`'s "unassigned" option submits `""`, and `z.uuid().optional()` rejects it
+outright** — a string that isn't a UUID, not an absent field. This failed at CLIENT-side
+validation, before `AddModuleDialog`/`EditModuleDialog`'s own submit handler ever ran, so the
+manual `leadProfileId: value || undefined` fallback in each dialog never got a chance to help.
+`features/packages/schema.ts`'s `leadProfileId` now accepts `""` and transforms it to `undefined`
+in the schema itself — the one place both the form and the action read from.
+
+**`requireAalForRole` (lib/auth/session.ts) hard-requires AAL2 for owner/admin, unconditionally, in
+every environment, and there is no enrollment UI yet** — Build 03 built the MFA *challenge* step,
+for a factor that already exists, never enrollment. No seeded account had a factor, so every
+`adminAction`-guarded Server Action (this build's own `createProject`, `createPackage`, and
+everything after them) was unreachable by the seeded admin account. `e2e/global-setup.ts` now
+enrolls and verifies a real TOTP factor for the seeded admin through `supabase-js` directly (there
+is nowhere else to do it from) and persists the secret locally (`e2e/.auth/admin-totp-secret.txt`,
+gitignored) so every run after the first computes a fresh code for the real `/login` challenge —
+the same one a human with an authenticator app completes. **The actual enrollment UI remains
+unbuilt**; a real admin account cannot pass MFA today outside this dev workaround. Recorded here
+rather than in "Still open" below because build/03-auth-and-rbac.md's own scope, not Build 04's,
+is where it belongs — flagging it is this build's job, building it is not.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |
@@ -423,3 +507,4 @@ and stop. The banner is persistent and not dismissible while active.
 | CA confirmation: statutory retention period (A-5) | Voola → CA | Build 10 R2 lifecycle rules | 2026-09-09 |
 | CA sign-off: the five tax questions in `01-hld.md` §8.4 | Voola → CA | Build 09 go-live | 2026-09-09 |
 | DPDP Act 2023 obligation set (`architecture.md` §12) | Voola → counsel | Launch | 2026-09-09 |
+| No TOTP enrollment UI exists (D22) — an owner/admin account cannot pass `requireAalForRole`'s AAL2 check anywhere outside the dev-only workaround in `e2e/global-setup.ts`. Every `adminAction`-guarded Server Action is unreachable by a real admin user until this is built. | — | Any real admin using a real account | 2026-09-10 |
