@@ -237,7 +237,11 @@ describe("approvals — visible to all three roles (01-hld.md §7.1)", () => {
 
     for (const email of [ADMIN_EMAIL, SITE_EMAIL, CLIENT_EMAIL]) {
       const session = await client(email);
-      const { data, error } = await session.from("approvals").select("id").eq("id", approval.id).maybeSingle();
+      const { data, error } = await session
+        .from("approvals")
+        .select("id")
+        .eq("id", approval.id)
+        .maybeSingle();
       expect(error, `${email} should be able to read the approval`).toBeNull();
       expect(data, `${email} should see the row it is a member of the project for`).not.toBeNull();
     }
@@ -277,7 +281,8 @@ describe("supersession — links both directions (01-hld.md §8.2)", () => {
 
     const revised = await createApproval(site, { item: "Revised sample", supersedesId: original.id });
 
-    const rows = await sql`select id, supersedes_id from public.approvals where id = ${original.id} or id = ${revised.id}`;
+    const rows =
+      await sql`select id, supersedes_id from public.approvals where id = ${original.id} or id = ${revised.id}`;
     const revisedRow = rows.find((r) => r.id === revised.id);
     const originalRow = rows.find((r) => r.id === original.id);
     expect(revisedRow?.supersedes_id).toBe(original.id);

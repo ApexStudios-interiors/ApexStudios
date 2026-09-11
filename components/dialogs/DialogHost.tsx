@@ -40,10 +40,20 @@ export function DialogHost() {
       return <RejectStockRequestDialog requestId={dialog.requestId} />;
     case "newApproval":
       return (
-        <NewApprovalDialog projectId={dialog.projectId} moduleId={dialog.moduleId} supersedes={dialog.supersedes} />
+        <NewApprovalDialog
+          projectId={dialog.projectId}
+          moduleId={dialog.moduleId}
+          supersedes={dialog.supersedes}
+        />
       );
     case "approvalPhotos":
-      return <ApprovalPhotosDialog approvalId={dialog.approvalId} projectId={dialog.projectId} item={dialog.item} />;
+      return (
+        <ApprovalPhotosDialog
+          approvalId={dialog.approvalId}
+          projectId={dialog.projectId}
+          item={dialog.item}
+        />
+      );
     case "decideApproval":
       return (
         <DecideApprovalDialog approvalId={dialog.approvalId} decision={dialog.decision} item={dialog.item} />

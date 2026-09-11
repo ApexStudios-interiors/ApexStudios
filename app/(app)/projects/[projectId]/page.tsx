@@ -40,7 +40,10 @@ export default async function ProjectDashboardPage({ params }: { params: Promise
   const pendingRequests = isClient
     ? []
     : (await getStockRequestsForProject(session, projectId, { status: "pending" })).slice(0, 5);
-  const pendingApprovals = (await getApprovalsForProject(session, projectId, { status: "pending" })).slice(0, 5);
+  const pendingApprovals = (await getApprovalsForProject(session, projectId, { status: "pending" })).slice(
+    0,
+    5
+  );
 
   return (
     <div>

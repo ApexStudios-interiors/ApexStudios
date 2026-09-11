@@ -22,7 +22,15 @@ import { Empty } from "@/components/ui/Empty";
  * plus the row's own status (`canDecide`/`canAddPhotos`/`canSupersede` on the
  * DTO, `features/approvals/service.ts`) — never a role string inline here.
  */
-export function ApprovalTable({ projectId, list, role }: { projectId: string; list: ApprovalDTO[]; role: Role }) {
+export function ApprovalTable({
+  projectId,
+  list,
+  role,
+}: {
+  projectId: string;
+  list: ApprovalDTO[];
+  role: Role;
+}) {
   const { openDialog } = useApp();
   const [lightbox, setLightbox] = useState<{ url: string; alt: string } | null>(null);
   const mayDecide = can(role, "decideApproval");
@@ -80,14 +88,28 @@ export function ApprovalTable({ projectId, list, role }: { projectId: string; li
                   <Button
                     variant="primary"
                     size="sm"
-                    onClick={() => openDialog({ kind: "decideApproval", approvalId: a.id, decision: "approved", item: a.item })}
+                    onClick={() =>
+                      openDialog({
+                        kind: "decideApproval",
+                        approvalId: a.id,
+                        decision: "approved",
+                        item: a.item,
+                      })
+                    }
                   >
                     Approve
                   </Button>
                   <Button
                     variant="destructive"
                     size="sm"
-                    onClick={() => openDialog({ kind: "decideApproval", approvalId: a.id, decision: "rejected", item: a.item })}
+                    onClick={() =>
+                      openDialog({
+                        kind: "decideApproval",
+                        approvalId: a.id,
+                        decision: "rejected",
+                        item: a.item,
+                      })
+                    }
                   >
                     Reject
                   </Button>
@@ -104,7 +126,13 @@ export function ApprovalTable({ projectId, list, role }: { projectId: string; li
                     openDialog({
                       kind: "newApproval",
                       projectId,
-                      supersedes: { id: a.id, packageId: a.packageId, phaseId: a.phaseId, type: a.type, item: a.item },
+                      supersedes: {
+                        id: a.id,
+                        packageId: a.packageId,
+                        phaseId: a.phaseId,
+                        type: a.type,
+                        item: a.item,
+                      },
                     })
                   }
                 >
@@ -117,7 +145,9 @@ export function ApprovalTable({ projectId, list, role }: { projectId: string; li
                   variant="ghost"
                   size="sm"
                   disabled={!a.canAddPhotos}
-                  onClick={() => openDialog({ kind: "approvalPhotos", approvalId: a.id, projectId, item: a.item })}
+                  onClick={() =>
+                    openDialog({ kind: "approvalPhotos", approvalId: a.id, projectId, item: a.item })
+                  }
                 >
                   Add photos
                 </Button>
@@ -188,7 +218,12 @@ export function ApprovalTable({ projectId, list, role }: { projectId: string; li
       </TableWrap>
 
       {lightbox && (
-        <DialogShell title="Photo" okLabel="Close" onOk={() => setLightbox(null)} onClose={() => setLightbox(null)}>
+        <DialogShell
+          title="Photo"
+          okLabel="Close"
+          onOk={() => setLightbox(null)}
+          onClose={() => setLightbox(null)}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element -- see the grid's own comment above */}
           <img src={lightbox.url} alt={lightbox.alt} className="max-w-full max-h-[70vh] mx-auto rounded-md" />
         </DialogShell>

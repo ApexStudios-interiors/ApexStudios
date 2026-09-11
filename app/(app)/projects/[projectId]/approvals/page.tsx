@@ -36,7 +36,12 @@ export default async function ApprovalsPage({
 
   // "" (All) is a valid, deliberate non-filter — only default to "pending"
   // when the param is absent, not when it is present-but-empty.
-  const status = rawStatus === undefined ? "pending" : VALID_STATUSES.includes(rawStatus as ApprovalStatus) ? (rawStatus as ApprovalStatus) : undefined;
+  const status =
+    rawStatus === undefined
+      ? "pending"
+      : VALID_STATUSES.includes(rawStatus as ApprovalStatus)
+        ? (rawStatus as ApprovalStatus)
+        : undefined;
 
   const list = await getApprovalsForProject(session, projectId, status ? { status } : {});
   const client = effectiveRole === "client";

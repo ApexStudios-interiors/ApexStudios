@@ -201,7 +201,9 @@ test.describe("site: can request an approval and add photos, but cannot decide",
     // The page's own "+ Request Approval" button shares this exact text with
     // the dialog's heading — scoped to the heading role so this doesn't
     // always resolve true regardless of whether the dialog actually closed.
-    await expect(page.getByRole("heading", { name: "Request Approval" })).not.toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("heading", { name: "Request Approval" })).not.toBeVisible({
+      timeout: 10_000,
+    });
 
     const sql = dbConnect();
     try {

@@ -118,20 +118,22 @@ export const addSamplePhotos = siteAction
  * pair a role-guarded action with its own RPC check (build §5's shared rule:
  * "don't add an Admin bypass, including for testing").
  */
-export const decideApproval = clientAction.inputSchema(decideApprovalSchema).action(async ({ parsedInput }) => {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("rpc_decide_approval", {
-    p_approval_id: parsedInput.approvalId,
-    p_decision: parsedInput.decision,
-    p_reason: parsedInput.reason,
-  });
-  if (error) throw new Error(error.message);
-  const row = data as { id: string; project_id: string; status: string };
+export const decideApproval = clientAction
+  .inputSchema(decideApprovalSchema)
+  .action(async ({ parsedInput }) => {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("rpc_decide_approval", {
+      p_approval_id: parsedInput.approvalId,
+      p_decision: parsedInput.decision,
+      p_reason: parsedInput.reason,
+    });
+    if (error) throw new Error(error.message);
+    const row = data as { id: string; project_id: string; status: string };
 
-  updateTag(`project:${row.project_id}`);
-  revalidatePath(`/projects/${row.project_id}`, "layout");
-  return { id: row.id, status: row.status };
-});
+    updateTag(`project:${row.project_id}`);
+    revalidatePath(`/projects/${row.project_id}`, "layout");
+    return { id: row.id, status: row.status };
+  });
 
 /** `NewApprovalDialog`'s Package field — `v_package_site`, same reason
  *  `features/updates/actions.ts`/`features/stock/actions.ts` each read it

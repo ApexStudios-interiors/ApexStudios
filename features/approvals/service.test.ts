@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { approvalTypeLabel, canAddPhotos, canDecide, canSupersede, isAgedPending, type ApprovalStatus } from "./service";
+import {
+  approvalTypeLabel,
+  canAddPhotos,
+  canDecide,
+  canSupersede,
+  isAgedPending,
+  type ApprovalStatus,
+} from "./service";
 import { APPROVAL_TYPES } from "./schema";
 
 describe("approvalTypeLabel", () => {

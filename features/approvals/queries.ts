@@ -83,17 +83,16 @@ async function fetchPackageNames(isAdmin: boolean, projectId: string): Promise<M
 async function fetchPhaseNames(isAdmin: boolean, projectId: string): Promise<Map<string, string>> {
   const supabase = await createClient();
   if (isAdmin) {
-    const { data, error } = await supabase
-      .from("phases")
-      .select("id, name")
-      .eq("project_id", projectId);
+    const { data, error } = await supabase.from("phases").select("id, name").eq("project_id", projectId);
     if (error) throw new Error(error.message);
     return new Map(data.map((p) => [p.id, p.name]));
   }
   const { data, error } = await supabase.from("v_phase_site").select("id, name").eq("project_id", projectId);
   if (error) throw new Error(error.message);
   return new Map(
-    data.filter((p): p is { id: string; name: string } => p.id != null && p.name != null).map((p) => [p.id, p.name])
+    data
+      .filter((p): p is { id: string; name: string } => p.id != null && p.name != null)
+      .map((p) => [p.id, p.name])
   );
 }
 
@@ -183,7 +182,11 @@ export async function getApprovalsForProject(
     fetchProfileNames([...typedRows.map((r) => r.requested_by), ...typedRows.map((r) => r.decided_by)]),
     fetchAttachments(ids),
     ids.length > 0
-      ? supabase.from("approvals").select("id, ref_no, supersedes_id").in("supersedes_id", ids).is("deleted_at", null)
+      ? supabase
+          .from("approvals")
+          .select("id, ref_no, supersedes_id")
+          .in("supersedes_id", ids)
+          .is("deleted_at", null)
       : Promise.resolve({ data: [], error: null }),
   ]);
   if (supersededByRows.error) throw new Error(supersededByRows.error.message);
@@ -192,7 +195,9 @@ export async function getApprovalsForProject(
   // A superseded target might not be on this page (a different status
   // filter, or paged differently) — look it up separately rather than
   // assuming it is one of `typedRows`.
-  const missingSupersedeIds = [...new Set(supersedesIds.filter((id): id is string => id != null && !refNoById.has(id)))];
+  const missingSupersedeIds = [
+    ...new Set(supersedesIds.filter((id): id is string => id != null && !refNoById.has(id))),
+  ];
   if (missingSupersedeIds.length > 0) {
     const { data: extra, error: extraErr } = await supabase
       .from("approvals")

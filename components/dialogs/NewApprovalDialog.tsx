@@ -136,7 +136,9 @@ export function NewApprovalDialog({
             value={phaseId}
             onChange={(e) => setPhaseId(e.target.value)}
           >
-            <option value="">{phases?.length ? "None" : packageId ? "Loading…" : "Select a package first"}</option>
+            <option value="">
+              {phases?.length ? "None" : packageId ? "Loading…" : "Select a package first"}
+            </option>
             {phases?.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
