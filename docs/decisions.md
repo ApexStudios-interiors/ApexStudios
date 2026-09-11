@@ -822,6 +822,41 @@ build's migrations but never mirrored into `db/schema/` — a real gap the drift
 specifically to catch (and did). **Fixed**: `db/schema/search.ts` (new, `rateLimits`) and
 `projects.nextSrSeq` added alongside the existing `nextBillSeq`.
 
+### D38 — Applying a migration by raw SQL instead of `supabase db push` let a later CI run silently revert it
+
+**Finding, caught by this build's own PR going through real CI.** Every migration in this build was
+applied to `apex-dev` directly via a `postgres` connection (`sql.unsafe(file)`), not through
+`supabase db push` — this environment has no working `supabase link` session, and D14 already rules
+out a local Postgres to develop against instead. That gets the SQL applied and it can be verified
+live, but it does **not** record the migration into Supabase's own `supabase_migrations.schema_migrations`
+tracking table, which is exactly what `db push` — the tool CI actually runs — consults to decide
+which migration files are still "pending."
+
+The concrete failure: `apex-dev`'s tracking table had never recorded `20260913090005` (D33) or
+either of `20260914090001`/`20260914090002` (search/rate-limit, D35) as applied, despite all three
+having been applied and verified live by hand. CI's first run correctly saw all three as pending,
+applied `20260913090005` fresh (harmless — a `create or replace view`, idempotent on its own), then
+failed on `20260914090001` (`rate_limits` already existing from the earlier raw apply) and stopped.
+But that first, partial `db push` **did** successfully commit and record `20260913090005` — and
+that file's own version of `v_notifications` doesn't contain the later `20260914090002` (D35) fix,
+because D35 was found and fixed *after* D33 was written. Reapplying it overwrote the hand-applied
+D35 fix on the live view, silently reverting Site's stock-request notifications right back to
+broken — caught only because this build's own pgTAP regression test for D35 ran for real in CI
+against the actual post-push state, not because anyone looked at the view again by hand.
+
+`supabase migration repair --status applied <version>` (used to reconcile the tracking table
+afterward for the two still-mismatched versions) fixes the *bookkeeping* but does not re-run or
+verify the file's SQL — repairing `20260914090002` as "applied" without re-running it left the
+now-reverted view exactly as `20260913090005`'s reapplication had left it, until reapplied by hand
+a second time and confirmed via `pg_get_viewdef` and the pgTAP suite together.
+
+**Consequence for every build after this one**: applying a migration by raw SQL against `apex-dev`
+is a legitimate way to get unblocked without a working `supabase link`, but it is not a substitute
+for eventually reconciling it — `supabase migration list --db-url "$SUPABASE_DB_URL"` (no link
+needed) should show zero `local`/`remote` mismatches before a PR is opened, and any live schema
+object touched by more than one migration in the same PR is worth re-verifying with
+`pg_get_viewdef`/`\d` after reconciliation, not just trusted from an earlier verification pass.
+
 ---
 
 ## Still open
