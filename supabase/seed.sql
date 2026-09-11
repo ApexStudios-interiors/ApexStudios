@@ -265,13 +265,24 @@ update public.stock_requests set inventory_item_id = '00000000-0000-4000-8000-00
 -- balance migration would write (build §0's own "opening adjust movements"),
 -- just backdated to the seed's own "today" rather than reconstructing a
 -- history nobody specified.
-insert into public.stock_movements (org_id, inventory_item_id, project_id, direction, qty, unit_cost, ref_type, reason, created_at, created_by) values
-  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000601', '00000000-0000-4000-8000-0000000000c1', 'in', 40,   395,  'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
-  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000602', '00000000-0000-4000-8000-0000000000c1', 'in', 5,    4050, 'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
-  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000604', '00000000-0000-4000-8000-0000000000c1', 'in', 45,   640,  'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
-  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000605', '00000000-0000-4000-8000-0000000000c1', 'in', 3,    2100, 'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
-  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000606', '00000000-0000-4000-8000-0000000000c1', 'in', 1100, 150,  'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
-  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000608', '00000000-0000-4000-8000-0000000000c1', 'in', 60,   380,  'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2');
+--
+-- D38 follow-up: found live, via `rpc_inventory_drift` reporting all six
+-- items at exactly 3x their real ledger total after CI ran `pnpm db:seed`
+-- three times against the same apex-dev database. Every other seeded row in
+-- this file carries an explicit id and `on conflict (id) do nothing`; this
+-- block relied on `gen_random_uuid()`'s default instead, so a second run
+-- inserted six brand new rows on top of the first with nothing to collide
+-- on — `stock_movements` is append-only by design (AGENTS.md database rule
+-- 6), so there was no natural constraint to catch it either. Explicit ids,
+-- same as everywhere else.
+insert into public.stock_movements (id, org_id, inventory_item_id, project_id, direction, qty, unit_cost, ref_type, reason, created_at, created_by) values
+  ('00000000-0000-4000-8000-000000000901', '00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000601', '00000000-0000-4000-8000-0000000000c1', 'in', 40,   395,  'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
+  ('00000000-0000-4000-8000-000000000902', '00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000602', '00000000-0000-4000-8000-0000000000c1', 'in', 5,    4050, 'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
+  ('00000000-0000-4000-8000-000000000903', '00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000604', '00000000-0000-4000-8000-0000000000c1', 'in', 45,   640,  'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
+  ('00000000-0000-4000-8000-000000000904', '00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000605', '00000000-0000-4000-8000-0000000000c1', 'in', 3,    2100, 'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
+  ('00000000-0000-4000-8000-000000000905', '00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000606', '00000000-0000-4000-8000-0000000000c1', 'in', 1100, 150,  'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
+  ('00000000-0000-4000-8000-000000000906', '00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000608', '00000000-0000-4000-8000-0000000000c1', 'in', 60,   380,  'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2')
+on conflict (id) do nothing;
 -- 603 (Pool-grade vitrified tile) and 607 (Aluminium window profile) both
 -- seed at qty_on_hand = 0 — the ledger already agrees with no rows at all,
 -- so they get none.

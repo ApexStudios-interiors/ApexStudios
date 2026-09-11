@@ -34,13 +34,6 @@ async function signedInAs(email: string): Promise<SupabaseClient> {
   return supabase;
 }
 
-function serviceClient(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("SUPABASE_SERVICE_ROLE_KEY must be set for this suite.");
-  return createClient(url, key, { auth: { persistSession: false } });
-}
-
 const sql = connect();
 const openClients: SupabaseClient[] = [];
 async function client(email: string) {
@@ -267,12 +260,15 @@ describe("rpc_inventory_drift — T-10", () => {
       // failure mode, not a sanctioned path).
       await sql`update public.inventory_items set qty_on_hand = 999 where id = ${itemId}`;
 
-      const admin = serviceClient();
-      const { data, error } = await admin.rpc("rpc_inventory_drift");
-      expect(error).toBeNull();
-      const drifted = (data as { item_id: string; cached_qty: number; ledger_qty: number }[]).find(
-        (d) => d.item_id === itemId
-      );
+      // rpc_inventory_drift is service_role-only (least privilege — no real
+      // user session has a legitimate reason to run it). Called here over
+      // the plain privileged connection, not a service_role supabase-js
+      // client: the same reasoning (and the same missing-secret-in-CI gap,
+      // found live) `rpc_claim_jobs` already settled in jobs.test.ts's own
+      // comment — this function takes no `auth.uid()`-shaped context either,
+      // so a raw connection exercises exactly what it does.
+      const drift = await sql`select item_id, name, cached_qty, ledger_qty from public.rpc_inventory_drift()`;
+      const drifted = drift.find((d) => d.item_id === itemId);
       expect(drifted).toBeDefined();
       expect(Number(drifted?.cached_qty)).toBe(999);
       expect(Number(drifted?.ledger_qty)).toBe(40);
@@ -284,13 +280,12 @@ describe("rpc_inventory_drift — T-10", () => {
       // afterEach deletes this item outright regardless of qty_on_hand, so
       // there is nothing further to restore — this just confirms the drift
       // clears once the item (and its movements) is gone.
-      const admin = serviceClient();
       // No cascade on this FK (migration 0006) — movements first, item second.
       await sql`delete from public.stock_movements where inventory_item_id = ${itemId}`;
       await sql`delete from public.inventory_items where id = ${itemId}`;
       trackedItemIds.splice(trackedItemIds.indexOf(itemId), 1);
-      const { data: clean } = await admin.rpc("rpc_inventory_drift");
-      expect((clean as unknown[]).some((d) => (d as { item_id: string }).item_id === itemId)).toBe(false);
+      const clean = await sql`select item_id from public.rpc_inventory_drift()`;
+      expect(clean.some((d) => d.item_id === itemId)).toBe(false);
     }
   });
 

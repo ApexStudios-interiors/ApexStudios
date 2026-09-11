@@ -857,6 +857,22 @@ needed) should show zero `local`/`remote` mismatches before a PR is opened, and 
 object touched by more than one migration in the same PR is worth re-verifying with
 `pg_get_viewdef`/`\d` after reconciliation, not just trusted from an earlier verification pass.
 
+### D39 — `seed.sql`'s opening-balance movements (D32) were not idempotent
+
+**Finding, caught by CI running `pnpm db:seed` against the same `apex-dev` database on three
+consecutive runs of this PR.** Every other row in `seed.sql` carries an explicit id and
+`on conflict (id) do nothing`; the six opening-balance `stock_movements` rows added for D32 relied
+on `gen_random_uuid()`'s column default instead, with no conflict target at all — and
+`stock_movements` is append-only by design (AGENTS.md database rule 6), so there was no natural
+constraint to catch a second insert either. Three CI runs meant three inserts: `rpc_inventory_drift`
+reported all six seeded items at exactly 3× their real ledger total, each successive run compounding
+the last silently.
+
+**Fixed**: explicit ids (`...0901`–`...0906`) and `on conflict (id) do nothing`, matching every other
+row in the file. Cleaned up live — deleted all eighteen duplicated rows, re-ran the corrected seed,
+confirmed exactly six rows and zero drift, then ran the seed a second time to confirm it now stays
+at six.
+
 ---
 
 ## Still open
