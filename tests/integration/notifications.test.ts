@@ -116,7 +116,10 @@ describe("v_notifications — Admin role (control case)", () => {
 describe("v_notifications — anon", () => {
   it("gets zero rows — this project's table grants are broad by platform default, RLS is the actual boundary", async () => {
     const supabase = anonClient();
-    const { data, error } = await supabase.from("v_notifications").select("kind").eq("project_id", SEED.project);
+    const { data, error } = await supabase
+      .from("v_notifications")
+      .select("kind")
+      .eq("project_id", SEED.project);
     expect(error).toBeNull();
     expect(data).toEqual([]);
   });

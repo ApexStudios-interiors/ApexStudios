@@ -52,15 +52,14 @@ type StatusRow = {
   stock_value?: number;
 };
 
-async function fetchRows(
-  isAdmin: boolean,
-  filter: { projectId?: string }
-): Promise<StatusRow[]> {
+async function fetchRows(isAdmin: boolean, filter: { projectId?: string }): Promise<StatusRow[]> {
   const supabase = await createClient();
   if (isAdmin) {
     let query = supabase
       .from("v_inventory_status")
-      .select("id, project_id, name, category, sku, unit, qty_on_hand, reorder_level, unit_cost, stock_value, location")
+      .select(
+        "id, project_id, name, category, sku, unit, qty_on_hand, reorder_level, unit_cost, stock_value, location"
+      )
       .order("name");
     if (filter.projectId) query = query.eq("project_id", filter.projectId);
     const { data, error } = await query;
@@ -145,7 +144,9 @@ export async function getBusinessInventory(
   if (effectiveRole === "client") return { items: [], stats: EMPTY_STATS };
 
   const rows = await fetchRows(isAdmin, opts);
-  const projectNames = await fetchProjectNames(rows.map((r) => r.project_id).filter((id): id is string => id != null));
+  const projectNames = await fetchProjectNames(
+    rows.map((r) => r.project_id).filter((id): id is string => id != null)
+  );
   const items = rows.map((r) => toDTO(r, isAdmin, projectNames));
   const stats = await fetchStats(isAdmin, opts.projectId);
   return { items, stats };

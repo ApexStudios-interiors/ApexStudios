@@ -40,7 +40,10 @@ type PackageInfo = { name: string; seqNo: number };
 async function fetchPackageNames(isAdmin: boolean, projectId: string): Promise<Map<string, PackageInfo>> {
   const supabase = await createClient();
   if (isAdmin) {
-    const { data, error } = await supabase.from("packages").select("id, name, seq_no").eq("project_id", projectId);
+    const { data, error } = await supabase
+      .from("packages")
+      .select("id, name, seq_no")
+      .eq("project_id", projectId);
     if (error) throw new Error(error.message);
     return new Map(data.map((p) => [p.id, { name: p.name, seqNo: p.seq_no }]));
   }
@@ -52,7 +55,8 @@ async function fetchPackageNames(isAdmin: boolean, projectId: string): Promise<M
   return new Map(
     data
       .filter(
-        (p): p is { id: string; name: string; seq_no: number } => p.id != null && p.name != null && p.seq_no != null
+        (p): p is { id: string; name: string; seq_no: number } =>
+          p.id != null && p.name != null && p.seq_no != null
       )
       .map((p) => [p.id, { name: p.name, seqNo: p.seq_no }])
   );

@@ -100,7 +100,9 @@ export function SearchBar() {
           ) : isExecuting ? (
             <div className="px-3 py-6 text-center text-muted-foreground text-[13px]">Searching…</div>
           ) : result.serverError ? (
-            <div className="px-3 py-6 text-center text-muted-foreground text-[13px]">{result.serverError}</div>
+            <div className="px-3 py-6 text-center text-muted-foreground text-[13px]">
+              {result.serverError}
+            </div>
           ) : results.length ? (
             [...grouped.entries()].map(([cat, items]) => (
               <div key={cat}>

@@ -49,7 +49,8 @@ test.describe("full stock lifecycle across three roles", () => {
     try {
       await sql`delete from public.stock_movements where ref_type = 'stock_request' and ref_id = ${createdRequestId}`;
       await sql`delete from public.stock_request_events where request_id = ${createdRequestId}`;
-      const [row] = await sql`select inventory_item_id from public.stock_requests where id = ${createdRequestId}`;
+      const [row] =
+        await sql`select inventory_item_id from public.stock_requests where id = ${createdRequestId}`;
       await sql`delete from public.stock_requests where id = ${createdRequestId}`;
       // Only clean up the inventory item if this test created a brand new
       // one (material_name below is unique per run) — never touch a seeded item.
@@ -62,7 +63,9 @@ test.describe("full stock lifecycle across three roles", () => {
     }
   });
 
-  test("raise -> approve -> order -> deliver, inventory increases, billable now", async ({ browser }, testInfo) => {
+  test("raise -> approve -> order -> deliver, inventory increases, billable now", async ({
+    browser,
+  }, testInfo) => {
     test.skip(testInfo.project.name !== "admin", "runs once, not once per role project");
     // Three sequential browser contexts, each a fresh page load against a
     // remote Mumbai-hosted database (D14: no local Postgres) — the default

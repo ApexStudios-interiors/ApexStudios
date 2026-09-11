@@ -55,7 +55,9 @@ export function LegacyDashboardCards({
   const { data } = useApp();
   const project = data.projects.find((p) => p.id === projectId);
 
-  const apPending = project ? data.approvals.filter((a) => a.proj === project.id && a.status === "Pending") : [];
+  const apPending = project
+    ? data.approvals.filter((a) => a.proj === project.id && a.status === "Pending")
+    : [];
 
   return (
     <>

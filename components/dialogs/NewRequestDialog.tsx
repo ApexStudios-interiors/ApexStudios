@@ -8,7 +8,12 @@ import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
 import { useSession } from "@/components/auth/SessionProvider";
 import { createStockRequestSchema } from "@/features/stock/schema";
-import { createStockRequest, getMaterialSuggestions, getPackageOptions, getUnitOptions } from "@/features/stock/actions";
+import {
+  createStockRequest,
+  getMaterialSuggestions,
+  getPackageOptions,
+  getUnitOptions,
+} from "@/features/stock/actions";
 import { getPhaseOptions } from "@/features/schedule/actions";
 import { DialogShell, Field, inputClass, textareaClass } from "@/components/ui/DialogShell";
 
@@ -136,7 +141,12 @@ export function NewRequestDialog({ projectId }: { projectId: string; moduleId?: 
         </div>
         <div className="col-span-2">
           <Field label="Phase" htmlFor="nr-phase">
-            <select id="nr-phase" className={inputClass} disabled={!visiblePhases?.length} {...register("phaseId")}>
+            <select
+              id="nr-phase"
+              className={inputClass}
+              disabled={!visiblePhases?.length}
+              {...register("phaseId")}
+            >
               <option value="">
                 {visiblePhases?.length ? "None" : packageId ? "Loading…" : "Select a package first"}
               </option>
@@ -163,11 +173,20 @@ export function NewRequestDialog({ projectId }: { projectId: string; moduleId?: 
               ))}
             </datalist>
           </Field>
-          {errors.materialName && <p className="text-xs text-destructive mt-1">{errors.materialName.message}</p>}
+          {errors.materialName && (
+            <p className="text-xs text-destructive mt-1">{errors.materialName.message}</p>
+          )}
         </div>
         <Field label="Quantity" htmlFor="nr-qty">
           <div className="flex gap-2">
-            <input id="nr-qty" type="number" step="any" className={inputClass} placeholder="0" {...register("qty")} />
+            <input
+              id="nr-qty"
+              type="number"
+              step="any"
+              className={inputClass}
+              placeholder="0"
+              {...register("qty")}
+            />
             <select
               aria-label="Unit"
               className={inputClass}
@@ -192,7 +211,14 @@ export function NewRequestDialog({ projectId }: { projectId: string; moduleId?: 
         </Field>
         {isAdmin && (
           <Field label="Rate (₹ per unit)" htmlFor="nr-rate">
-            <input id="nr-rate" type="number" step="any" className={inputClass} placeholder="Optional" {...register("rate")} />
+            <input
+              id="nr-rate"
+              type="number"
+              step="any"
+              className={inputClass}
+              placeholder="Optional"
+              {...register("rate")}
+            />
           </Field>
         )}
         <div className="col-span-2">

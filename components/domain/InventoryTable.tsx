@@ -59,7 +59,11 @@ export function InventoryTable({
               </td>
               {isAdmin && (
                 <td className={tdNum}>
-                  {i.stockValue != null ? formatINR(i.stockValue) : <span className="text-muted-foreground">–</span>}
+                  {i.stockValue != null ? (
+                    formatINR(i.stockValue)
+                  ) : (
+                    <span className="text-muted-foreground">–</span>
+                  )}
                 </td>
               )}
               <td className={td + " text-muted-foreground"}>{i.location ?? "–"}</td>

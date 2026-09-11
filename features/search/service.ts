@@ -34,7 +34,11 @@ const OVERALL_CAP = 25;
  * category order above — so which results survive a busy search is
  * deterministic, not whichever queries happened to resolve first.
  */
-export function capResults(byCategory: Partial<Record<SearchCategory, SearchResultDTO[]>>): SearchResultDTO[] {
-  const capped = SEARCH_CATEGORIES.flatMap((category) => (byCategory[category] ?? []).slice(0, PER_CATEGORY_CAP));
+export function capResults(
+  byCategory: Partial<Record<SearchCategory, SearchResultDTO[]>>
+): SearchResultDTO[] {
+  const capped = SEARCH_CATEGORIES.flatMap((category) =>
+    (byCategory[category] ?? []).slice(0, PER_CATEGORY_CAP)
+  );
   return capped.slice(0, OVERALL_CAP);
 }

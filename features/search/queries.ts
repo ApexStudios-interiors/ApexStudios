@@ -81,7 +81,11 @@ async function searchPackages(
   type Row = { id: string; name: string; project_id: string };
   let rows: Row[];
   if (isAdmin) {
-    const { data, error } = await supabase.from("packages").select("id, name, project_id").ilike("name", q).limit(5);
+    const { data, error } = await supabase
+      .from("packages")
+      .select("id, name, project_id")
+      .ilike("name", q)
+      .limit(5);
     if (error) throw new Error(error.message);
     rows = data;
   } else if (isClient) {
@@ -104,7 +108,10 @@ async function searchPackages(
     if (error) throw new Error(error.message);
     rows = data as Row[];
   }
-  const names = await projectNames(supabase, rows.map((r) => r.project_id));
+  const names = await projectNames(
+    supabase,
+    rows.map((r) => r.project_id)
+  );
   return rows.map((r) => ({
     id: r.id,
     category: "Packages" as const,
@@ -129,7 +136,10 @@ async function searchStockRequests(supabase: Supa, q: string, isAdmin: boolean):
         .limit(5);
   if (error) throw new Error(error.message);
   const rows = data as Row[];
-  const names = await projectNames(supabase, rows.map((r) => r.project_id));
+  const names = await projectNames(
+    supabase,
+    rows.map((r) => r.project_id)
+  );
   return rows.map((r) => ({
     id: r.id,
     category: "Stock Requests" as const,
@@ -146,7 +156,10 @@ async function searchApprovals(supabase: Supa, q: string): Promise<SearchResultD
     .ilike("item", q)
     .limit(5);
   if (error) throw new Error(error.message);
-  const names = await projectNames(supabase, data.map((a) => a.project_id));
+  const names = await projectNames(
+    supabase,
+    data.map((a) => a.project_id)
+  );
   return data.map((a) => ({
     id: a.id,
     category: "Approvals" as const,
@@ -163,7 +176,10 @@ async function searchBills(supabase: Supa, q: string, isAdmin: boolean): Promise
     : await supabase.from("v_bill_client").select("id, bill_no, project_id").ilike("bill_no", q).limit(5);
   if (error) throw new Error(error.message);
   const rows = data as Row[];
-  const names = await projectNames(supabase, rows.map((r) => r.project_id));
+  const names = await projectNames(
+    supabase,
+    rows.map((r) => r.project_id)
+  );
   return rows.map((r) => ({
     id: r.id,
     category: "Bills" as const,
@@ -180,7 +196,10 @@ async function searchInventory(supabase: Supa, q: string, isAdmin: boolean): Pro
     : await supabase.from("v_inventory_site").select("id, name, project_id").ilike("name", q).limit(5);
   if (error) throw new Error(error.message);
   const rows = data as Row[];
-  const names = await projectNames(supabase, rows.map((r) => r.project_id).filter((id): id is string => id != null));
+  const names = await projectNames(
+    supabase,
+    rows.map((r) => r.project_id).filter((id): id is string => id != null)
+  );
   return rows.map((r) => ({
     id: r.id,
     category: "Inventory" as const,
