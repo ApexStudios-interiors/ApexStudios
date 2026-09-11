@@ -1,8 +1,10 @@
 import { Badge } from "@/components/ui/Badge";
-import type { ApprovalStatus, BillStatus, RequestStatus } from "@/lib/types";
+import type { BillStatus, RequestStatus } from "@/lib/types";
 import { type InventoryStatus, type PhaseStatus } from "@/lib/logic";
 import type { StockRequestStatus } from "@/features/stock/service";
 import type { InventoryStatus as StockLevel } from "@/features/inventory/service";
+import { approvalTypeLabel, type ApprovalStatus } from "@/features/approvals/service";
+import type { ApprovalType } from "@/features/approvals/schema";
 
 export function RequestStatusBadge({ status }: { status: RequestStatus }) {
   switch (status) {
@@ -19,15 +21,26 @@ export function RequestStatusBadge({ status }: { status: RequestStatus }) {
   }
 }
 
+/**
+ * build/08-approvals.md §2.5. Real `approvals.status` (lowercase enum,
+ * `features/approvals/service.ts`) — `ApprovalTable.tsx` was this badge's
+ * only caller and is fully converted in the same build, so this takes the
+ * real shape directly rather than growing a second, `StockRequestStatusBadge`
+ * -style name next to a now-dead mock version.
+ */
 export function ApprovalStatusBadge({ status }: { status: ApprovalStatus }) {
   switch (status) {
-    case "Pending":
+    case "pending":
       return <Badge variant="warning">Pending</Badge>;
-    case "Approved":
+    case "approved":
       return <Badge variant="success">Approved</Badge>;
-    case "Rejected":
+    case "rejected":
       return <Badge variant="destructive">Rejected</Badge>;
   }
+}
+
+export function ApprovalTypeBadge({ type }: { type: ApprovalType }) {
+  return <Badge variant="outline">{approvalTypeLabel(type)}</Badge>;
 }
 
 export function BillStatusBadge({ status }: { status: BillStatus }) {

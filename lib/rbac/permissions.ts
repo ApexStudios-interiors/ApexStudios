@@ -45,6 +45,10 @@ export const CAN = {
 
   // ── Approvals ────────────────────────────────────────────────────────────
   requestApproval: ["owner", "admin", "site"],
+  // Not in 01-hld.md §7.1's own matrix — build/08-approvals.md §2.4's own
+  // row, same roles as requestApproval, "Pending approvals only" enforced by
+  // status (features/approvals/service.ts's canAddPhotos), not by role.
+  addSamplePhotos: ["owner", "admin", "site"],
   // Admin is excluded deliberately. 01-hld.md §7.1 — an Admin self-certifying
   // destroys the audit value of the whole chain. Do not add an Admin bypass,
   // including for testing.

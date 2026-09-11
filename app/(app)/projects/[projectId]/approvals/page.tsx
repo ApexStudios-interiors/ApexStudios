@@ -1,25 +1,55 @@
-"use client";
-
-import { useState } from "react";
-import { useApp } from "@/context/AppContext";
-import { useProject } from "@/hooks/useProject";
-import { isClientRole } from "@/lib/logic";
+import { notFound } from "next/navigation";
+import { requireSession } from "@/lib/auth/session";
+import { getProjectHeader } from "@/features/projects/queries";
+import { getApprovalsForProject } from "@/features/approvals/queries";
+import { can } from "@/lib/rbac/permissions";
+import type { ApprovalStatus } from "@/features/approvals/service";
 import { ApprovalTable } from "@/components/domain/ApprovalTable";
+import { ApprovalStatusTabs } from "@/components/domain/ApprovalStatusTabs";
+import { OpenDialogButton } from "@/components/domain/OpenDialogButton";
 import { Card } from "@/components/ui/Card";
-import { Tabs } from "@/components/ui/Tabs";
-import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 
-const FILTERS = ["Pending", "Approved", "Rejected", "All"];
+const VALID_STATUSES: ApprovalStatus[] = ["pending", "approved", "rejected"];
 
-export default function ApprovalsPage() {
-  const { data, role, openDialog } = useApp();
-  const project = useProject();
-  const client = isClientRole(role);
-  const [filter, setFilter] = useState("Pending");
+/**
+ * build/08-approvals.md §2.5 step 1. Same shape as `stock/page.tsx`
+ * (Build 07): status tabs are a thin client boundary that navigates on
+ * change, the page itself stays a plain Server Component reading
+ * `searchParams`. Visible to all three roles (01-hld.md §7.1) — unlike
+ * `/stock`, there is no `forbidden()` gate here.
+ */
+export default async function ApprovalsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ status?: string }>;
+}) {
+  const { projectId } = await params;
+  const { status: rawStatus } = await searchParams;
+  const session = await requireSession();
+  const effectiveRole = session.impersonating?.role ?? session.role;
 
-  const all = data.approvals.filter((a) => a.proj === project.id);
-  const list = filter === "All" ? all : all.filter((a) => a.status === filter);
+  const header = await getProjectHeader(session, projectId);
+  if (!header) notFound();
+
+  // "" (All, `ApprovalStatusTabs`'s own explicit value) is a valid,
+  // deliberate non-filter. An absent param defaults to "pending" — and so
+  // does anything else that isn't recognized (a stale link carrying the old
+  // mock's capitalized values, a typo), rather than being silently treated
+  // as the same thing as "All": found live in review, an invalid param was
+  // indistinguishable from the deliberate All click.
+  const status: ApprovalStatus | undefined =
+    rawStatus === ""
+      ? undefined
+      : rawStatus !== undefined && VALID_STATUSES.includes(rawStatus as ApprovalStatus)
+        ? (rawStatus as ApprovalStatus)
+        : "pending";
+
+  const list = await getApprovalsForProject(session, projectId, status ? { status } : {});
+  const client = effectiveRole === "client";
+  const basePath = `/projects/${projectId}/approvals`;
 
   return (
     <div>
@@ -33,22 +63,19 @@ export default function ApprovalsPage() {
           </p>
         </div>
         <div className="ml-auto flex gap-2">
-          {!client && (
-            <Button
-              variant="primary"
-              onClick={() => openDialog({ kind: "newApproval", projectId: project.id })}
-            >
+          {can(effectiveRole, "requestApproval") && (
+            <OpenDialogButton dialog={{ kind: "newApproval", projectId }} variant="primary">
               <Icon name="plus" className="w-[15px] h-[15px]" />
               Request Approval
-            </Button>
+            </OpenDialogButton>
           )}
         </div>
       </div>
 
-      <Tabs items={FILTERS.map((s) => ({ key: s, label: s }))} value={filter} onChange={setFilter} />
+      <ApprovalStatusTabs basePath={basePath} status={status ?? ""} />
 
       <Card>
-        <ApprovalTable project={project} list={list} />
+        <ApprovalTable projectId={projectId} list={list} role={effectiveRole} />
       </Card>
     </div>
   );

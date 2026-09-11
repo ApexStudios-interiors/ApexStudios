@@ -966,6 +966,114 @@ the build; this pass found several more. Fixed:
   `Promise.all`). All real, none correctness bugs — noted for a follow-up cleanup pass rather than
   reworked under merge pressure across a dozen files at once.
 
+### D41 — the attachments-freeze RLS policy required a PENDING approval to already exist, blocking the create flow
+
+**Finding, caught while implementing `features/approvals/actions.ts`** (build/08-approvals.md §2.2/§2.4),
+not by any test written before this point — the first round of live verification for the freeze
+policy only ever exercised it against an approval that already existed. Migration
+`20260915090003_freeze_approval_attachments.sql`'s own predicate was `entity_type <> 'approval' or
+exists (select 1 from approvals a where a.id = entity_id and a.status = 'pending')` — read literally,
+an attachment insert against an approval id that doesn't exist YET (no row at all) fails that `exists`
+check exactly like one against a decided approval does. That is precisely `NewApprovalDialog`'s own
+create flow: `rpc_create_approval` takes a client-generated `p_id` so `FileUploader`'s sample photos
+can upload and confirm *before* the row exists (0035's own comment, the same pattern `daily_updates`
+established in Build 06) — every one of those uploads would have been silently refused.
+
+**Fixed** in `supabase/migrations/20260915090004_fix_approval_attachment_freeze.sql`: the predicate is
+`not exists (select 1 from approvals a where a.id = entity_id and a.status <> 'pending')` instead — this
+is vacuously true (and therefore allows the insert) when no row exists yet, and only becomes false once
+a row exists and has moved past pending. Applied via `pnpm exec supabase db push`, per D38's own lesson;
+never edited the already-applied 0036 in place, per AGENTS.md database rule 1. Re-verified live against
+`apex-dev` from real signed-in sessions: insert-before-create succeeds, insert-while-pending succeeds,
+insert-after-decided is refused, delete-after-decided is refused even within the 24-hour uploader
+window. Both directions are now also regression-tested in `tests/integration/approvals.test.ts`.
+
+### D42 — the Approvals "All" tab silently re-defaulted to "Pending"
+
+**Finding, caught by the client mobile-viewport Playwright journey** (`e2e/approvals-journey.spec.ts`),
+not by unit or integration tests — this is a client-navigation bug, not a data or RLS one.
+`ApprovalStatusTabs`'s "All" tab (`key: ""`) built its URL as `nextStatus ? `${basePath}?status=${nextStatus}` : basePath` — for `nextStatus = ""` that is falsy, so it navigated to the bare
+`basePath` with **no** `status` query param at all. The page itself treats an *absent* `status` param
+as "never visited this page before, default to Pending" (`rawStatus === undefined ? "pending" : ...`)
+— a necessary rule so a fresh visit opens on Pending, not All, per `docs/ui-guide.md` §6.10's own
+default. Those two rules collided: clicking "All" from any other tab produced a URL indistinguishable
+from a fresh visit, so the page silently bounced back to the Pending-filtered view instead of showing
+every row — a real, user-facing defect (a client trying to see approval history since decided rows
+leave the Pending tab entirely) that would have shipped with zero automated coverage catching it, since
+every other test in this build filtered by an explicit status rather than exercising the tab click
+itself.
+
+**Fixed** in `components/domain/ApprovalStatusTabs.tsx`: `navigate` always sends an explicit
+`?status=${nextStatus}`, never a bare path — `?status=` (empty) is now distinguishable from no param
+at all. Verified live via the Playwright journey that found it (approve, then check the row under
+"All"), and via the admin supersession journey (which needs both a rejected and a pending row visible
+together).
+
+### Review findings before merge — fixed and deferred
+
+**Before merging this PR**, a full multi-dimensional review (correctness, security/AGENTS.md
+conventions, removed behavior, reuse/duplication, efficiency, simplification, root-cause altitude) was
+run across the complete diff, five independent passes. D41/D42 above were both found and fixed *during*
+the build; this pass confirmed both are genuinely correct and found several more. Fixed:
+
+- **Double-supersession race**: `rpc_create_approval` read the superseded approval's status without a
+  row lock and never checked whether it already had a successor — two concurrent "Raise revised
+  approval" calls against the same rejected row (a double-click, or two sessions racing) could both
+  succeed, and `features/approvals/queries.ts`'s own `supersededByRefNoBySupersedesId` map (keyed by
+  `supersedes_id`) would silently drop one of the two forward links from the UI. Fixed in migration
+  `20260915090005_fix_approval_supersession_race.sql`: `select ... for update` on the target, plus an
+  "already superseded" existence check evaluated only after that lock is held (so the second caller's
+  check runs against the first caller's now-committed insert, not a stale snapshot) — the same tool
+  `rpc_transition_stock_request`/`rpc_decide_approval` already use for this exact race class. Verified
+  live (concurrent `Promise.all` calls, exactly one succeeds) and regression-tested in
+  `tests/integration/approvals.test.ts`.
+- **Missing `deleted_at is null` filters** in `features/approvals/queries.ts`: `fetchPackageNames`'s
+  admin branch, `fetchPhaseNames`'s admin branch, `fetchProfileNames`, and the `missingSupersedeIds`
+  fallback lookup all read base tables without the filter AGENTS.md database rule 7 requires
+  unconditionally ("every query filters `deleted_at is null`"). Fixed — all four now filter. (The
+  identical `fetchPackageNames`/`fetchProfileNames` shape in `features/updates/queries.ts` and
+  `features/stock/queries.ts` has the same gap and predates this build; not fixed here as it's outside
+  this PR's diff, flagged below as pre-existing, systemic debt.)
+- **D41's own fix didn't account for a soft-deleted approval**: the widened freeze predicate
+  (`not exists (... where status <> 'pending')`) is vacuously true for a row that exists, was
+  soft-deleted, but whose `status` was never changed off `'pending'` — nothing deletes an approval today,
+  but the column exists for a reason. Fixed in migration
+  `20260915090006_freeze_approval_attachments_deleted.sql`: the predicate now also treats
+  `deleted_at is not null` as frozen.
+- `ApprovalTable.tsx`'s "Raise revised approval" gate re-implemented `canSupersede(status)` inline as
+  `a.status === "rejected"` instead of using the pure, unit-tested helper — contradicting the file's own
+  doc comment, which already claimed per-row actions come from `canDecide`/`canAddPhotos`/`canSupersede`
+  on the DTO. Fixed: `ApprovalDTO` now carries a real `canSupersede` field (`getApprovalsForProject`),
+  and the table reads it instead of re-deriving the rule.
+- An invalid or unrecognized `status` query param (a stale link using the pre-conversion mock's
+  capitalized values, a typo) was indistinguishable from the deliberate "All" tab click and silently
+  showed every approval instead of falling back to the documented "pending" default. Fixed in
+  `approvals/page.tsx`: only the exact empty string (`ApprovalStatusTabs`'s own explicit "All" value)
+  means no filter; anything else unrecognized now falls back to "pending", same as an absent param.
+
+**Checked and confirmed not an issue**: `addSamplePhotos` has no cumulative per-approval photo-count
+cap of its own — but `requestUploadUrl` (`features/attachments/actions.ts`) already counts *all*
+existing, non-deleted attachments for the entity before issuing a new upload URL, so the real
+`MAX_PHOTOS_PER_ENTITY` enforcement is already at the shared upload layer every entity type goes
+through; a second copy in `addSamplePhotos` would be redundant.
+
+**Deferred** (real, not correctness/security-critical, not reworked under merge pressure):
+
+- The `fetchPackageNames`/`fetchPhaseNames`/`fetchProfileNames`/`fetchAttachments` helpers in
+  `features/approvals/queries.ts` are near-verbatim copies of the same-named helpers in
+  `features/updates/queries.ts` and `features/stock/queries.ts` — a pre-existing duplication pattern
+  this build continues rather than originates; a shared-helper extraction is a follow-up cleanup, not
+  a per-PR fix (same reasoning Build 07's own review entry gives for its equivalent finding).
+- The client-role Approvals nav badge in `components/layout/Sidebar.tsx` still counts from
+  `AppContext`'s frozen mock `data.approvals`, exactly like the Stock and Bills nav badges next to it
+  (`data.requests`, `data.bills`) — a pre-existing, cross-domain gap since Build 04, not something this
+  build introduced or is positioned to fix in isolation without converting all three at once.
+- `missingSupersedeIds`'s fallback lookup runs as one extra sequential round trip after the main
+  `Promise.all` rather than being folded into it — a real, minor inefficiency on the rare page view
+  where a superseded target falls outside the current filter/page.
+- `NewApprovalDialog`'s `supersedes.type` prop is cast to `ApprovalType` without runtime validation;
+  low risk since its only source today is a live `ApprovalDTO.type` read straight off the enum column.
+
 ---
 
 ## Still open

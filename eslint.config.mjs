@@ -151,6 +151,13 @@ const eslintConfig = defineConfig([
       // assertion — including the lifecycle journey's own multi-role
       // transitions — runs through a real signed-in session via the UI.
       "e2e/stock-inventory-journey.spec.ts",
+      // Same exemption, same reason: seeding throwaway pending/rejected
+      // approvals and a fixture attachment row directly (so the approve,
+      // reject and supersession journeys don't depend on ordering against
+      // the seed's own five approvals), and cleaning up afterwards. Every
+      // assertion — including the client's mobile-viewport lightbox and
+      // decision journey — runs through a real signed-in session via the UI.
+      "e2e/approvals-journey.spec.ts",
     ],
     rules: { "no-restricted-imports": ["error", { patterns: [...RLS_BYPASS] }] },
   },

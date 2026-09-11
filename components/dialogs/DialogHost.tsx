@@ -10,6 +10,7 @@ import { NewRequestDialog } from "./NewRequestDialog";
 import { RejectStockRequestDialog } from "./RejectStockRequestDialog";
 import { NewApprovalDialog } from "./NewApprovalDialog";
 import { ApprovalPhotosDialog } from "./ApprovalPhotosDialog";
+import { DecideApprovalDialog } from "./DecideApprovalDialog";
 import { PostUpdateDialog } from "./PostUpdateDialog";
 import { EditUpdateDialog } from "./EditUpdateDialog";
 import { BillUploadDialog } from "./BillUploadDialog";
@@ -38,9 +39,25 @@ export function DialogHost() {
     case "rejectStockRequest":
       return <RejectStockRequestDialog requestId={dialog.requestId} />;
     case "newApproval":
-      return <NewApprovalDialog projectId={dialog.projectId} moduleId={dialog.moduleId} />;
+      return (
+        <NewApprovalDialog
+          projectId={dialog.projectId}
+          moduleId={dialog.moduleId}
+          supersedes={dialog.supersedes}
+        />
+      );
     case "approvalPhotos":
-      return <ApprovalPhotosDialog approvalId={dialog.approvalId} />;
+      return (
+        <ApprovalPhotosDialog
+          approvalId={dialog.approvalId}
+          projectId={dialog.projectId}
+          item={dialog.item}
+        />
+      );
+    case "decideApproval":
+      return (
+        <DecideApprovalDialog approvalId={dialog.approvalId} decision={dialog.decision} item={dialog.item} />
+      );
     case "postUpdate":
       return <PostUpdateDialog projectId={dialog.projectId} moduleId={dialog.moduleId} />;
     case "editUpdate":

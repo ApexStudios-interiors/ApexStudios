@@ -1,38 +1,26 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useApp } from "@/context/AppContext";
 import type { Role } from "@/lib/rbac/roles";
 import { ApprovalTable } from "@/components/domain/ApprovalTable";
 import { ReqTable } from "@/components/domain/ReqTable";
 import { UpdateList } from "@/components/domain/UpdateList";
 import type { UpdateDTO } from "@/features/updates/queries";
 import type { StockRequestDTO } from "@/features/stock/queries";
+import type { ApprovalDTO } from "@/features/approvals/queries";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 
 /**
- * The one dashboard card not yet converted off `AppContext`
- * (build/04-projects-packages-phases.md §4.4 step 2):
- *   TODO(build-08): Pending Approvals — features/approvals/ lands there.
- * (Corrected label — this was mislabelled TODO(build-07) by Build 04; Build 07
- * is entirely stock/inventory/notifications/search and never touches
- * approvals. See docs/decisions.md D34.)
+ * build/08-approvals.md §2.5 step 7 converts the last card here off
+ * `AppContext` (build/04-projects-packages-phases.md §4.4 step 2's own
+ * TODO — mislabelled TODO(build-07) by Build 04 and corrected to
+ * TODO(build-08) after Build 07, see docs/decisions.md D34).
  *
- * Pending Requests and Latest Updates are both real data now
- * (build/07-stock-inventory-notifications.md §2.5 step 6 and
- * build/06-files-jobs-daily-updates.md §4.2 respectively) — fetched
- * server-side by the page and passed down as props, since this component is
- * a client boundary for the one still-mock card but has no reason to fetch
- * either of the real ones itself.
- *
- * Does NOT use `useProject()` for the mock Approvals card — that hook throws
- * for a project id absent from the mock array, and a project created through
- * the real `createProject` action has no entry there and never will. Found
- * live: creating a project and landing on its own dashboard crashed to the
- * generic error boundary. The still-mock card simply has nothing to show for
- * such a project, the same honest answer `useLegacyModule` already gives the
- * package tabs still on AppContext.
+ * Pending Approvals, Pending Requests and Latest Updates are all real data
+ * now — fetched server-side by the page and passed down as props. This
+ * component is a client boundary only because `router.push` on "View all"
+ * needs one; it has no reason to fetch anything itself.
  */
 export function LegacyDashboardCards({
   projectId,
@@ -40,6 +28,7 @@ export function LegacyDashboardCards({
   isSite,
   isAdmin,
   role,
+  pendingApprovals,
   pendingRequests,
   updates,
 }: {
@@ -48,20 +37,15 @@ export function LegacyDashboardCards({
   isSite: boolean;
   isAdmin: boolean;
   role: Role;
+  pendingApprovals: ApprovalDTO[];
   pendingRequests: StockRequestDTO[];
   updates: UpdateDTO[];
 }) {
   const router = useRouter();
-  const { data } = useApp();
-  const project = data.projects.find((p) => p.id === projectId);
-
-  const apPending = project
-    ? data.approvals.filter((a) => a.proj === project.id && a.status === "Pending")
-    : [];
 
   return (
     <>
-      {project && apPending.length > 0 && !isSite && (
+      {pendingApprovals.length > 0 && !isSite && (
         <Card className="mt-5">
           <CardHeader>
             <h3>Pending Approvals</h3>
@@ -75,7 +59,7 @@ export function LegacyDashboardCards({
               </Button>
             </div>
           </CardHeader>
-          <ApprovalTable project={project} list={apPending} />
+          <ApprovalTable projectId={projectId} list={pendingApprovals} role={role} />
         </Card>
       )}
 

@@ -387,6 +387,12 @@ update public.projects set next_bill_seq = 6
 update public.projects set next_sr_seq = 17
  where id = '00000000-0000-4000-8000-0000000000c1' and next_sr_seq < 17;
 
+-- Same pattern again, applied proactively this time (D36 caught it live only
+-- after the fact for next_sr_seq) — five seeded approvals, AP-BHEL-NCH-001
+-- through -005, so next_ap_seq must start past them.
+update public.projects set next_ap_seq = 6
+ where id = '00000000-0000-4000-8000-0000000000c1' and next_ap_seq < 6;
+
 insert into public.bill_lines (id, bill_id, source_type, source_id, description, client_value, pct_billed, amount, internal_cost, sort_order) values
   ('00000000-0000-4000-8000-000000000501', '00000000-0000-4000-8000-000000000401', 'material', '00000000-0000-4000-8000-000000000212', 'SR-BHEL-NCH-012 Ultratech 53 grade cement, 120 bag',  83045, 75,  62283.75,  35550.00, 1),
   ('00000000-0000-4000-8000-000000000502', '00000000-0000-4000-8000-000000000401', 'material', '00000000-0000-4000-8000-000000000211', 'SR-BHEL-NCH-011 Bonding agent, SBR latex, 10 can',    36792, 75,  27594.00,  15750.00, 2),

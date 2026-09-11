@@ -4,6 +4,7 @@ import { getClientBillingStats, getProjectHeader, getSiteStockStats } from "@/fe
 import { getPackagesForProject, type PackagesForProject } from "@/features/packages/queries";
 import { getUpdatesForProject } from "@/features/updates/queries";
 import { getStockRequestsForProject } from "@/features/stock/queries";
+import { getApprovalsForProject } from "@/features/approvals/queries";
 import { BudgetStatBar } from "@/components/domain/BudgetStatBar";
 import { StatBar } from "@/components/ui/StatBar";
 import { ModuleTable } from "@/components/domain/ModuleTable";
@@ -16,12 +17,11 @@ import { formatINRCompact } from "@/lib/money";
 
 /**
  * build/04-projects-packages-phases.md §4.4 step 2. Stat row and Packages
- * table come from the database. `LegacyDashboardCards` is the one client
- * boundary left on this page — Pending Approvals, Pending Requests and Latest
- * Updates still read AppContext (TODO(build-07): Approvals off AppContext.
- * TODO(build-08): Stock Requests and Daily Updates off AppContext) — a Server
- * Component can render a Client Component directly, so the rest of this page
- * stays server-rendered around it.
+ * table come from the database. Pending Approvals, Pending Requests and
+ * Latest Updates are all real data as of build/08-approvals.md — the last of
+ * the three off `AppContext` — fetched here and passed down as props.
+ * `LegacyDashboardCards` stays a client boundary only because "View all"
+ * needs `router.push`, not because anything on it is still mock.
  */
 export default async function ProjectDashboardPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
@@ -40,6 +40,10 @@ export default async function ProjectDashboardPage({ params }: { params: Promise
   const pendingRequests = isClient
     ? []
     : (await getStockRequestsForProject(session, projectId, { status: "pending" })).slice(0, 5);
+  const pendingApprovals = (await getApprovalsForProject(session, projectId, { status: "pending" })).slice(
+    0,
+    5
+  );
 
   return (
     <div>
@@ -98,6 +102,7 @@ export default async function ProjectDashboardPage({ params }: { params: Promise
         isSite={!isMoney && !isClient}
         isAdmin={isMoney}
         role={effectiveRole}
+        pendingApprovals={pendingApprovals}
         pendingRequests={pendingRequests}
         updates={latestUpdates.slice(0, 3)}
       />
