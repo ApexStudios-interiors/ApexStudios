@@ -38,6 +38,8 @@ export const projects = pgTable(
     nextBillSeq: integer("next_bill_seq").notNull().default(1),
     /** Same pattern (D18), for rpc_create_stock_request's SR-{code}-{n} ref_no. */
     nextSrSeq: integer("next_sr_seq").notNull().default(1),
+    /** Same pattern again, for rpc_create_approval's AP-{code}-{n} ref_no. */
+    nextApSeq: integer("next_ap_seq").notNull().default(1),
     ...auditColumns,
   },
   (t) => [index("idx_projects_org_status").on(t.orgId, t.status), index("idx_projects_client").on(t.clientId)]

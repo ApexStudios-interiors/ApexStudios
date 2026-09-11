@@ -828,6 +828,7 @@ export type Database = {
           deleted_at: string | null;
           completed_at: string | null;
           next_sr_seq: number;
+          next_ap_seq: number;
         };
         Insert: {
           id?: string;
@@ -855,6 +856,7 @@ export type Database = {
           deleted_at?: string | null;
           completed_at?: string | null;
           next_sr_seq?: number;
+          next_ap_seq?: number;
         };
         Update: {
           id?: string;
@@ -882,6 +884,7 @@ export type Database = {
           deleted_at?: string | null;
           completed_at?: string | null;
           next_sr_seq?: number;
+          next_ap_seq?: number;
         };
         Relationships: [];
       };
@@ -1453,6 +1456,20 @@ export type Database = {
         };
         Returns: unknown;
       };
+      rpc_create_approval: {
+        Args: {
+          p_id: string;
+          p_project_id: string;
+          p_package_id: string;
+          p_type: Database["public"]["Enums"]["approval_type"];
+          p_item: string;
+          p_phase_id?: string;
+          p_note?: string;
+          p_needed_by?: string;
+          p_supersedes_id?: string;
+        };
+        Returns: unknown;
+      };
       rpc_create_project: {
         Args: {
           p_name: string;
@@ -1476,6 +1493,14 @@ export type Database = {
           p_rate?: number;
           p_needed_by?: string;
           p_note?: string;
+        };
+        Returns: unknown;
+      };
+      rpc_decide_approval: {
+        Args: {
+          p_approval_id: string;
+          p_decision: Database["public"]["Enums"]["approval_status"];
+          p_reason?: string;
         };
         Returns: unknown;
       };
