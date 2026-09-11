@@ -1,27 +1,44 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
-import type { Project, StockRequest } from "@/lib/types";
-import { amt, canApprove, dmy, fmt, isMoney, mno } from "@/lib/logic";
-import { RequestStatusBadge } from "@/components/domain/StatusBadges";
+import type { Role } from "@/lib/rbac/roles";
+import type { StockRequestDTO } from "@/features/stock/queries";
+import { availableTransitions } from "@/features/stock/service";
+import { transitionStockRequest } from "@/features/stock/actions";
+import { dmy } from "@/lib/logic";
+import { formatINR } from "@/lib/money";
+import { StockRequestStatusBadge } from "@/components/domain/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, sub } from "@/components/ui/table";
 import { Button } from "@/components/ui/Button";
 import { Empty } from "@/components/ui/Empty";
 
+/**
+ * build/07-stock-inventory-notifications.md §2.5 step 5: props instead of
+ * `useApp()`. `isAdmin` gates the Value column (AGENTS.md: `rate` never
+ * reaches a non-admin session — the query already omits it, this just
+ * decides whether to render the column at all). Per-row actions come from
+ * `availableTransitions(status, role)` — one rule, shared by the button set
+ * here and by its own unit tests, never re-decided in the UI (build §5:
+ * "Do not implement transitions in the UI. The RPC decides; the UI
+ * reflects.").
+ */
 export function ReqTable({
-  project,
-  reqs,
-  moduleContext,
+  requests,
+  role,
+  isAdmin,
 }: {
-  project: Project;
-  reqs: StockRequest[];
-  moduleContext?: boolean;
+  requests: StockRequestDTO[];
+  role: Role;
+  isAdmin: boolean;
 }) {
-  const { role, setRequestStatus } = useApp();
-  const money = isMoney(role);
+  const { openDialog } = useApp();
+  const router = useRouter();
+  const transition = useAction(transitionStockRequest, { onSuccess: () => router.refresh() });
 
-  if (!reqs.length) {
+  if (!requests.length) {
     return (
       <TableWrap>
         <thead>
@@ -29,7 +46,7 @@ export function ReqTable({
             <th className={th}>Request</th>
             <th className={th}>Material</th>
             <th className={thNum}>Qty</th>
-            {money && <th className={thNum}>Value</th>}
+            {isAdmin && <th className={thNum}>Value</th>}
             <th className={th}>Needed By</th>
             <th className={th}>Status</th>
             <th className={th}></th>
@@ -37,7 +54,7 @@ export function ReqTable({
         </thead>
         <tbody>
           <tr>
-            <td className={td} colSpan={money ? 7 : 6}>
+            <td className={td} colSpan={isAdmin ? 7 : 6}>
               <Empty>No requests.</Empty>
             </td>
           </tr>
@@ -53,69 +70,67 @@ export function ReqTable({
           <th className={th}>Request</th>
           <th className={th}>Material</th>
           <th className={thNum}>Qty</th>
-          {money && <th className={thNum}>Value</th>}
+          {isAdmin && <th className={thNum}>Value</th>}
           <th className={th}>Needed By</th>
           <th className={th}>Status</th>
           <th className={th}></th>
         </tr>
       </thead>
       <tbody>
-        {reqs.map((r) => {
-          const m = project.modules.find((x) => x.id === r.mod);
-          const k = m?.packages.find((x) => x.id === r.pkg);
-          let action: React.ReactNode = null;
-          if (r.status === "Pending" && canApprove(role)) {
-            action = (
-              <div className="flex gap-1.5 flex-wrap justify-end">
-                <Button variant="primary" size="sm" onClick={() => setRequestStatus(r.id, "Approved")}>
-                  Approve
-                </Button>
-                <Button variant="destructive" size="sm" onClick={() => setRequestStatus(r.id, "Rejected")}>
-                  Reject
-                </Button>
-              </div>
-            );
-          } else if (r.status === "Approved" && (role === "admin" || role === "owner")) {
-            action = (
-              <Button size="sm" onClick={() => setRequestStatus(r.id, "Ordered")}>
-                Mark Ordered
-              </Button>
-            );
-          } else if (r.status === "Ordered" && (role === "admin" || role === "owner" || role === "site")) {
-            action = (
-              <Button size="sm" onClick={() => setRequestStatus(r.id, "Delivered")}>
-                Mark Delivered
-              </Button>
-            );
-          }
+        {requests.map((r) => {
+          const transitions = availableTransitions(r.status, role);
           return (
             <tr key={r.id}>
               <td className={td}>
-                {r.id}
+                {r.refNo}
                 <span className={sub}>
-                  {dmy(r.raised)} · {r.by}
+                  {dmy(r.createdAt.slice(0, 10))} · {r.requestedByName}
                 </span>
               </td>
               <td className={td}>
-                {r.item}
-                <span className={sub}>
-                  {!moduleContext && m ? `${mno(project, m)} ${m.name} · ` : ""}
-                  {k ? k.name : ""}
-                </span>
+                {r.materialName}
+                <span className={sub}>{r.packageName ?? ""}</span>
               </td>
               <td className={tdNum}>
                 {r.qty.toLocaleString("en-IN")} {r.unit}
               </td>
-              {money && (
+              {isAdmin && (
                 <td className={tdNum}>
-                  {amt(r) ? fmt(amt(r)) : <span className="text-muted-foreground">–</span>}
+                  {r.value != null ? formatINR(r.value) : <span className="text-muted-foreground">–</span>}
                 </td>
               )}
-              <td className={td}>{dmy(r.need)}</td>
+              <td className={td}>{dmy(r.neededBy)}</td>
               <td className={td}>
-                <RequestStatusBadge status={r.status} />
+                <StockRequestStatusBadge status={r.status} />
               </td>
-              <td className={td}>{action}</td>
+              <td className={td}>
+                {transitions.length > 0 && (
+                  <div className="flex gap-1.5 flex-wrap justify-end">
+                    {transitions.map((t) =>
+                      t.to === "rejected" ? (
+                        <Button
+                          key={t.to}
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => openDialog({ kind: "rejectStockRequest", requestId: r.id })}
+                        >
+                          {t.label}
+                        </Button>
+                      ) : (
+                        <Button
+                          key={t.to}
+                          variant={t.to === "approved" ? "primary" : "default"}
+                          size="sm"
+                          disabled={transition.isPending}
+                          onClick={() => transition.execute({ requestId: r.id, toStatus: t.to })}
+                        >
+                          {t.label}
+                        </Button>
+                      )
+                    )}
+                  </div>
+                )}
+              </td>
             </tr>
           );
         })}

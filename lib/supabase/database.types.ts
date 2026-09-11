@@ -827,6 +827,7 @@ export type Database = {
           updated_by: string | null;
           deleted_at: string | null;
           completed_at: string | null;
+          next_sr_seq: number;
         };
         Insert: {
           id?: string;
@@ -853,6 +854,7 @@ export type Database = {
           updated_by?: string | null;
           deleted_at?: string | null;
           completed_at?: string | null;
+          next_sr_seq?: number;
         };
         Update: {
           id?: string;
@@ -879,6 +881,28 @@ export type Database = {
           updated_by?: string | null;
           deleted_at?: string | null;
           completed_at?: string | null;
+          next_sr_seq?: number;
+        };
+        Relationships: [];
+      };
+      rate_limits: {
+        Row: {
+          profile_id: string;
+          action: string;
+          window_start: string;
+          count: number;
+        };
+        Insert: {
+          profile_id: string;
+          action: string;
+          window_start?: string;
+          count?: number;
+        };
+        Update: {
+          profile_id?: string;
+          action?: string;
+          window_start?: string;
+          count?: number;
         };
         Relationships: [];
       };
@@ -1405,6 +1429,22 @@ export type Database = {
         };
         Returns: boolean;
       };
+      rpc_adjust_inventory: {
+        Args: {
+          p_item_id: string;
+          p_new_qty: number;
+          p_reason: string;
+        };
+        Returns: unknown;
+      };
+      rpc_check_rate_limit: {
+        Args: {
+          p_action: string;
+          p_max_per_window: number;
+          p_window_seconds?: number;
+        };
+        Returns: boolean;
+      };
       rpc_claim_jobs: {
         Args: {
           p_names: unknown;
@@ -1424,6 +1464,21 @@ export type Database = {
         };
         Returns: string;
       };
+      rpc_create_stock_request: {
+        Args: {
+          p_project_id: string;
+          p_package_id: string;
+          p_material_name: string;
+          p_qty: number;
+          p_unit: string;
+          p_phase_id?: string;
+          p_inventory_item_id?: string;
+          p_rate?: number;
+          p_needed_by?: string;
+          p_note?: string;
+        };
+        Returns: unknown;
+      };
       rpc_enqueue_job: {
         Args: {
           p_name: string;
@@ -1440,6 +1495,16 @@ export type Database = {
           p_error?: string;
         };
         Returns: unknown;
+      };
+      rpc_inventory_drift: {
+        Args: Record<string, never>;
+        Returns: { item_id: string; name: string; cached_qty: number; ledger_qty: number }[];
+      };
+      rpc_inventory_stats: {
+        Args: {
+          p_project_id?: string;
+        };
+        Returns: { total_items: number; total_value: number; low_count: number; critical_count: number }[];
       };
       rpc_log_impersonation: {
         Args: {
@@ -1465,6 +1530,14 @@ export type Database = {
         Args: {
           p_task_id: string;
           p_pct: number;
+        };
+        Returns: unknown;
+      };
+      rpc_transition_stock_request: {
+        Args: {
+          p_request_id: string;
+          p_to_status: Database["public"]["Enums"]["stock_request_status"];
+          p_note?: string;
         };
         Returns: unknown;
       };

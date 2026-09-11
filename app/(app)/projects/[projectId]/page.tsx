@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth/session";
 import { getClientBillingStats, getProjectHeader, getSiteStockStats } from "@/features/projects/queries";
 import { getPackagesForProject, type PackagesForProject } from "@/features/packages/queries";
 import { getUpdatesForProject } from "@/features/updates/queries";
+import { getStockRequestsForProject } from "@/features/stock/queries";
 import { BudgetStatBar } from "@/components/domain/BudgetStatBar";
 import { StatBar } from "@/components/ui/StatBar";
 import { ModuleTable } from "@/components/domain/ModuleTable";
@@ -34,6 +35,11 @@ export default async function ProjectDashboardPage({ params }: { params: Promise
   const effectiveRole = session.impersonating?.role ?? session.role;
   const isMoney = effectiveRole === "owner" || effectiveRole === "admin";
   const isClient = effectiveRole === "client";
+  // 01-hld.md §7.1: Client has no stock visibility at all — the query itself
+  // isn't even worth running for that role.
+  const pendingRequests = isClient
+    ? []
+    : (await getStockRequestsForProject(session, projectId, { status: "pending" })).slice(0, 5);
 
   return (
     <div>
@@ -90,6 +96,9 @@ export default async function ProjectDashboardPage({ params }: { params: Promise
         projectId={projectId}
         isClient={isClient}
         isSite={!isMoney && !isClient}
+        isAdmin={isMoney}
+        role={effectiveRole}
+        pendingRequests={pendingRequests}
         updates={latestUpdates.slice(0, 3)}
       />
     </div>

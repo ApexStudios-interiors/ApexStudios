@@ -36,6 +36,8 @@ export const projects = pgTable(
     progressPct: smallint("progress_pct").notNull().default(0),
     /** Incremented under a row lock in rpc_create_bill; count(*)+1 would race. */
     nextBillSeq: integer("next_bill_seq").notNull().default(1),
+    /** Same pattern (D18), for rpc_create_stock_request's SR-{code}-{n} ref_no. */
+    nextSrSeq: integer("next_sr_seq").notNull().default(1),
     ...auditColumns,
   },
   (t) => [index("idx_projects_org_status").on(t.orgId, t.status), index("idx_projects_client").on(t.clientId)]

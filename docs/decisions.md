@@ -669,6 +669,305 @@ renders on every page. All admin baselines were refreshed together for this one,
 
 ---
 
+### D28 — Stock request reference number format
+
+**Question:** `build/07-stock-inventory-notifications.md` §0 requires a final format before the
+first one is issued. The prototype uses `SR-014`; `02-lld.md`'s own schema comment shows
+`SR-BHEL-NCH-014`.
+**Answered:** 2026-09-12 by Voola
+**Answer:** `SR-{project_code}-{n}`, one counter per project — the exact pattern D6 already
+established for bill numbers (`RA-{project_code}-{n}`).
+**Consequence:** `projects` gains `next_sr_seq`, incremented under the same per-project row lock
+`rpc_create_bill` already takes for `next_bill_seq`. `rpc_create_stock_request` is the only path
+that can allocate one — never a `count(*) + 1` in application code, which races.
+
+### D29 — Central store and transfers, in or out for v1
+
+**Question:** `inventory_items.project_id` is nullable, meaning `NULL` = a central store. Does
+Apex actually hold central stock, and if so, are site↔store transfers needed?
+**Answered:** 2026-09-12 by Voola
+**Answer:** No central store for v1. Every `inventory_items` row keeps a real `project_id`.
+**Consequence:** No transfer movement type, no transfer RPC — both stay out of scope, matching
+`01-hld.md` §2.1's own boundary. C2 (delivery challans for warehouse→site transfers,
+`01-hld.md` §8.4 item 4) stays unresolved but genuinely doesn't block anything now: it was only
+ever a blocker for transfers, and there are none. Revisit both together if a central store is
+ever wanted.
+
+**Also confirmed, not re-litigated because the source documents already settle them without
+ambiguity:** who marks Delivered (Admin or Site — `01-hld.md` §7.1's own permission matrix
+already says so explicitly) and rate visibility (`stock_requests.rate` admin-only — same table).
+
+### D30 — `inventory_items.unit_cost`: the build file's own wording contradicts AGENTS.md
+
+**Finding, not a question put to Voola.** `build/07-stock-inventory-notifications.md` §2.3 says
+*"`unit_cost` is admin/site, never client"* — but `AGENTS.md` names `unit_cost` explicitly, by
+that exact column name, in its list of columns that must never reach a non-Admin session
+("internal_amount, unit_cost, rate, internal_cost_amount or margin_amount"). AGENTS.md's own
+precedence rule is that it wins over every other document, always. Both role-scoped inventory
+views already agree with AGENTS.md, not the build file: `v_inventory_status` (0013, admin-only in
+practice — carries `unit_cost`/`stock_value`) and `v_inventory_site` (0014, its own comment: "A
+supervisor needs to know that cement is low, not what it cost"). Read as "the column exists in
+the admin/site inventory *feature area*, but is never actually exposed to Site" — `unit_cost` is
+implemented admin-only throughout `features/inventory/`, per AGENTS.md and per the views that
+already existed before this build started.
+
+### D31 — What does `movement_direction`'s 'adjust' value actually mean?
+
+**Finding, resolved while writing `rpc_adjust_inventory`.** `stock_movements.qty` must be positive
+(`movements_qty_ck`), and `direction` is the only column that could carry a correction's sign.
+The build file's own reconcile formula — "recompute the quantity from `stock_movements`: Σ in −
+Σ out ± adjust" — reads as if `adjust` were a third, separately-summed bucket, but nothing in the
+table lets a third bucket's own rows carry a sign independent of `direction` itself.
+**Resolved:** an adjustment is recorded as an ordinary `'in'` or `'out'` movement — whichever sign
+the correction actually is — tagged `ref_type = 'adjustment'` to distinguish it from a
+stock-request-driven movement. `direction`'s `'adjust'` enum value (migration 0006) is left
+defined but unused by any application code; removing an already-applied enum value isn't
+worthwhile for a value nothing else depends on. **Consequence:** `inventory.reconcile`'s recompute
+is one formula, `Σ in − Σ out` grouped by `inventory_item_id`, with nothing structurally different
+about a correction row — simpler, and loses no information the build file's own formula needed
+either.
+
+### D32 — Seeded inventory had no ledger behind it
+
+**Finding, resolved live before writing `inventory.reconcile`.** All eight of Build 02's seeded
+`inventory_items` carry a `qty_on_hand` inserted directly; zero `stock_movements` rows existed for
+any of them, and none of the three seeded "delivered" `stock_requests` had `inventory_item_id`
+linked. Confirmed live against `apex-dev`. Build 07's own reconcile job recomputes `qty_on_hand`
+from `Σ in − Σ out` and alerts on any disagreement (D31) — with no ledger behind the seed, it
+would have alerted on all eight items the first time it ever ran, which is noise, not a finding.
+**Fixed in `supabase/seed.sql`** (amending Build 02's file, not this build's own migrations): the
+three delivered requests now link `inventory_item_id`; one `'in'`/`ref_type='adjustment'` opening
+movement per item, sized to match its own seeded `qty_on_hand` exactly, stands in for whatever
+real delivery-then-consumption history was never specified — the same thing a real opening-balance
+migration would write (build §0's own phrase for it), just applied to the dev seed too. Verified
+live: ledger and cache now agree exactly for all eight items.
+
+### D33 — `v_notifications`'s `bill_submitted` branch returned zero rows for Client, silently
+
+**Finding, resolved while wiring the live notifications bell.** Migration 0015's `v_notifications`
+is `security_invoker = on`, on the stated assumption that "each branch reads a table whose own
+policy already scopes it correctly." That is false for `public.bills`: its only select policy,
+`bills_select_admin` (0010), requires `is_admin()` — there is no policy granting a Client select on
+the base table at all. Client-facing bill reads go through `v_bill_client` (0014), a
+`security_invoker = off` view that does its own `is_member_of()` scoping specifically because no
+RLS policy on `bills` covers a Client session.
+
+The practical effect, verified live against a real Client JWT (not service_role, which bypasses
+RLS and would have hidden this): a Client session got RLS-filtered to zero `bills` rows before the
+view's own `for_roles` array was ever consulted, so a Client never saw "Bill RA-... awaiting
+certification" — the one notification that matters most, since AGENTS.md's own rule is "Only a
+Client may certify a bill." This predates Build 07 (it was already wrong in 0015) and was never
+caught because nothing had queried `v_notifications` from a real Client session until now.
+
+**Fixed** in `supabase/migrations/20260913090005_fix_notifications_bills.sql`: the branch now reads
+`public.v_bill_client` instead of `public.bills` directly. `is_member_of()` returns true
+unconditionally for `is_admin()` (0002), so Owner/Admin see exactly the same rows as before — this
+is a strict widening for Client, not a second, narrower branch. Verified live with a throwaway
+Client session (real JWT via `signInWithPassword`, cleaned up after): the notification now appears,
+and a direct `select * from bills` from that same session still returns zero rows, confirming the
+base table stays closed and the fix is additive only.
+
+### D34 — `LegacyDashboardCards.tsx`'s two TODOs had their build numbers swapped
+
+**Finding, resolved while converting the dashboard's Pending Requests card.** Build 04's own
+comment read *"TODO(build-07): Pending Approvals... TODO(build-08): Pending Requests"* — the
+opposite of build/07-stock-inventory-notifications.md's own explicit instruction ("§2.5 step 6:
+the dashboard's Pending Requests card — the TODO(build-07) left by Build 04") and of what this
+build actually covers (stock/inventory/notifications/search; it never touches approvals).
+**Fixed**: the Pending Requests card is now real (`getStockRequestsForProject`, passed down as a
+prop from the Server Component page). The Pending Approvals card stays on `AppContext` — approvals
+are out of this build's scope entirely — and its comment now correctly reads
+`TODO(build-08): Pending Approvals`.
+
+### D35 — `v_notifications`'s `stock_request` branch returned zero rows for Site, silently
+
+**Finding, resolved while writing the Playwright bell journey.** The exact same bug class as D33,
+one branch over. `stock_request` read `public.stock_requests` directly; that table's only select
+policy, `sr_select_admin` (0007), requires `is_admin()` — there is no policy granting Site a
+select on the base table at all. Site-facing reads go through `v_stock_request_site` (0014), a
+`security_invoker = off` view that does its own `is_member_of()` scoping specifically because no
+RLS policy on `stock_requests` covers Site.
+
+Caught by an actual Playwright run under a real Site session — the notifications bell showed only
+the `inventory_low` items (5) and zero `stock_request` ones, even though both seeded pending
+requests were confirmed still present in the table. It had been masked until then by this build's
+own `tests/integration/notifications.test.ts`, whose Site assertion read
+`stock_request OR inventory_low` — `inventory_low` alone (that table's select policy genuinely does
+include Site) was enough to pass, so `stock_request` being silently empty never surfaced. Fixed in
+the same pass: the assertion is now two separate checks, not one `||`.
+
+**Fixed** in `supabase/migrations/20260914090002_fix_notifications_stock_requests.sql`: the branch
+now reads `public.v_stock_request_site` instead of `public.stock_requests`. `is_member_of()`
+returns true unconditionally for `is_admin()` (0002), so Owner/Admin see exactly the same rows as
+before — a strict widening for Site, not a second, narrower branch. Verified live with a real Site
+JWT: both seeded pending requests now appear; Admin's own count is unchanged.
+
+### D36 — `next_sr_seq` was never advanced past the seeded `SR-BHEL-NCH-0NN` numbers
+
+**Finding, caught by the integration suite's own rate-strip test failing with a raw Postgres
+error.** `next_sr_seq` (migration `20260913090001`) defaulted to 1 for every existing project row,
+including the seeded one that already carries `SR-BHEL-NCH-001` through `-016` (Build 02's own
+seed, inserted directly with hand-picked ref numbers, long before this build's counter column
+existed). The first real `rpc_create_stock_request` calls against that project silently succeeded
+up to seq 8, then failed on seq 9 with `duplicate key value violates unique constraint
+"sr_ref_uq"` — the exact class of bug `next_bill_seq`'s own seed fix (`supabase/seed.sql`, "Keep
+projects.next_bill_seq ahead of the seeded bills") already exists to prevent, just missed when this
+build added the stock-request counter. **Fixed** in `seed.sql`: `next_sr_seq` is set to 17
+(`update ... where next_sr_seq < 17`), mirroring the bills fix exactly. Verified live.
+
+### D37 — `rate_limits` and `projects.next_sr_seq` were missing from the Drizzle schema
+
+**Finding, caught by `tests/integration/drift.test.ts`.** Both were added to the database by this
+build's migrations but never mirrored into `db/schema/` — a real gap the drift test exists
+specifically to catch (and did). **Fixed**: `db/schema/search.ts` (new, `rateLimits`) and
+`projects.nextSrSeq` added alongside the existing `nextBillSeq`.
+
+### D38 — Applying a migration by raw SQL instead of `supabase db push` let a later CI run silently revert it
+
+**Finding, caught by this build's own PR going through real CI.** Every migration in this build was
+applied to `apex-dev` directly via a `postgres` connection (`sql.unsafe(file)`), not through
+`supabase db push` — this environment has no working `supabase link` session, and D14 already rules
+out a local Postgres to develop against instead. That gets the SQL applied and it can be verified
+live, but it does **not** record the migration into Supabase's own `supabase_migrations.schema_migrations`
+tracking table, which is exactly what `db push` — the tool CI actually runs — consults to decide
+which migration files are still "pending."
+
+The concrete failure: `apex-dev`'s tracking table had never recorded `20260913090005` (D33) or
+either of `20260914090001`/`20260914090002` (search/rate-limit, D35) as applied, despite all three
+having been applied and verified live by hand. CI's first run correctly saw all three as pending,
+applied `20260913090005` fresh (harmless — a `create or replace view`, idempotent on its own), then
+failed on `20260914090001` (`rate_limits` already existing from the earlier raw apply) and stopped.
+But that first, partial `db push` **did** successfully commit and record `20260913090005` — and
+that file's own version of `v_notifications` doesn't contain the later `20260914090002` (D35) fix,
+because D35 was found and fixed *after* D33 was written. Reapplying it overwrote the hand-applied
+D35 fix on the live view, silently reverting Site's stock-request notifications right back to
+broken — caught only because this build's own pgTAP regression test for D35 ran for real in CI
+against the actual post-push state, not because anyone looked at the view again by hand.
+
+`supabase migration repair --status applied <version>` (used to reconcile the tracking table
+afterward for the two still-mismatched versions) fixes the *bookkeeping* but does not re-run or
+verify the file's SQL — repairing `20260914090002` as "applied" without re-running it left the
+now-reverted view exactly as `20260913090005`'s reapplication had left it, until reapplied by hand
+a second time and confirmed via `pg_get_viewdef` and the pgTAP suite together.
+
+**Consequence for every build after this one**: applying a migration by raw SQL against `apex-dev`
+is a legitimate way to get unblocked without a working `supabase link`, but it is not a substitute
+for eventually reconciling it — `supabase migration list --db-url "$SUPABASE_DB_URL"` (no link
+needed) should show zero `local`/`remote` mismatches before a PR is opened, and any live schema
+object touched by more than one migration in the same PR is worth re-verifying with
+`pg_get_viewdef`/`\d` after reconciliation, not just trusted from an earlier verification pass.
+
+### D39 — `seed.sql`'s opening-balance movements (D32) were not idempotent
+
+**Finding, caught by CI running `pnpm db:seed` against the same `apex-dev` database on three
+consecutive runs of this PR.** Every other row in `seed.sql` carries an explicit id and
+`on conflict (id) do nothing`; the six opening-balance `stock_movements` rows added for D32 relied
+on `gen_random_uuid()`'s column default instead, with no conflict target at all — and
+`stock_movements` is append-only by design (AGENTS.md database rule 6), so there was no natural
+constraint to catch a second insert either. Three CI runs meant three inserts: `rpc_inventory_drift`
+reported all six seeded items at exactly 3× their real ledger total, each successive run compounding
+the last silently.
+
+**Fixed**: explicit ids (`...0901`–`...0906`) and `on conflict (id) do nothing`, matching every other
+row in the file. Cleaned up live — deleted all eighteen duplicated rows, re-ran the corrected seed,
+confirmed exactly six rows and zero drift, then ran the seed a second time to confirm it now stays
+at six.
+
+### D40 — `rpc_inventory_stats` computed `total_value` for every caller, relying on the DTO layer to hide it
+
+**Finding, caught by a full multi-dimensional review of this PR before merge (not by any test — nothing
+called this RPC directly from a non-admin session before).** The function's own original comment
+said "the CALLER decides whether to even read the column back... `features/inventory/queries.ts` is
+what discards it" — exactly the "hide it in the UI" pattern AGENTS.md's own rule says to stop and
+flag, not the "never fetch it in the first place" pattern every other admin-only figure in this
+codebase uses (role-scoped views omit the column from their SELECT list entirely; `rpc_create_stock_request`
+strips `rate` before it's ever stored). A Site session calling `rpc_inventory_stats` directly — its
+own grant already permits `authenticated`, which Site is — received the real `unit_cost`-derived
+total regardless of what the app's UI does with it.
+
+**Fixed** in `supabase/migrations/20260914090003_rpc_inventory_stats_admin_only_value.sql`: the RPC
+itself now returns `total_value = null` for a non-admin caller, computed via `case when
+public.is_admin() then ... else null end` — the same defense-in-depth boundary `rpc_create_stock_request`
+already applies to `rate`. Verified live with real Site/Admin sessions; `features/inventory/queries.ts`
+still discards it too, as the second boundary that pattern always keeps.
+
+### Review findings before merge — fixed and deferred
+
+**Before merging this PR**, a full multi-dimensional review (correctness, security/AGENTS.md
+conventions, removed behavior, reuse/duplication, efficiency, simplification, root-cause altitude)
+was run across the complete diff. D33, D35, D36, D38, D39 above were all found and fixed *during*
+the build; this pass found several more. Fixed:
+
+- **D40** above (`rpc_inventory_stats`).
+- `NewRequestDialog`'s `moduleId` prop was accepted but silently unused — the "+ Stock Request"
+  button on a package's own detail page (`PackageDetailActions.tsx`, a live, untouched caller) lost
+  its package pre-select. Restored.
+- `NewRequestDialog`'s Rate-field visibility used `session.role` (the REAL role) instead of the
+  effective role (`useApp().role`) — contradicted its own doc comment and broke the impersonation
+  preview's fidelity for Owner/Admin previewing as Site (not a security hole: the server action
+  separately, correctly, re-derives admin-ness from the real role for the write boundary). Fixed to
+  use the effective role, matching every other read-shaping check in this build.
+- `createStockRequestSchema`'s `rate` field used `z.coerce.number()` before `.optional()` ever saw
+  the value, so a blank Rate input coerced `""` to `0` — a real rate of zero, not "unspecified."
+  Fixed with the same `""` → `undefined` preprocessing shape used elsewhere in the same schema.
+- `features/search/queries.ts`'s `ilike` patterns didn't escape `%`/`_`/`\` in the user's own query
+  text, so a search containing those characters was interpreted as wildcards instead of literal
+  text (e.g. searching "M_20 grade concrete" matched far more than the literal substring). Fixed
+  with an escaping helper.
+- `ReqTable`'s Value column used a truthy check (`r.value ? ... : "–"`) instead of `!= null`, so a
+  real rate of exactly ₹0 rendered as "–" (unknown), indistinguishable from no rate at all. Fixed.
+- `InventoryTable`'s empty-state `colSpan` was keyed on `showProject` alone, not updated when
+  `isAdmin` was added as a second conditional column — under/over-spanned the empty row for a
+  non-admin viewer. Fixed to account for both.
+- `PackageFilterSelect` (Build 06, reused here alongside the new `StockStatusTabs`) rebuilt the
+  query string from just its own `package` param, silently dropping the `status` tab selection
+  when a user changed the package filter on the new Stock page — its original caller (Daily
+  Updates) has only one filter, so this never showed up there. Fixed to merge into the current
+  search params instead of replacing them (and to explicitly reset `cursor`, so the original
+  caller's pagination still restarts on a filter change, matching its previous behavior).
+
+**Deferred — real findings, not fixed in this pass, with reasons:**
+
+- **`rpc_adjust_inventory` (and, on inspection, several sibling RPCs) have no `org_id`/project
+  membership check beyond `is_admin()`.** This looked like a Build 07-specific gap at first, but
+  `is_member_of()` itself (migration 0002, Build 02) returns `true` unconditionally for any
+  `is_admin()` caller regardless of the target project's own org — so the *other* RPCs in this same
+  file that do call `is_member_of()` before touching a row don't actually enforce cross-org
+  isolation for an admin either. This is a systemic characteristic of the whole RPC layer since
+  Build 02, not a regression this PR introduces or fixes by patching one function. D3 already
+  accepts single-org-for-now with `org_id` on every table "for when it's needed" — worth a
+  dedicated multi-tenancy hardening pass before any real second org exists, not a one-RPC patch
+  here that would give false confidence while leaving every sibling RPC exactly as exposed.
+- **Every delivered stock request with no `inventory_item_id` creates a brand-new inventory item**,
+  rather than matching an existing one by name — two separate requests for identically-named
+  material become two separate, un-merged inventory rows, and the auto-created row's
+  `reorder_level` is hardcoded to `0` (never triggers Low/Critical). This matches `02-lld.md`
+  §5.4's own literal pseudocode exactly (which also never looks up an existing item by name or sets
+  a reorder level) — a real product gap, but a documented one in the implementation contract itself,
+  not a shortcut this build took. Worth raising as a follow-up build item (name-based matching, or
+  requiring `inventoryItemId` once a material has been delivered once before), not a fix to make
+  unilaterally against the LLD's own contract.
+- Search no longer matches a project by its client's name (the old mock's `buildSearchResults` did).
+  Not a regression against anything the build spec asked for (`§2.7` names the seven entity types
+  searched, not "or a project's client") — a possible enhancement, not a fix.
+- The phase captured on stock request creation (`phase_id`) is stored but never displayed in
+  `ReqTable` (only the package is). Minor, real, deferred.
+- `e2e/schedule-journey.spec.ts`'s "widens the viewport" test lost its direct DB-persistence check
+  when its cleanup was made name-based instead of id-based (see the finding above this file already
+  records for that same change) — it still asserts the task is visible and the viewport widened,
+  just not a direct `select` confirming the row exists in Postgres. Minor test-coverage regression,
+  not reverted because the id-based version is what left a stray row behind in the first place.
+- Several duplication/reuse and sequential-await-instead-of-`Promise.all` findings across
+  `features/search/queries.ts`, `features/inventory/queries.ts`, `features/stock/queries.ts`, and
+  `app/(app)/projects/[projectId]/page.tsx` (a shared `isAdminRole`/`isMoney` predicate reimplemented
+  inline in ~10 places instead of reused from `features/stock/service.ts`/`lib/logic.ts`;
+  `fetchProjectNames`-shaped helpers copy-pasted across `features/inventory/`, `features/notifications/`,
+  and `features/search/`; a handful of pages awaiting independent queries in sequence rather than via
+  `Promise.all`). All real, none correctness bugs — noted for a follow-up cleanup pass rather than
+  reworked under merge pressure across a dozen files at once.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |

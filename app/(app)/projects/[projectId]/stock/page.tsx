@@ -1,64 +1,80 @@
-"use client";
-
-import { useState } from "react";
-import { useApp } from "@/context/AppContext";
-import { useProject } from "@/hooks/useProject";
-import { mno } from "@/lib/logic";
-import { FLOW } from "@/lib/data";
+import { notFound } from "next/navigation";
+import { requireSession } from "@/lib/auth/session";
+import { forbidden } from "next/navigation";
+import { getProjectHeader } from "@/features/projects/queries";
+import { getStockRequestsForProject } from "@/features/stock/queries";
+import { getPackageOptions } from "@/features/stock/actions";
+import type { StockRequestStatus } from "@/features/stock/service";
 import { ReqTable } from "@/components/domain/ReqTable";
+import { StockStatusTabs } from "@/components/domain/StockStatusTabs";
+import { PackageFilterSelect } from "@/components/domain/PackageFilterSelect";
+import { OpenDialogButton } from "@/components/domain/OpenDialogButton";
 import { Card } from "@/components/ui/Card";
-import { Tabs } from "@/components/ui/Tabs";
-import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 
-const FILTERS = ["All", ...FLOW, "Rejected"];
+const VALID_STATUSES: StockRequestStatus[] = ["pending", "approved", "ordered", "delivered", "rejected"];
 
-export default function StockPage() {
-  const { data, openDialog } = useApp();
-  const project = useProject();
-  const [filter, setFilter] = useState("All");
-  const [modFilter, setModFilter] = useState("all");
+/**
+ * build/07-stock-inventory-notifications.md §2.5 step 1. Status tabs and the
+ * package filter are both thin client boundaries that navigate on change
+ * (`StockStatusTabs`/`PackageFilterSelect`, Build 06's own pattern); the page
+ * itself stays a plain Server Component reading `searchParams`. 01-hld.md
+ * §7.1: Client has no route here at all — `forbidden()` (build/03's
+ * `authInterrupts`), not an empty state.
+ */
+export default async function StockPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ status?: string; package?: string }>;
+}) {
+  const { projectId } = await params;
+  const { status: rawStatus, package: packageId } = await searchParams;
+  const session = await requireSession();
 
-  const all = data.requests.filter(
-    (r) => r.proj === project.id && (modFilter === "all" || r.mod === modFilter)
-  );
-  const reqs = filter === "All" ? all : all.filter((r) => r.status === filter);
+  const effectiveRole = session.impersonating?.role ?? session.role;
+  if (effectiveRole === "client") forbidden();
+
+  const header = await getProjectHeader(session, projectId);
+  if (!header) notFound();
+
+  const status = VALID_STATUSES.includes(rawStatus as StockRequestStatus)
+    ? (rawStatus as StockRequestStatus)
+    : undefined;
+
+  const [all, packages] = await Promise.all([
+    getStockRequestsForProject(session, projectId, { packageId }),
+    getPackageOptions(projectId),
+  ]);
+
+  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const pendingCount = all.filter((r) => r.status === "pending").length;
+  const requests = status ? all.filter((r) => r.status === status) : all;
+  const basePath = `/projects/${projectId}/stock`;
 
   return (
     <div>
       <div className="flex items-start gap-4 flex-wrap mb-[22px]">
         <div>
           <h1 className="text-[26px] font-bold tracking-tight">Stock Requests</h1>
-          <p className="mt-1 text-muted-foreground text-[13.5px]">
-            {all.filter((r) => r.status === "Pending").length} pending
-          </p>
+          <p className="mt-1 text-muted-foreground text-[13.5px]">{pendingCount} pending</p>
         </div>
         <div className="ml-auto flex gap-2">
-          <Button variant="primary" onClick={() => openDialog({ kind: "newRequest", projectId: project.id })}>
+          <OpenDialogButton dialog={{ kind: "newRequest", projectId }} variant="primary">
             <Icon name="plus" className="w-[15px] h-[15px]" />
             New Request
-          </Button>
+          </OpenDialogButton>
         </div>
       </div>
 
       <div className="flex gap-3 items-center flex-wrap">
-        <Tabs items={FILTERS.map((s) => ({ key: s, label: s }))} value={filter} onChange={setFilter} />
-        <select
-          value={modFilter}
-          onChange={(e) => setModFilter(e.target.value)}
-          className="h-9 border border-input rounded-lg bg-background px-2 text-[13px] mb-4"
-        >
-          <option value="all">All packages</option>
-          {project.modules.map((m) => (
-            <option key={m.id} value={m.id}>
-              {mno(project, m)} {m.name}
-            </option>
-          ))}
-        </select>
+        <StockStatusTabs basePath={basePath} status={status ?? ""} packageId={packageId} />
+        <PackageFilterSelect basePath={basePath} packages={packages} value={packageId ?? ""} />
       </div>
 
       <Card>
-        <ReqTable project={project} reqs={reqs} />
+        <ReqTable requests={requests} role={effectiveRole} isAdmin={isAdmin} />
       </Card>
     </div>
   );

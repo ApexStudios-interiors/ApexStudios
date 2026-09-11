@@ -361,3 +361,77 @@ confirmation.
 | `inventory.reconcile` is a documented no-op stub | Build 07 fills it in |
 | `bill.pdf` isn't in `lib/jobs/registry.ts` yet (no code enqueues it) | Build 09 adds it, and its own name to `rpc_enqueue_job`'s allowlist |
 | TOTP enrollment UI (D22) | A real admin/owner account cannot use any admin-gated action today |
+
+## Build 07 — Stock Requests, Inventory Ledger, Notifications & Search
+
+Branch `build/07-stock-and-inventory`. Not yet merged; not yet opened as a PR.
+
+**Verified**: 131/131 unit tests, 84/84 pgTAP (21 new, across `06_stock_inventory_test.sql`,
+`07_notifications_test.sql` and `08_search_test.sql`), 65/65 integration tests (18 new, across
+`stock-and-inventory.test.ts` and `notifications.test.ts`), typecheck/lint/build all clean. The
+full three-role Playwright journey (`e2e/stock-inventory-journey.spec.ts`) passes: raise → approve
+→ order → deliver → inventory increases → appears in `v_billable_now`, admin's reject-without-reason
+blocked with a field error, client forbidden from `/projects/{id}/stock` with no sidebar entry, and
+the bell showing the right rows to admin/site and nothing to client. Visual-parity checked against
+`proto-v1` for all four converted routes, both themes — differences found are documented below, not
+silently accepted. All new RPCs and views smoke-tested live against `apex-dev` from real signed-in
+sessions (not service_role). The dev database was left exactly seed-consistent after every check —
+`rpc_inventory_drift()` reports 0 rows as of the last verification pass.
+
+### What shipped
+
+| Area | Status | Notes |
+|---|---|---|
+| `rpc_create_stock_request`, `rpc_transition_stock_request`, `rpc_adjust_inventory` | ✅ | The full lifecycle (pending → approved/rejected → ordered → delivered) with row-lock concurrency safety, rate stripped for non-admin at both the action layer (real role, never impersonated) and the RPC itself, atomic delivery → inventory-item-creation → ledger movement → cache update in one transaction. Fixed a real bug in 02-lld.md §5.4's own pseudocode along the way (before/after audit state captured in the wrong order). |
+| `rpc_inventory_stats`, `rpc_inventory_drift` | ✅ | Stats is `security invoker` (aggregates only already-visible rows); drift is `security definer`, service_role-only, one indexed aggregate comparing the cache against `Σ in − Σ out` per item. |
+| `lib/jobs/handlers/inventory.reconcile.ts` | ✅ | Replaces Build 06's stub. Logs, raises a Sentry message, and throws — landing the job in `failed` is the alert. Deliberately never auto-corrects the cache. Verified live: an injected un-ledgered mutation is detected and the cache is left untouched. |
+| `features/stock/`, `features/inventory/` | ✅ | service/schema/actions/queries for both, role-scoped views throughout (`v_stock_request_site`, `v_inventory_site`, `v_inventory_status`), the established literal-`.from()`-per-branch pattern. |
+| `features/notifications/` | ✅ | Replaces `buildNotifications()` in `lib/logic.ts`. One query over `v_notifications`, filtered by `.contains("for_roles", [effectiveRole])`, scoped across every project the session can access via each underlying table's own RLS. Wired into `app/(app)/layout.tsx` → `Header` → `NotificationsMenu` as a server-fetched prop, no client-side data fetching. No read state, no notifications table (ADR-014). |
+| `features/search/` | ✅ | `searchAll` (`authedAction`), one role-scoped query per entity (projects/packages/stock requests/approvals/bills/inventory/users) so a Client searching "marble" cannot learn a stock request exists — that query is never run for that role. `pg_trgm` GIN indexes (installed into the `extensions` schema, not `public`); `rpc_check_rate_limit`, a plain locked-row sliding-window counter (no Redis/Upstash in this stack), 20/min/user. `SearchBar.tsx` debounced 300ms client-side on top of the action's own 2-char minimum and rate limit. |
+| Four converted routes + dialogs | ✅ | `stock/page.tsx` (project + package level, status tabs, package filter, admin-only Value column, `availableTransitions`-derived per-row actions), `inventory/page.tsx` (project + business-wide, Project column and filter on the business view), `NewRequestDialog` (real Package/Phase/Unit dropdowns, material suggestions, Rate admin-only and server-stripped), `RejectStockRequestDialog` (new — required-reason field error, not a generic toast), `ReqTable`/`InventoryTable` (props, not `useApp()`), dashboard's Pending Requests card. |
+| `scripts/gen-types.mjs` | ✅ | Fixed a real generator bug: `RETURNS TABLE(...)` output columns were leaking into the generated `Args` type because the `information_schema.parameters` query didn't filter by `parameter_mode`. |
+| `supabase/seed.sql` | ✅ | Amended twice more (Build 02's file): linked `inventory_item_id` for the three seeded delivered requests and added opening-balance movements (D32); advanced `next_sr_seq` past the sixteen pre-existing `SR-BHEL-NCH-0NN` numbers (D36). |
+| `db/schema/` | ✅ | `search.ts` (new, `rateLimits`) and `projects.nextSrSeq` — both existed in the database via migration but were missing from Drizzle until the drift test caught it (D37). |
+
+### Real bugs and gaps found only by actually running it
+
+| Finding | Where |
+|---|---|
+| **`v_notifications`'s `bill_submitted` branch returned zero rows for Client, silently, since migration 0015** — it read `public.bills` directly on the stated assumption that RLS scoped it correctly, but `bills` has no select policy for Client at all. A Client session never saw "Bill RA-... awaiting certification" — the one notification that matters most, since only a Client may certify a bill. Caught by testing from a real Client JWT, not service_role. | D33 |
+| **The exact same bug, one branch over: `stock_request` returned zero rows for Site**, since the same migration — it read `public.stock_requests` directly, and that table is admin-only on select. Caught by an actual Playwright run under a real Site session (the bell showed only `inventory_low` items); this build's own integration test had already been written for this and passed anyway, because its assertion was `stock_request OR inventory_low` — the weak `||` let `inventory_low` alone (that table's policy does include Site) hide `stock_request` being silently empty. Both the migration and the test assertion are fixed. | D35 |
+| **`next_sr_seq` was never advanced past the seeded `SR-BHEL-NCH-001..016` numbers** — defaulted to 1 for the existing project row when the column was added, so the first real `rpc_create_stock_request` calls succeeded up to seq 8 and then failed on seq 9 with a raw `sr_ref_uq` duplicate-key error. The exact same class of gap `next_bill_seq`'s own seed fix already exists to prevent; just missed here. Caught by the integration suite, not by hand. | D36 |
+| **Applying a migration by raw SQL (no working `supabase link` in this environment) instead of `supabase db push` doesn't record it in Supabase's own migration-tracking table.** This PR's first real CI run correctly saw three "unrecorded" migrations as pending, applied one of them fresh (harmless on its own), and that reapplication silently reverted the *other* hand-applied migration's fix to the same view (D35's stock_request branch) — because the earlier file's own `create or replace view` doesn't know about a later hand-made fix to the same object. Caught only because this build's own pgTAP regression test for D35 ran for real against CI's actual post-push state. Fixed by reapplying and reconciling `apex-dev`'s tracking table (`supabase migration repair`, then `supabase migration list --db-url` showing zero mismatches) before re-running CI. | D38 |
+| **`unit_cost`'s admin/site wording in the build file itself contradicts AGENTS.md**, which names that exact column in its never-to-a-non-admin list. AGENTS.md wins. | D30 |
+| **`movement_direction`'s `'adjust'` enum value has no sign of its own** — recorded as an ordinary `'in'`/`'out'` movement tagged `ref_type = 'adjustment'` instead. | D31 |
+| **Seeded inventory had zero `stock_movements` behind it** — would have made `inventory.reconcile` alert on all eight items on its first real run. | D32 |
+| **`getByText()`'s default substring match falsely passed a Playwright assertion mid-mutation** — `getByText("Ordered")` matched the still-present "Mark Ordered" button label before the real transition committed, so the test closed its browser context early and cancelled the in-flight request, leaving a real stock request stuck on "approved" forever. Fixed with `{ exact: true }` throughout the journey spec. | `e2e/stock-inventory-journey.spec.ts` |
+| **This build's own integration test file initially left the dev database with a real, permanent drift** — a delivery's cache bump was reverted by deleting the movement row in `afterEach` without reverting the cache it had justified. Fixed: disposable inventory items instead of a seeded one, `try/finally` around the drift-injection test. | `tests/integration/stock-and-inventory.test.ts` |
+| **A date rendered as `7/9/2026` instead of the app's own `06 Sep 2026` convention** — `ReqTable`'s conversion used `toLocaleDateString` instead of `lib/logic.ts`'s established `dmy()`. Caught by the visual-parity screenshot diff, not by lint (the AGENTS.md restriction only names `toLocaleString`/`Intl` literally). | `components/domain/ReqTable.tsx` |
+| **A pre-existing Build 05 e2e test left a stray far-future task behind on a failed run and never cleaned it up**, because it tracked the created row by an id only captured several `await`s after the row actually existed — a run that failed in between (confirmed live, under load from running the full suite) silently widened every later run's Gantt viewport baseline, cascading into two unrelated tests' failures until traced back and the stray row removed by hand. Fixed with the same pattern already used in this build's own `stock-and-inventory.test.ts`: name the row before any risky `await`, clean up by that name regardless of where the test fails. | `e2e/schedule-journey.spec.ts` |
+| **`LegacyDashboardCards.tsx`'s two TODOs had their build numbers swapped** by Build 04 — Pending Requests was labelled `build-08`, Pending Approvals `build-07`, backwards from what this build (and the build file's own §2.5 step 6) actually covers. | D34 |
+
+Visual-parity diffs against `proto-v1` for the four converted routes are real but expected: more
+rows now exist than the frozen prototype ever had (the seed grew twice since — six stock requests
+in the original prototype dataset vs sixteen now, two of which this build's own RPC work added to
+exercise the `approved`/`ordered` states), and `v_inventory_status`/`v_inventory_site` order by
+name rather than the mock array's arbitrary insertion order. Layout, spacing, fonts, badge colours
+and button styling are pixel-identical once those two are accounted for.
+
+### Pre-merge review pass
+
+Before merging, a full multi-dimensional review (correctness, security/AGENTS.md conventions,
+removed behavior, reuse, efficiency, simplification) ran across the complete PR diff. Six more real
+bugs were found and fixed (D40 in `docs/decisions.md`, plus `NewRequestDialog`'s dropped `moduleId`
+pre-select and real-vs-effective-role Rate visibility, a `rate` schema coercion bug, unescaped
+`ilike` wildcards in search, a falsy-zero display bug in `ReqTable`, and an under-spanning
+`InventoryTable` empty state) — see `docs/decisions.md`'s "Review findings before merge" entry for
+the full list, fixed and deliberately deferred alike. 84/84 pgTAP, 66/66 integration (1 new),
+131/131 unit, typecheck/lint/format all reconfirmed clean after the fixes.
+
+### Still open
+
+| Item | Blocks |
+|---|---|
+| `rpc_adjust_inventory` and its siblings have no cross-org isolation beyond `is_admin()` — systemic since Build 02's `is_member_of()`, not a Build 07 regression | A dedicated multi-tenancy hardening pass, before any real second org exists (D3) |
+| Delivered stock requests with no `inventory_item_id` always create a new inventory item rather than matching an existing one by name; the auto-created row's `reorder_level` is hardcoded to 0 — matches `02-lld.md` §5.4's own literal pseudocode | A follow-up build item, not a fix against the LLD's own contract |
+| Commit, push, PR, CI | Merge |

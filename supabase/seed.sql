@@ -244,6 +244,49 @@ insert into public.stock_requests (id, org_id, project_id, package_id, phase_id,
   ('00000000-0000-4000-8000-000000000216', '00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', '00000000-0000-4000-8000-0000000000e1', '00000000-0000-4000-8000-0000000000f8', 'SR-BHEL-NCH-016', 'Underwater LED light, IP68, 18 W',                9, 'nos',  8400, date '2026-10-26', 'ordered',   '00000000-0000-4000-8000-0000000000d5', '00000000-0000-4000-8000-0000000000d2', timestamptz '2026-09-08 10:00+05:30', timestamptz '2026-09-08 15:00+05:30', null, null, null, timestamptz '2026-09-07 09:00+05:30')
 on conflict (id) do nothing;
 
+-- Delivered requests link back to the item they delivered — a real delivery
+-- (rpc_transition_stock_request) always sets this; these three rows predate
+-- that RPC, so it's set by hand here for the same referential completeness.
+update public.stock_requests set inventory_item_id = '00000000-0000-4000-8000-000000000605' where id = '00000000-0000-4000-8000-000000000211';
+update public.stock_requests set inventory_item_id = '00000000-0000-4000-8000-000000000601' where id = '00000000-0000-4000-8000-000000000212';
+update public.stock_requests set inventory_item_id = '00000000-0000-4000-8000-000000000602' where id = '00000000-0000-4000-8000-000000000213';
+
+-- ── Stock movements: opening balance ─────────────────────────────────────────
+-- D32 (docs/decisions.md): every inventory_items row above was seeded with a
+-- qty_on_hand directly, with no stock_movements behind it — a real delivery
+-- (SR-011/012/013 above) put some of it there, but each item's CURRENT
+-- quantity doesn't equal what was delivered (site consumption between then
+-- and the seed's own "today" was never modelled, and never asked for).
+-- Build 07's inventory.reconcile job recomputes qty_on_hand from this ledger
+-- and alerts on any disagreement — without a ledger behind the seed, it
+-- would alert on all eight items on its very first run, which is noise, not
+-- a finding. One 'in' / ref_type='adjustment' movement per item, sized to
+-- match its own seeded qty_on_hand exactly, is the same thing a real opening
+-- balance migration would write (build §0's own "opening adjust movements"),
+-- just backdated to the seed's own "today" rather than reconstructing a
+-- history nobody specified.
+--
+-- D38 follow-up: found live, via `rpc_inventory_drift` reporting all six
+-- items at exactly 3x their real ledger total after CI ran `pnpm db:seed`
+-- three times against the same apex-dev database. Every other seeded row in
+-- this file carries an explicit id and `on conflict (id) do nothing`; this
+-- block relied on `gen_random_uuid()`'s default instead, so a second run
+-- inserted six brand new rows on top of the first with nothing to collide
+-- on — `stock_movements` is append-only by design (AGENTS.md database rule
+-- 6), so there was no natural constraint to catch it either. Explicit ids,
+-- same as everywhere else.
+insert into public.stock_movements (id, org_id, inventory_item_id, project_id, direction, qty, unit_cost, ref_type, reason, created_at, created_by) values
+  ('00000000-0000-4000-8000-000000000901', '00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000601', '00000000-0000-4000-8000-0000000000c1', 'in', 40,   395,  'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
+  ('00000000-0000-4000-8000-000000000902', '00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000602', '00000000-0000-4000-8000-0000000000c1', 'in', 5,    4050, 'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
+  ('00000000-0000-4000-8000-000000000903', '00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000604', '00000000-0000-4000-8000-0000000000c1', 'in', 45,   640,  'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
+  ('00000000-0000-4000-8000-000000000904', '00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000605', '00000000-0000-4000-8000-0000000000c1', 'in', 3,    2100, 'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
+  ('00000000-0000-4000-8000-000000000905', '00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000606', '00000000-0000-4000-8000-0000000000c1', 'in', 1100, 150,  'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
+  ('00000000-0000-4000-8000-000000000906', '00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000608', '00000000-0000-4000-8000-0000000000c1', 'in', 60,   380,  'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2')
+on conflict (id) do nothing;
+-- 603 (Pool-grade vitrified tile) and 607 (Aluminium window profile) both
+-- seed at qty_on_hand = 0 — the ledger already agrees with no rows at all,
+-- so they get none.
+
 -- ── Approvals ────────────────────────────────────────────────────────────────
 -- The prototype has pending and approved. §4.9 requires a rejected one too, so
 -- AP-005 is added; the other four are transcribed.
@@ -332,6 +375,17 @@ on conflict (id) do nothing;
 -- first real call collides on bills_seq_uq.
 update public.projects set next_bill_seq = 6
  where id = '00000000-0000-4000-8000-0000000000c1' and next_bill_seq < 6;
+
+-- Same gap, one build later: next_sr_seq defaulted to 1 (migration
+-- 20260913090001) when this column was added long after SR-BHEL-NCH-001
+-- through -016 were already seeded above. Confirmed live: rpc_create_stock_request's
+-- first real calls allocated SR-BHEL-NCH-001..008 successfully (nothing seeded
+-- at those exact numbers was still in a state to collide) and then failed with
+-- a raw sr_ref_uq duplicate-key error on SR-BHEL-NCH-009 — the same class of
+-- oversight next_bill_seq's own fix above exists for, just missed when this
+-- build added the column.
+update public.projects set next_sr_seq = 17
+ where id = '00000000-0000-4000-8000-0000000000c1' and next_sr_seq < 17;
 
 insert into public.bill_lines (id, bill_id, source_type, source_id, description, client_value, pct_billed, amount, internal_cost, sort_order) values
   ('00000000-0000-4000-8000-000000000501', '00000000-0000-4000-8000-000000000401', 'material', '00000000-0000-4000-8000-000000000212', 'SR-BHEL-NCH-012 Ultratech 53 grade cement, 120 bag',  83045, 75,  62283.75,  35550.00, 1),

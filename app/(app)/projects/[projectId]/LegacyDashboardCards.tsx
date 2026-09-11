@@ -2,53 +2,66 @@
 
 import { useRouter } from "next/navigation";
 import { useApp } from "@/context/AppContext";
+import type { Role } from "@/lib/rbac/roles";
 import { ApprovalTable } from "@/components/domain/ApprovalTable";
 import { ReqTable } from "@/components/domain/ReqTable";
 import { UpdateList } from "@/components/domain/UpdateList";
 import type { UpdateDTO } from "@/features/updates/queries";
+import type { StockRequestDTO } from "@/features/stock/queries";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 
 /**
- * The two dashboard cards not yet converted off `AppContext`
+ * The one dashboard card not yet converted off `AppContext`
  * (build/04-projects-packages-phases.md §4.4 step 2):
- *   TODO(build-07): Pending Approvals — features/approvals/ lands there.
- *   TODO(build-08): Pending Requests — features/stock/ lands there.
- * Latest Updates is real data now (build/06-files-jobs-daily-updates.md
- * §4.2) — fetched server-side by the page and passed down as `updates`,
- * since this component is a client boundary for the other two cards but has
- * no reason to fetch updates itself.
+ *   TODO(build-08): Pending Approvals — features/approvals/ lands there.
+ * (Corrected label — this was mislabelled TODO(build-07) by Build 04; Build 07
+ * is entirely stock/inventory/notifications/search and never touches
+ * approvals. See docs/decisions.md D34.)
  *
- * Does NOT use `useProject()` — that hook throws for a project id absent
- * from the mock array, and a project created through the real `createProject`
- * action has no entry there and never will. Found live: creating a project
- * and landing on its own dashboard crashed to the generic error boundary.
- * The two still-mock cards simply have nothing to show for such a project,
- * the same honest answer `useLegacyModule` already gives the package tabs
- * still on AppContext.
+ * Pending Requests and Latest Updates are both real data now
+ * (build/07-stock-inventory-notifications.md §2.5 step 6 and
+ * build/06-files-jobs-daily-updates.md §4.2 respectively) — fetched
+ * server-side by the page and passed down as props, since this component is
+ * a client boundary for the one still-mock card but has no reason to fetch
+ * either of the real ones itself.
+ *
+ * Does NOT use `useProject()` for the mock Approvals card — that hook throws
+ * for a project id absent from the mock array, and a project created through
+ * the real `createProject` action has no entry there and never will. Found
+ * live: creating a project and landing on its own dashboard crashed to the
+ * generic error boundary. The still-mock card simply has nothing to show for
+ * such a project, the same honest answer `useLegacyModule` already gives the
+ * package tabs still on AppContext.
  */
 export function LegacyDashboardCards({
   projectId,
   isClient,
   isSite,
+  isAdmin,
+  role,
+  pendingRequests,
   updates,
 }: {
   projectId: string;
   isClient: boolean;
   isSite: boolean;
+  isAdmin: boolean;
+  role: Role;
+  pendingRequests: StockRequestDTO[];
   updates: UpdateDTO[];
 }) {
   const router = useRouter();
   const { data } = useApp();
   const project = data.projects.find((p) => p.id === projectId);
-  if (!project) return null;
 
-  const pending = data.requests.filter((r) => r.proj === project.id && r.status === "Pending");
-  const apPending = data.approvals.filter((a) => a.proj === project.id && a.status === "Pending");
+  const apPending = project
+    ? data.approvals.filter((a) => a.proj === project.id && a.status === "Pending")
+    : [];
 
   return (
     <>
-      {apPending.length > 0 && !isSite && (
+      {project && apPending.length > 0 && !isSite && (
         <Card className="mt-5">
           <CardHeader>
             <h3>Pending Approvals</h3>
@@ -66,7 +79,7 @@ export function LegacyDashboardCards({
         </Card>
       )}
 
-      {pending.length > 0 && !isClient && (
+      {pendingRequests.length > 0 && !isClient && (
         <Card className="mt-5">
           <CardHeader>
             <h3>Pending Requests</h3>
@@ -76,7 +89,7 @@ export function LegacyDashboardCards({
               </Button>
             </div>
           </CardHeader>
-          <ReqTable project={project} reqs={pending} />
+          <ReqTable requests={pendingRequests} role={role} isAdmin={isAdmin} />
         </Card>
       )}
 

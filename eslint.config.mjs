@@ -145,6 +145,12 @@ const eslintConfig = defineConfig([
       // site journey creates). Every assertion runs through a real
       // signed-in session.
       "e2e/updates-journey.spec.ts",
+      // Same exemption, same reason: seeding a throwaway pending stock
+      // request directly (so the reject/bell journeys don't depend on the
+      // seed's own two pending rows) and cleaning up afterwards. Every
+      // assertion — including the lifecycle journey's own multi-role
+      // transitions — runs through a real signed-in session via the UI.
+      "e2e/stock-inventory-journey.spec.ts",
     ],
     rules: { "no-restricted-imports": ["error", { patterns: [...RLS_BYPASS] }] },
   },

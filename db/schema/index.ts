@@ -11,3 +11,4 @@ export * from "./daily-updates";
 export * from "./billing";
 export * from "./audit";
 export * from "./jobs";
+export * from "./search";

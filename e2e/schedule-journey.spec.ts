@@ -135,13 +135,19 @@ test.describe("client: clicking a task bar is read-only", () => {
 });
 
 test.describe("admin: a task beyond the 14-week default widens the viewport", () => {
-  let createdTaskId: string | null = null;
+  // Named up front, before any risky `await`, and cleaned up by NAME rather
+  // than an id captured only after several later steps succeed — a stray
+  // task from a run that failed between creation and that capture (found
+  // live: a prior run's own assertion timeout under load left one behind,
+  // and it silently widened every subsequent run's "before" baseline,
+  // cascading into two unrelated tests' failures) is exactly what this
+  // avoids.
+  const taskName = `E2E far-future task ${Date.now().toString(36)}`;
 
   test.afterAll(async () => {
-    if (!createdTaskId) return;
     const sql = dbConnect();
     try {
-      await sql`delete from public.tasks where id = ${createdTaskId}`;
+      await sql`delete from public.tasks where name = ${taskName}`;
     } finally {
       await sql.end({ timeout: 5 });
     }
@@ -161,8 +167,6 @@ test.describe("admin: a task beyond the 14-week default widens the viewport", ()
     const before = await weekMarkers.count();
     expect(before).toBe(14);
 
-    const stamp = Date.now().toString(36);
-    const taskName = `E2E far-future task ${stamp}`;
     await page.getByRole("button", { name: "Add Task" }).first().click();
     await page.getByLabel("Task").fill(taskName);
     await page.getByLabel("Phase").selectOption({ label: "Deck finishes" });
@@ -171,15 +175,6 @@ test.describe("admin: a task beyond the 14-week default widens the viewport", ()
     await page.getByRole("button", { name: "Add", exact: true }).click();
 
     await expect(page.getByText(taskName)).toBeVisible();
-
-    const sql = dbConnect();
-    try {
-      const [row] = await sql`select id from public.tasks where name = ${taskName}`;
-      createdTaskId = row?.id ?? null;
-    } finally {
-      await sql.end({ timeout: 5 });
-    }
-    expect(createdTaskId).not.toBeNull();
 
     const after = await weekMarkers.count();
     expect(after).toBeGreaterThan(before);
