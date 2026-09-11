@@ -34,14 +34,18 @@ export default async function ApprovalsPage({
   const header = await getProjectHeader(session, projectId);
   if (!header) notFound();
 
-  // "" (All) is a valid, deliberate non-filter — only default to "pending"
-  // when the param is absent, not when it is present-but-empty.
-  const status =
-    rawStatus === undefined
-      ? "pending"
-      : VALID_STATUSES.includes(rawStatus as ApprovalStatus)
+  // "" (All, `ApprovalStatusTabs`'s own explicit value) is a valid,
+  // deliberate non-filter. An absent param defaults to "pending" — and so
+  // does anything else that isn't recognized (a stale link carrying the old
+  // mock's capitalized values, a typo), rather than being silently treated
+  // as the same thing as "All": found live in review, an invalid param was
+  // indistinguishable from the deliberate All click.
+  const status: ApprovalStatus | undefined =
+    rawStatus === ""
+      ? undefined
+      : rawStatus !== undefined && VALID_STATUSES.includes(rawStatus as ApprovalStatus)
         ? (rawStatus as ApprovalStatus)
-        : undefined;
+        : "pending";
 
   const list = await getApprovalsForProject(session, projectId, status ? { status } : {});
   const client = effectiveRole === "client";

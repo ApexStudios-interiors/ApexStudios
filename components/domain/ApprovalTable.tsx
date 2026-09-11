@@ -115,7 +115,7 @@ export function ApprovalTable({
                   </Button>
                 </div>
               );
-            } else if (mayRequest && a.status === "rejected") {
+            } else if (mayRequest && a.canSupersede) {
               // build §2.3: "Raise revised approval" — a new request pre-filled
               // from this one, with `supersedesId` set.
               action = (

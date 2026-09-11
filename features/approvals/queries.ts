@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession, type Session } from "@/lib/auth/session";
 import { presignGet } from "@/lib/r2/presign";
-import { canAddPhotos, canDecide } from "./service";
+import { canAddPhotos, canDecide, canSupersede } from "./service";
 import type { ApprovalType } from "./schema";
 
 /**
@@ -50,6 +50,7 @@ export type ApprovalDTO = {
   supersededByRefNo: string | null;
   canAddPhotos: boolean;
   canDecide: boolean;
+  canSupersede: boolean;
   attachments: ApprovalAttachment[];
 };
 
@@ -61,7 +62,8 @@ async function fetchPackageNames(isAdmin: boolean, projectId: string): Promise<M
     const { data, error } = await supabase
       .from("packages")
       .select("id, name, seq_no")
-      .eq("project_id", projectId);
+      .eq("project_id", projectId)
+      .is("deleted_at", null);
     if (error) throw new Error(error.message);
     return new Map(data.map((p) => [p.id, { name: p.name, seqNo: p.seq_no }]));
   }
@@ -83,7 +85,11 @@ async function fetchPackageNames(isAdmin: boolean, projectId: string): Promise<M
 async function fetchPhaseNames(isAdmin: boolean, projectId: string): Promise<Map<string, string>> {
   const supabase = await createClient();
   if (isAdmin) {
-    const { data, error } = await supabase.from("phases").select("id, name").eq("project_id", projectId);
+    const { data, error } = await supabase
+      .from("phases")
+      .select("id, name")
+      .eq("project_id", projectId)
+      .is("deleted_at", null);
     if (error) throw new Error(error.message);
     return new Map(data.map((p) => [p.id, p.name]));
   }
@@ -100,7 +106,11 @@ async function fetchProfileNames(profileIds: (string | null)[]): Promise<Map<str
   const ids = [...new Set(profileIds.filter((id): id is string => id != null))];
   if (ids.length === 0) return new Map();
   const supabase = await createClient();
-  const { data, error } = await supabase.from("profiles").select("id, full_name").in("id", ids);
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name")
+    .in("id", ids)
+    .is("deleted_at", null);
   if (error) throw new Error(error.message);
   return new Map(data.map((p) => [p.id, p.full_name]));
 }
@@ -202,7 +212,8 @@ export async function getApprovalsForProject(
     const { data: extra, error: extraErr } = await supabase
       .from("approvals")
       .select("id, ref_no")
-      .in("id", missingSupersedeIds);
+      .in("id", missingSupersedeIds)
+      .is("deleted_at", null);
     if (extraErr) throw new Error(extraErr.message);
     for (const e of extra) refNoById.set(e.id, e.ref_no);
   }
@@ -253,6 +264,7 @@ export async function getApprovalsForProject(
       supersededByRefNo: supersededBy?.refNo ?? null,
       canAddPhotos: canAddPhotos(r.status),
       canDecide: canDecide(r.status),
+      canSupersede: canSupersede(r.status),
       attachments: attachmentDtosByApproval.get(r.id) ?? [],
     };
   });

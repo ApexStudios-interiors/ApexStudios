@@ -441,7 +441,7 @@ the full list, fixed and deliberately deferred alike. 84/84 pgTAP, 66/66 integra
 Branch `build/08-approvals`. Not yet opened as a PR.
 
 **Verified**: 143/143 unit tests (12 new, across `features/approvals/service.test.ts`), 95/95 pgTAP
-(11 new, `09_approvals_test.sql`), 82/82 integration tests (16 new, `approvals.test.ts`),
+(11 new, `09_approvals_test.sql`), 83/83 integration tests (17 new, `approvals.test.ts`),
 typecheck/lint/build all clean. The full client mobile-viewport journey
 (`e2e/approvals-journey.spec.ts`) passes: bell → pending approval → view a sample photo full size in
 the lightbox → Approve with a confirmation step → leaves the bell, "All" tab shows Approved with a
@@ -459,7 +459,8 @@ top of them. The dev database was left exactly seed-consistent after every check
 | Area | Status | Notes |
 |---|---|---|
 | `projects.next_ap_seq`, `rpc_create_approval`, `rpc_decide_approval` | ✅ | Same row-lock pattern as `next_sr_seq`/`rpc_create_stock_request` (D18). `rpc_decide_approval` locks the row FIRST, then role (`client` only, no admin/owner bypass), then membership, then status, then decision validity, then reason-required-for-reject — the exact numbered order build §2.1 specifies. Supersession (not reopening): a new approval may reference a rejected one in the same project only. |
-| Attachments freeze on decision (migrations 0036 + 0037) | ✅ | Two layers per build §2.2: RLS (`att_insert`/`att_delete_uploader` on `attachments`) and the action layer (`addSamplePhotos`'s own pending-only guard). **0036's first version had a real bug (D41)** — fixed in 0037 before any UI was built against it. |
+| Attachments freeze on decision (migrations 0036, 0037, 0039) | ✅ | Two layers per build §2.2: RLS (`att_insert`/`att_delete_uploader` on `attachments`) and the action layer (`addSamplePhotos`'s own pending-only guard). **0036's first version had a real bug (D41)** — fixed in 0037 before any UI was built against it; 0039 (pre-merge review) hardened the same predicate against a soft-deleted approval too. |
+| Approval supersession row lock (migration 0038) | ✅ | `rpc_create_approval` now locks the superseded row and checks it doesn't already have a successor, closing a double-supersession race found in pre-merge review. |
 | `features/approvals/` — schema, service, queries, actions | ✅ | `requestApproval`/`addSamplePhotos` (site), `decideApproval` (client-only, `clientAction`). `getApprovalsForProject` returns the same DTO shape to all three roles (no cost columns exist on `approvals` at all) with presigned attachment thumbnails, requester/decider names, and both directions of a supersession link. `getAgedApprovalsCount` — architecture.md §9.1's "Approvals pending > 7 days" — computed here for Build 10's Admin dashboard to surface, per build §2.4's own instruction. |
 | `lib/rbac/permissions.ts` | ✅ | Added `addSamplePhotos: ["owner","admin","site"]` — not an HLD §7.1 matrix row, so no test-table entry needed; `requestApproval`/`decideApproval` already existed and needed no change. |
 | UI conversion | ✅ | `NewApprovalDialog` (client-generated id, real Package/Phase/Type dropdowns, `FileUploader`, optional supersede pre-fill), `ApprovalPhotosDialog` (pending-only, hidden once decided), `DecideApprovalDialog` (one dialog parameterized by decision — required-reason field for reject, an explicit confirmation step for approve per build §2.5's "commercially meaningful, irreversible click" instruction), `ApprovalTable` (props-driven, real thumbnails with a lightbox reusing `UpdateList`'s exact pattern, per-row actions from `can(role, ...)` plus status, never a role string inline), `ApprovalStatusTabs`, the approvals page (Server Component, status tabs, "+ Request Approval" hidden for client), the dashboard's Pending Approvals card (the last `AppContext`-driven card, TODO(build-08) from Build 04/D34). `AppContext`'s `setApprovalStatus`/`addApproval`/`addApprovalPhotos` mock mutators removed, their only callers converted. |
@@ -482,6 +483,20 @@ expected, the same category Build 07 documented: real seed item text wraps diffe
 frozen mock's own placeholder wording, and dates now correctly show `05 Sep 2026` rather than the
 mock's arbitrary values. Layout, spacing, fonts, badge colours (amber Pending / green Approved / red
 Rejected) and button styling are pixel-identical once that's accounted for.
+
+### Pre-merge review pass
+
+Before merging, a full multi-dimensional review (correctness, security/AGENTS.md conventions, removed
+behavior, reuse, efficiency, simplification) ran across the complete PR diff — five independent passes.
+D41 and D42 above were both double-checked and confirmed genuinely fixed. Four more real issues were
+found and fixed: a double-supersession race in `rpc_create_approval` (no row lock on the superseded
+target, no already-superseded check — migration 0038), missing `deleted_at is null` filters in four
+`features/approvals/queries.ts` lookups (AGENTS.md database rule 7), D41's own fix not accounting for a
+soft-deleted approval (migration 0039), and `ApprovalTable.tsx`'s "Raise revised approval" gate
+re-implementing the tested `canSupersede()` rule inline instead of using it. See `docs/decisions.md`'s
+"Review findings before merge" entry for the full list, fixed and deliberately deferred alike. 95/95
+pgTAP, 83/83 integration (1 new — the double-supersession race), 143/143 unit,
+typecheck/lint/format/build all reconfirmed clean after the fixes.
 
 ### Still open
 

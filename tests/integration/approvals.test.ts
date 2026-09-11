@@ -341,6 +341,58 @@ describe("rpc_create_approval — concurrency", () => {
     trackedApprovalIds.push(rowA.id, rowB.id);
     expect(rowA.ref_no).not.toBe(rowB.ref_no);
   });
+
+  // Pre-merge review found this: the superseded row's status was read
+  // without a lock, so two concurrent supersession creates against the same
+  // rejected approval could both succeed, silently dropping one of the two
+  // forward links. Fixed in migration 0038 (`for update` plus an
+  // already-superseded check evaluated after the lock is held).
+  it("two concurrent supersessions of the same rejected approval — exactly one succeeds", async () => {
+    const site = await client(SITE_EMAIL);
+    const original = await createApproval(site, { item: "Race test original" });
+
+    const clientSession = await client(CLIENT_EMAIL);
+    const { error: rejectErr } = await clientSession.rpc("rpc_decide_approval", {
+      p_approval_id: original.id,
+      p_decision: "rejected",
+      p_reason: "test",
+    });
+    expect(rejectErr).toBeNull();
+
+    const siteB = await signedInAs(SITE_EMAIL);
+    openClients.push(siteB);
+    const idA = randomUUID();
+    const idB = randomUUID();
+    const [ra, rb] = await Promise.all([
+      site.rpc("rpc_create_approval", {
+        p_id: idA,
+        p_project_id: SEED.project,
+        p_package_id: SEED.poolPackage,
+        p_type: "material_sample",
+        p_item: "Race test revision A",
+        p_supersedes_id: original.id,
+      }),
+      siteB.rpc("rpc_create_approval", {
+        p_id: idB,
+        p_project_id: SEED.project,
+        p_package_id: SEED.poolPackage,
+        p_type: "material_sample",
+        p_item: "Race test revision B",
+        p_supersedes_id: original.id,
+      }),
+    ]);
+    const results = [ra, rb];
+    const succeeded = results.filter((r) => !r.error);
+    const failed = results.filter((r) => r.error);
+    expect(succeeded.length).toBe(1);
+    expect(failed.length).toBe(1);
+    expect(failed[0]?.error?.message).toMatch(/ILLEGAL_TRANSITION/);
+
+    for (const r of succeeded) trackedApprovalIds.push((r.data as ApprovalRow).id);
+
+    const backLink = await sql`select id from public.approvals where supersedes_id = ${original.id}`;
+    expect(backLink.length).toBe(1);
+  });
 });
 
 describe("attachments freeze on decision (migrations 0036/0037)", () => {
