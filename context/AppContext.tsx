@@ -2,7 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { seedData } from "@/lib/data";
-import type { AppData, ApprovalStatus, BillFile, BillStatus, Package, Role, Task } from "@/lib/types";
+import type { AppData, BillFile, BillStatus, Package, Role, Task } from "@/lib/types";
 import { billableItems, lineVal } from "@/lib/logic";
 import { ROLE_LABEL } from "@/lib/rbac/roles";
 
@@ -16,8 +16,23 @@ export type DialogState =
   | { kind: "taskDetail"; projectId: string; moduleId: string; taskId: string }
   | { kind: "newRequest"; projectId: string; moduleId?: string }
   | { kind: "rejectStockRequest"; requestId: string }
-  | { kind: "newApproval"; projectId: string; moduleId?: string }
-  | { kind: "approvalPhotos"; approvalId: string }
+  | {
+      kind: "newApproval";
+      projectId: string;
+      moduleId?: string;
+      // build §2.3: "Raise revised approval" on a rejected row pre-fills a
+      // new request from it, with `supersedesId` set — not present on a
+      // plain "+ Request Approval" open.
+      supersedes?: {
+        id: string;
+        packageId: string;
+        phaseId: string | null;
+        type: string;
+        item: string;
+      };
+    }
+  | { kind: "approvalPhotos"; approvalId: string; projectId: string; item: string }
+  | { kind: "decideApproval"; approvalId: string; decision: "approved" | "rejected"; item: string }
   | { kind: "postUpdate"; projectId: string; moduleId?: string }
   | { kind: "editUpdate"; updateId: string; body: string }
   | { kind: "billUpload"; billId: string }
@@ -41,7 +56,9 @@ interface AppContextValue {
   // setRequestStatus removed: build/07-stock-inventory-notifications.md
   // converts ReqTable to real Server Actions (transitionStockRequest), its
   // only caller.
-  setApprovalStatus: (id: string, status: ApprovalStatus) => void;
+  // setApprovalStatus removed: build/08-approvals.md converts ApprovalTable's
+  // Approve/Reject buttons to real Server Actions (decideApproval), its only
+  // caller.
   setBillStatus: (id: string, status: BillStatus) => void;
   createBill: (projectId: string, selectedKeys: Set<string>) => string | null;
   markPhaseDone: (projectId: string, moduleId: string, pkgId: string) => void;
@@ -59,11 +76,9 @@ interface AppContextValue {
   // (features/schedule/actions.ts), the only two callers these ever had.
   // addRequest removed: build/07-stock-inventory-notifications.md converts
   // NewRequestDialog to createStockRequest, its only caller.
-  addApproval: (
-    projectId: string,
-    a: { mod: string; pkg?: string; type: string; item: string; need: string; note: string; photos: number }
-  ) => void;
-  addApprovalPhotos: (approvalId: string, count: number) => void;
+  // addApproval/addApprovalPhotos removed: build/08-approvals.md converts
+  // NewApprovalDialog and ApprovalPhotosDialog to real Server Actions
+  // (requestApproval, addSamplePhotos), their only callers.
   uploadBillFiles: (billId: string, files: BillFile[]) => void;
   addProject: (p: {
     name: string;
@@ -112,18 +127,6 @@ export function AppProvider({
 
   const openDialog = useCallback((d: DialogState) => setDialog(d), []);
   const closeDialog = useCallback(() => setDialog(null), []);
-
-  const setApprovalStatus = useCallback((id: string, status: ApprovalStatus) => {
-    setData((prev) => {
-      const next = clone(prev);
-      const a = next.approvals.find((x) => x.id === id);
-      if (a) {
-        a.status = status;
-        a.decided = TODAY_ISO;
-      }
-      return next;
-    });
-  }, []);
 
   const setBillStatus = useCallback((id: string, status: BillStatus) => {
     setData((prev) => {
@@ -240,43 +243,6 @@ export function AppProvider({
     []
   );
 
-  const addApproval = useCallback(
-    (
-      projectId: string,
-      a: { mod: string; pkg?: string; type: string; item: string; need: string; note: string; photos: number }
-    ) => {
-      setData((prev) => {
-        const next = clone(prev);
-        const by = next.team.find((t) => t.r === role)?.n.split(" ")[0] || "You";
-        next.approvals.unshift({
-          id: "AP-" + String(next.approvals.length + 1).padStart(3, "0"),
-          proj: projectId,
-          mod: a.mod,
-          pkg: a.pkg,
-          type: a.type,
-          item: a.item || "Item",
-          by,
-          requested: TODAY_ISO,
-          need: a.need,
-          status: "Pending",
-          note: a.note,
-          photos: a.photos,
-        });
-        return next;
-      });
-    },
-    [role]
-  );
-
-  const addApprovalPhotos = useCallback((approvalId: string, count: number) => {
-    setData((prev) => {
-      const next = clone(prev);
-      const a = next.approvals.find((x) => x.id === approvalId);
-      if (a) a.photos = (a.photos || 0) + count;
-      return next;
-    });
-  }, []);
-
   const uploadBillFiles = useCallback((billId: string, files: BillFile[]) => {
     setData((prev) => {
       const next = clone(prev);
@@ -355,14 +321,11 @@ export function AppProvider({
       closeDialog,
       toastMsg,
       toast,
-      setApprovalStatus,
       setBillStatus,
       createBill,
       markPhaseDone,
       addModule,
       editModule,
-      addApproval,
-      addApprovalPhotos,
       uploadBillFiles,
       addProject,
       inviteUser,
@@ -377,14 +340,11 @@ export function AppProvider({
       toast,
       openDialog,
       closeDialog,
-      setApprovalStatus,
       setBillStatus,
       createBill,
       markPhaseDone,
       addModule,
       editModule,
-      addApproval,
-      addApprovalPhotos,
       uploadBillFiles,
       addProject,
       inviteUser,
