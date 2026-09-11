@@ -21,7 +21,12 @@ export const createStockRequestSchema = z.object({
   materialName: z.string().trim().min(1, "Material name is required"),
   qty: z.coerce.number().positive("Quantity must be positive"),
   unit: z.string().trim().min(1, "Unit is required"),
-  rate: z.coerce.number().nonnegative().optional(),
+  // `z.coerce.number()` alone coerces "" to 0 before `.optional()` ever sees
+  // it — found live via review: a blank Rate field silently submitted a
+  // real rate of ₹0 instead of "not specified." Preprocessing "" to
+  // undefined first is the same "" -> undefined shape as phaseId/neededBy
+  // above, just ahead of the coercion instead of after it.
+  rate: z.preprocess((v) => (v === "" ? undefined : v), z.coerce.number().nonnegative().optional()),
   neededBy: z
     .union([z.iso.date(), z.literal("")])
     .optional()

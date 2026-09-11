@@ -873,6 +873,99 @@ row in the file. Cleaned up live — deleted all eighteen duplicated rows, re-ra
 confirmed exactly six rows and zero drift, then ran the seed a second time to confirm it now stays
 at six.
 
+### D40 — `rpc_inventory_stats` computed `total_value` for every caller, relying on the DTO layer to hide it
+
+**Finding, caught by a full multi-dimensional review of this PR before merge (not by any test — nothing
+called this RPC directly from a non-admin session before).** The function's own original comment
+said "the CALLER decides whether to even read the column back... `features/inventory/queries.ts` is
+what discards it" — exactly the "hide it in the UI" pattern AGENTS.md's own rule says to stop and
+flag, not the "never fetch it in the first place" pattern every other admin-only figure in this
+codebase uses (role-scoped views omit the column from their SELECT list entirely; `rpc_create_stock_request`
+strips `rate` before it's ever stored). A Site session calling `rpc_inventory_stats` directly — its
+own grant already permits `authenticated`, which Site is — received the real `unit_cost`-derived
+total regardless of what the app's UI does with it.
+
+**Fixed** in `supabase/migrations/20260914090003_rpc_inventory_stats_admin_only_value.sql`: the RPC
+itself now returns `total_value = null` for a non-admin caller, computed via `case when
+public.is_admin() then ... else null end` — the same defense-in-depth boundary `rpc_create_stock_request`
+already applies to `rate`. Verified live with real Site/Admin sessions; `features/inventory/queries.ts`
+still discards it too, as the second boundary that pattern always keeps.
+
+### Review findings before merge — fixed and deferred
+
+**Before merging this PR**, a full multi-dimensional review (correctness, security/AGENTS.md
+conventions, removed behavior, reuse/duplication, efficiency, simplification, root-cause altitude)
+was run across the complete diff. D33, D35, D36, D38, D39 above were all found and fixed *during*
+the build; this pass found several more. Fixed:
+
+- **D40** above (`rpc_inventory_stats`).
+- `NewRequestDialog`'s `moduleId` prop was accepted but silently unused — the "+ Stock Request"
+  button on a package's own detail page (`PackageDetailActions.tsx`, a live, untouched caller) lost
+  its package pre-select. Restored.
+- `NewRequestDialog`'s Rate-field visibility used `session.role` (the REAL role) instead of the
+  effective role (`useApp().role`) — contradicted its own doc comment and broke the impersonation
+  preview's fidelity for Owner/Admin previewing as Site (not a security hole: the server action
+  separately, correctly, re-derives admin-ness from the real role for the write boundary). Fixed to
+  use the effective role, matching every other read-shaping check in this build.
+- `createStockRequestSchema`'s `rate` field used `z.coerce.number()` before `.optional()` ever saw
+  the value, so a blank Rate input coerced `""` to `0` — a real rate of zero, not "unspecified."
+  Fixed with the same `""` → `undefined` preprocessing shape used elsewhere in the same schema.
+- `features/search/queries.ts`'s `ilike` patterns didn't escape `%`/`_`/`\` in the user's own query
+  text, so a search containing those characters was interpreted as wildcards instead of literal
+  text (e.g. searching "M_20 grade concrete" matched far more than the literal substring). Fixed
+  with an escaping helper.
+- `ReqTable`'s Value column used a truthy check (`r.value ? ... : "–"`) instead of `!= null`, so a
+  real rate of exactly ₹0 rendered as "–" (unknown), indistinguishable from no rate at all. Fixed.
+- `InventoryTable`'s empty-state `colSpan` was keyed on `showProject` alone, not updated when
+  `isAdmin` was added as a second conditional column — under/over-spanned the empty row for a
+  non-admin viewer. Fixed to account for both.
+- `PackageFilterSelect` (Build 06, reused here alongside the new `StockStatusTabs`) rebuilt the
+  query string from just its own `package` param, silently dropping the `status` tab selection
+  when a user changed the package filter on the new Stock page — its original caller (Daily
+  Updates) has only one filter, so this never showed up there. Fixed to merge into the current
+  search params instead of replacing them (and to explicitly reset `cursor`, so the original
+  caller's pagination still restarts on a filter change, matching its previous behavior).
+
+**Deferred — real findings, not fixed in this pass, with reasons:**
+
+- **`rpc_adjust_inventory` (and, on inspection, several sibling RPCs) have no `org_id`/project
+  membership check beyond `is_admin()`.** This looked like a Build 07-specific gap at first, but
+  `is_member_of()` itself (migration 0002, Build 02) returns `true` unconditionally for any
+  `is_admin()` caller regardless of the target project's own org — so the *other* RPCs in this same
+  file that do call `is_member_of()` before touching a row don't actually enforce cross-org
+  isolation for an admin either. This is a systemic characteristic of the whole RPC layer since
+  Build 02, not a regression this PR introduces or fixes by patching one function. D3 already
+  accepts single-org-for-now with `org_id` on every table "for when it's needed" — worth a
+  dedicated multi-tenancy hardening pass before any real second org exists, not a one-RPC patch
+  here that would give false confidence while leaving every sibling RPC exactly as exposed.
+- **Every delivered stock request with no `inventory_item_id` creates a brand-new inventory item**,
+  rather than matching an existing one by name — two separate requests for identically-named
+  material become two separate, un-merged inventory rows, and the auto-created row's
+  `reorder_level` is hardcoded to `0` (never triggers Low/Critical). This matches `02-lld.md`
+  §5.4's own literal pseudocode exactly (which also never looks up an existing item by name or sets
+  a reorder level) — a real product gap, but a documented one in the implementation contract itself,
+  not a shortcut this build took. Worth raising as a follow-up build item (name-based matching, or
+  requiring `inventoryItemId` once a material has been delivered once before), not a fix to make
+  unilaterally against the LLD's own contract.
+- Search no longer matches a project by its client's name (the old mock's `buildSearchResults` did).
+  Not a regression against anything the build spec asked for (`§2.7` names the seven entity types
+  searched, not "or a project's client") — a possible enhancement, not a fix.
+- The phase captured on stock request creation (`phase_id`) is stored but never displayed in
+  `ReqTable` (only the package is). Minor, real, deferred.
+- `e2e/schedule-journey.spec.ts`'s "widens the viewport" test lost its direct DB-persistence check
+  when its cleanup was made name-based instead of id-based (see the finding above this file already
+  records for that same change) — it still asserts the task is visible and the viewport widened,
+  just not a direct `select` confirming the row exists in Postgres. Minor test-coverage regression,
+  not reverted because the id-based version is what left a stray row behind in the first place.
+- Several duplication/reuse and sequential-await-instead-of-`Promise.all` findings across
+  `features/search/queries.ts`, `features/inventory/queries.ts`, `features/stock/queries.ts`, and
+  `app/(app)/projects/[projectId]/page.tsx` (a shared `isAdminRole`/`isMoney` predicate reimplemented
+  inline in ~10 places instead of reused from `features/stock/service.ts`/`lib/logic.ts`;
+  `fetchProjectNames`-shaped helpers copy-pasted across `features/inventory/`, `features/notifications/`,
+  and `features/search/`; a handful of pages awaiting independent queries in sequence rather than via
+  `Promise.all`). All real, none correctness bugs — noted for a follow-up cleanup pass rather than
+  reworked under merge pressure across a dozen files at once.
+
 ---
 
 ## Still open

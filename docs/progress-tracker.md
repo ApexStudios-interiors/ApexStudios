@@ -417,9 +417,21 @@ exercise the `approved`/`ordered` states), and `v_inventory_status`/`v_inventory
 name rather than the mock array's arbitrary insertion order. Layout, spacing, fonts, badge colours
 and button styling are pixel-identical once those two are accounted for.
 
+### Pre-merge review pass
+
+Before merging, a full multi-dimensional review (correctness, security/AGENTS.md conventions,
+removed behavior, reuse, efficiency, simplification) ran across the complete PR diff. Six more real
+bugs were found and fixed (D40 in `docs/decisions.md`, plus `NewRequestDialog`'s dropped `moduleId`
+pre-select and real-vs-effective-role Rate visibility, a `rate` schema coercion bug, unescaped
+`ilike` wildcards in search, a falsy-zero display bug in `ReqTable`, and an under-spanning
+`InventoryTable` empty state) — see `docs/decisions.md`'s "Review findings before merge" entry for
+the full list, fixed and deliberately deferred alike. 84/84 pgTAP, 66/66 integration (1 new),
+131/131 unit, typecheck/lint/format all reconfirmed clean after the fixes.
+
 ### Still open
 
 | Item | Blocks |
 |---|---|
-| `docs/progress-tracker.md` visual-parity note above should be treated as the "documented differences" record the build's own exit criteria ask for | Nothing — recorded, not blocking |
+| `rpc_adjust_inventory` and its siblings have no cross-org isolation beyond `is_admin()` — systemic since Build 02's `is_member_of()`, not a Build 07 regression | A dedicated multi-tenancy hardening pass, before any real second org exists (D3) |
+| Delivered stock requests with no `inventory_item_id` always create a new inventory item rather than matching an existing one by name; the auto-created row's `reorder_level` is hardcoded to 0 — matches `02-lld.md` §5.4's own literal pseudocode | A follow-up build item, not a fix against the LLD's own contract |
 | Commit, push, PR, CI | Merge |

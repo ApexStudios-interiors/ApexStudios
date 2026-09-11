@@ -246,6 +246,28 @@ describe("rpc_adjust_inventory — T-09 negative quantity refused", () => {
   });
 });
 
+describe("rpc_inventory_stats — D40", () => {
+  it("total_value is null for a site session, populated for admin", async () => {
+    // D40: the RPC itself withholds total_value from a non-admin caller now
+    // — found in review calling it directly (not through
+    // features/inventory/queries.ts, which discarded it only in the DTO,
+    // the "hide it in the UI" pattern AGENTS.md says to stop and flag).
+    type StatsRow = { total_items: number; total_value: number | null };
+
+    const site = await client(SITE_EMAIL);
+    const { data: siteData, error: siteError } = await site.rpc("rpc_inventory_stats");
+    expect(siteError).toBeNull();
+    const siteRow = one(siteData as StatsRow[], "site inventory stats row");
+    expect(siteRow.total_value).toBeNull();
+    expect(Number(siteRow.total_items)).toBeGreaterThan(0);
+
+    const admin = await client(ADMIN_EMAIL);
+    const { data: adminData, error: adminError } = await admin.rpc("rpc_inventory_stats");
+    expect(adminError).toBeNull();
+    expect(one(adminData as StatsRow[], "admin inventory stats row").total_value).not.toBeNull();
+  });
+});
+
 describe("rpc_inventory_drift — T-10", () => {
   it("detects an un-ledgered mutation and leaves the cache untouched", async () => {
     // A disposable item, never a seeded one: this test deliberately injects

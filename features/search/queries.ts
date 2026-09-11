@@ -13,8 +13,14 @@ import { capResults, type SearchResultDTO } from "./service";
  * (Build 05: impersonation only ever shapes reads).
  */
 
+/** Escapes `ilike`'s own wildcard characters (`%`, `_`, and the escape
+ *  character `\` itself) before wrapping the user's literal text in `%...%`
+ *  — found live via review: an unescaped search for e.g. "M_20 grade
+ *  concrete" let Postgres treat `_` as "match any single character,"
+ *  matching far more than the literal substring typed. */
 function pattern(query: string): string {
-  return `%${query}%`;
+  const escaped = query.replace(/[\\%_]/g, (c) => `\\${c}`);
+  return `%${escaped}%`;
 }
 
 export async function searchAll(session: Session, query: string): Promise<SearchResultDTO[]> {

@@ -74,7 +74,13 @@ export function InventoryTable({
           ))
         ) : (
           <tr>
-            <td className={td} colSpan={showProject ? 7 : 6}>
+            {/* 5 base columns (Item, On Hand, Reorder Level, Location, Status)
+                plus Project and/or Value when those are shown — found live
+                via review: this stayed keyed on `showProject` alone after
+                `isAdmin` was added, under-spanning the empty state for a
+                non-admin business-wide view and over-spanning it for a
+                non-admin project view. */}
+            <td className={td} colSpan={5 + (showProject ? 1 : 0) + (isAdmin ? 1 : 0)}>
               <Empty>No inventory recorded yet.</Empty>
             </td>
           </tr>

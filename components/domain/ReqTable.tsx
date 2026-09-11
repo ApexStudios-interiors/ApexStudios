@@ -96,7 +96,7 @@ export function ReqTable({
               </td>
               {isAdmin && (
                 <td className={tdNum}>
-                  {r.value ? formatINR(r.value) : <span className="text-muted-foreground">–</span>}
+                  {r.value != null ? formatINR(r.value) : <span className="text-muted-foreground">–</span>}
                 </td>
               )}
               <td className={td}>{dmy(r.neededBy)}</td>

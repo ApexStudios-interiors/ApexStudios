@@ -6,7 +6,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
-import { useSession } from "@/components/auth/SessionProvider";
 import { createStockRequestSchema } from "@/features/stock/schema";
 import {
   createStockRequest,
@@ -30,11 +29,20 @@ import { DialogShell, Field, inputClass, textareaClass } from "@/components/ui/D
  * `modules`/`packages` naming (Build 04's known prototype-vs-schema mismatch,
  * carried forward from AddTaskDialog) — this one uses the real
  * `packages`/`phases` labels directly, matching every dialog converted since.
+ *
+ * `moduleId`, when the caller has one (e.g. the "+ Stock Request" button on
+ * a package's own detail page), pre-selects that package — restored after
+ * review found the prop was accepted but silently dropped, breaking the
+ * one caller (`PackageDetailActions.tsx`) that already relies on it.
  */
-export function NewRequestDialog({ projectId }: { projectId: string; moduleId?: string }) {
-  const { closeDialog, toast } = useApp();
-  const session = useSession();
-  const isAdmin = session.role === "owner" || session.role === "admin";
+export function NewRequestDialog({ projectId, moduleId }: { projectId: string; moduleId?: string }) {
+  const { role, closeDialog, toast } = useApp();
+  // The EFFECTIVE role: impersonation shapes what a preview sees, same as
+  // every other read-shaping check in this build (`useApp().role` is
+  // exactly that, computed server-side in app/(app)/layout.tsx — restored
+  // after review found this used the REAL role instead, contradicting this
+  // file's own comment above and the app's own impersonation-preview rule).
+  const isAdmin = role === "owner" || role === "admin";
   const router = useRouter();
 
   const [packages, setPackages] = useState<{ id: string; name: string }[] | null>(null);
@@ -64,7 +72,7 @@ export function NewRequestDialog({ projectId }: { projectId: string; moduleId?: 
     resolver: zodResolver(createStockRequestSchema),
     defaultValues: {
       projectId,
-      packageId: "",
+      packageId: moduleId ?? "",
       phaseId: "",
       materialName: "",
       qty: 0,
@@ -81,7 +89,7 @@ export function NewRequestDialog({ projectId }: { projectId: string; moduleId?: 
   // incompatible-library warning FileUploader's own upload queue hit twice
   // in Build 06. `register`'s own `onChange` option fires alongside its
   // internal handling, so the field is still form-registered either way.
-  const [packageId, setPackageId] = useState("");
+  const [packageId, setPackageId] = useState(moduleId ?? "");
   useEffect(() => {
     // No package selected: nothing to fetch, and nothing to reset here —
     // `visiblePhases` below derives "no package selected yet" from
