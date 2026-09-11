@@ -30,13 +30,20 @@ select is_empty(
 
 -- ── 2. Every table has at least one policy ───────────────────────────────────
 -- RLS enabled with no policy denies everything, which is safe but is almost
--- always an oversight rather than a decision.
+-- always an oversight rather than a decision. `rate_limits` (build 07,
+-- migration 20260914090001) is the one deliberate exception: no session has a
+-- legitimate reason to read or write its own throttle counter directly —
+-- `rpc_check_rate_limit` (security definer) is the only intended path in, and
+-- reading it directly would just be a second way to reset it. Named
+-- explicitly here rather than silently excluded, so the next table that shows
+-- up in this list is still caught.
 select is_empty(
   $$ select c.relname::text
        from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'public' and c.relkind = 'r'
+        and c.relname not in ('rate_limits')
         and not exists (select 1 from pg_policy p where p.polrelid = c.oid) $$,
-  'every table in public has at least one policy'
+  'every table in public has at least one policy, except the documented zero-policy exceptions'
 );
 
 -- ── 3. Every security definer function pins search_path ──────────────────────

@@ -1,21 +1,34 @@
-"use client";
-
-import { useState } from "react";
-import { useApp } from "@/context/AppContext";
-import { fmtS, inventoryStatus, inventoryValue } from "@/lib/logic";
+import { requireSession } from "@/lib/auth/session";
+import { getBusinessInventory } from "@/features/inventory/queries";
+import { getPortfolio } from "@/features/projects/queries";
 import { InventoryTable } from "@/components/domain/InventoryTable";
+import { InventoryProjectFilterSelect } from "@/components/domain/InventoryProjectFilterSelect";
+import { formatINRCompact } from "@/lib/money";
 import { StatBar } from "@/components/ui/StatBar";
 import { Card } from "@/components/ui/Card";
 
-export default function BusinessInventoryPage() {
-  const { data } = useApp();
-  const [projectFilter, setProjectFilter] = useState("all");
+/**
+ * build/07-stock-inventory-notifications.md §2.5 step 3: business-wide —
+ * adds the Project column and a project filter, keeps its ALL sidebar tag
+ * (unchanged, no code here). `getBusinessInventory` returns `EMPTY_STATS`/`[]`
+ * for a Client session, same non-hidden-route pattern as the project-level
+ * page.
+ */
+export default async function BusinessInventoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ project?: string }>;
+}) {
+  const { project: projectId } = await searchParams;
+  const session = await requireSession();
 
-  const items = data.inventory.filter((i) => projectFilter === "all" || i.proj === projectFilter);
+  const effectiveRole = session.impersonating?.role ?? session.role;
+  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
 
-  const totalValue = items.reduce((a, i) => a + inventoryValue(i), 0);
-  const lowCount = items.filter((i) => inventoryStatus(i) === "Low").length;
-  const criticalCount = items.filter((i) => inventoryStatus(i) === "Critical").length;
+  const [{ items, stats }, portfolio] = await Promise.all([
+    getBusinessInventory(session, { projectId }),
+    getPortfolio(session),
+  ]);
 
   return (
     <div>
@@ -26,30 +39,21 @@ export default function BusinessInventoryPage() {
 
       <StatBar
         stats={[
-          { label: "Total Items", value: items.length },
-          { label: "Total Value", value: fmtS(totalValue), sub: "at unit cost" },
-          { label: "Low Stock", value: lowCount, sub: "below reorder level" },
-          { label: "Critical", value: criticalCount, sub: "out of stock" },
+          { label: "Total Items", value: stats.totalItems },
+          ...(isAdmin
+            ? [{ label: "Total Value", value: formatINRCompact(stats.totalValue ?? 0), sub: "at unit cost" }]
+            : []),
+          { label: "Low Stock", value: stats.lowCount, sub: "below reorder level" },
+          { label: "Critical", value: stats.criticalCount, sub: "out of stock" },
         ]}
       />
 
       <div className="flex gap-3 mb-4">
-        <select
-          value={projectFilter}
-          onChange={(e) => setProjectFilter(e.target.value)}
-          className="h-9 border border-input rounded-lg bg-background px-2 text-[13px]"
-        >
-          <option value="all">All projects</option>
-          {data.projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+        <InventoryProjectFilterSelect projects={portfolio.projects} value={projectId ?? ""} />
       </div>
 
       <Card>
-        <InventoryTable items={items} projects={data.projects} />
+        <InventoryTable items={items} isAdmin={isAdmin} showProject />
       </Card>
     </div>
   );

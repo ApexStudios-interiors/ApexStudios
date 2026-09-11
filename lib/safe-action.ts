@@ -23,6 +23,7 @@ const ERROR_MESSAGES = {
   ALREADY_BILLED: "One or more items are already on another bill.",
   NEGATIVE_STOCK: "Not enough stock on hand.",
   REASON_REQUIRED: "Please give a reason.",
+  RATE_LIMITED: "Too many requests. Please wait a moment and try again.",
 } as const;
 
 /** Postgres RAISE EXCEPTION messages the RPCs use are prefixed with their code

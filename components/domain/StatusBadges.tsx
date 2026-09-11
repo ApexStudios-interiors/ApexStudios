@@ -1,6 +1,8 @@
 import { Badge } from "@/components/ui/Badge";
 import type { ApprovalStatus, BillStatus, RequestStatus } from "@/lib/types";
 import { type InventoryStatus, type PhaseStatus } from "@/lib/logic";
+import type { StockRequestStatus } from "@/features/stock/service";
+import type { InventoryStatus as StockLevel } from "@/features/inventory/service";
 
 export function RequestStatusBadge({ status }: { status: RequestStatus }) {
   switch (status) {
@@ -83,6 +85,40 @@ export function InventoryStatusBadge({ status }: { status: InventoryStatus }) {
     case "Low":
       return <Badge variant="warning">Low</Badge>;
     case "Critical":
+      return <Badge variant="destructive">Critical</Badge>;
+  }
+}
+
+/**
+ * build/07-stock-inventory-notifications.md §2.5. Real `stock_requests.status`
+ * (lowercase enum, `features/stock/service.ts`) — same colours as the mock's
+ * `RequestStatusBadge` above, which stays for the billing engine's own
+ * mock data until Build 09 converts it.
+ */
+export function StockRequestStatusBadge({ status }: { status: StockRequestStatus }) {
+  switch (status) {
+    case "pending":
+      return <Badge variant="warning">Pending</Badge>;
+    case "approved":
+      return <Badge variant="default">Approved</Badge>;
+    case "ordered":
+      return <Badge variant="outline">Ordered</Badge>;
+    case "delivered":
+      return <Badge variant="success">Delivered</Badge>;
+    case "rejected":
+      return <Badge variant="destructive">Rejected</Badge>;
+  }
+}
+
+/** Real `inventoryStatus()` (lowercase, `features/inventory/service.ts`) —
+ *  same colours as the mock's `InventoryStatusBadge` above. */
+export function StockLevelBadge({ status }: { status: StockLevel }) {
+  switch (status) {
+    case "ok":
+      return <Badge variant="success">OK</Badge>;
+    case "low":
+      return <Badge variant="warning">Low</Badge>;
+    case "critical":
       return <Badge variant="destructive">Critical</Badge>;
   }
 }

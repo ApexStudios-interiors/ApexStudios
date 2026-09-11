@@ -81,3 +81,33 @@ export async function getMaterialSuggestions(): Promise<string[]> {
   if (error) throw new Error(error.message);
   return [...new Set(data.map((i) => i.name))];
 }
+
+/** `NewRequestDialog`'s Package field — `v_package_site`, not `packages`
+ *  directly, for the same reason `features/schedule/actions.ts`'s own
+ *  `getPhaseOptions` reads the site view: `packages` is admin-only on
+ *  select, but this dialog is open to site too, and a package name carries
+ *  no money. */
+export async function getPackageOptions(projectId: string): Promise<{ id: string; name: string }[]> {
+  await requireSession();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("v_package_site")
+    .select("id, name, seq_no")
+    .eq("project_id", projectId)
+    .order("seq_no", { ascending: true });
+  if (error) throw new Error(error.message);
+  return data
+    .filter((p): p is { id: string; name: string; seq_no: number } => p.id != null && p.name != null)
+    .map((p) => ({ id: p.id, name: p.name }));
+}
+
+/** The closed `units` vocabulary (D-series decision predating this build,
+ *  Build 02) — free text would produce "Bags"/"bags"/"BAG" within a week.
+ *  Readable by every signed-in user; there is nothing confidential in it. */
+export async function getUnitOptions(): Promise<{ code: string; label: string }[]> {
+  await requireSession();
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("units").select("code, label").order("sort_order", { ascending: true });
+  if (error) throw new Error(error.message);
+  return data;
+}

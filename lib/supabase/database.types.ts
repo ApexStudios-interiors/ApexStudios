@@ -885,6 +885,27 @@ export type Database = {
         };
         Relationships: [];
       };
+      rate_limits: {
+        Row: {
+          profile_id: string;
+          action: string;
+          window_start: string;
+          count: number;
+        };
+        Insert: {
+          profile_id: string;
+          action: string;
+          window_start?: string;
+          count?: number;
+        };
+        Update: {
+          profile_id?: string;
+          action?: string;
+          window_start?: string;
+          count?: number;
+        };
+        Relationships: [];
+      };
       stock_movements: {
         Row: {
           id: string;
@@ -1415,6 +1436,14 @@ export type Database = {
           p_reason: string;
         };
         Returns: unknown;
+      };
+      rpc_check_rate_limit: {
+        Args: {
+          p_action: string;
+          p_max_per_window: number;
+          p_window_seconds?: number;
+        };
+        Returns: boolean;
       };
       rpc_claim_jobs: {
         Args: {

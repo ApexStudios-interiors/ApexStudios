@@ -7,6 +7,7 @@ import { EditModuleDialog } from "./EditModuleDialog";
 import { AddTaskDialog } from "./AddTaskDialog";
 import { TaskDetailDialog } from "./TaskDetailDialog";
 import { NewRequestDialog } from "./NewRequestDialog";
+import { RejectStockRequestDialog } from "./RejectStockRequestDialog";
 import { NewApprovalDialog } from "./NewApprovalDialog";
 import { ApprovalPhotosDialog } from "./ApprovalPhotosDialog";
 import { PostUpdateDialog } from "./PostUpdateDialog";
@@ -34,6 +35,8 @@ export function DialogHost() {
       );
     case "newRequest":
       return <NewRequestDialog projectId={dialog.projectId} moduleId={dialog.moduleId} />;
+    case "rejectStockRequest":
+      return <RejectStockRequestDialog requestId={dialog.requestId} />;
     case "newApproval":
       return <NewApprovalDialog projectId={dialog.projectId} moduleId={dialog.moduleId} />;
     case "approvalPhotos":

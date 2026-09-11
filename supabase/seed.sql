@@ -365,6 +365,17 @@ on conflict (id) do nothing;
 update public.projects set next_bill_seq = 6
  where id = '00000000-0000-4000-8000-0000000000c1' and next_bill_seq < 6;
 
+-- Same gap, one build later: next_sr_seq defaulted to 1 (migration
+-- 20260913090001) when this column was added long after SR-BHEL-NCH-001
+-- through -016 were already seeded above. Confirmed live: rpc_create_stock_request's
+-- first real calls allocated SR-BHEL-NCH-001..008 successfully (nothing seeded
+-- at those exact numbers was still in a state to collide) and then failed with
+-- a raw sr_ref_uq duplicate-key error on SR-BHEL-NCH-009 — the same class of
+-- oversight next_bill_seq's own fix above exists for, just missed when this
+-- build added the column.
+update public.projects set next_sr_seq = 17
+ where id = '00000000-0000-4000-8000-0000000000c1' and next_sr_seq < 17;
+
 insert into public.bill_lines (id, bill_id, source_type, source_id, description, client_value, pct_billed, amount, internal_cost, sort_order) values
   ('00000000-0000-4000-8000-000000000501', '00000000-0000-4000-8000-000000000401', 'material', '00000000-0000-4000-8000-000000000212', 'SR-BHEL-NCH-012 Ultratech 53 grade cement, 120 bag',  83045, 75,  62283.75,  35550.00, 1),
   ('00000000-0000-4000-8000-000000000502', '00000000-0000-4000-8000-000000000401', 'material', '00000000-0000-4000-8000-000000000211', 'SR-BHEL-NCH-011 Bonding agent, SBR latex, 10 can',    36792, 75,  27594.00,  15750.00, 2),

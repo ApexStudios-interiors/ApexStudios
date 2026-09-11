@@ -11,7 +11,7 @@ import type { Role } from "@/lib/rbac/roles";
  */
 export type StockRequestStatus = "pending" | "approved" | "ordered" | "delivered" | "rejected";
 
-export type StockTransition = { to: StockRequestStatus; label: string };
+export type StockTransition = { to: Exclude<StockRequestStatus, "pending">; label: string };
 
 const isAdminRole = (role: Role) => role === "owner" || role === "admin";
 

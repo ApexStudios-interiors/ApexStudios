@@ -1,11 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
-import { useApp } from "@/context/AppContext";
-import { buildSearchResults, type SearchResult } from "@/lib/logic";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useAction } from "next-safe-action/hooks";
+import { searchAll } from "@/features/search/actions";
+import type { SearchResultDTO } from "@/features/search/service";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { useClickOutside } from "@/hooks/useClickOutside";
+
+/**
+ * build/07-stock-inventory-notifications.md §2.7. Replaces the in-memory
+ * `buildSearchResults()` with the real `searchAll` Server Action —
+ * role-scoping now lives entirely in `features/search/queries.ts`, this
+ * component only owns typing, debouncing, and the open/close interaction.
+ *
+ * Debounced 300ms client-side, on top of the action's own 2-character
+ * minimum and rate limit — three independent reasons a single fast typist
+ * never sends seven queries per keystroke.
+ */
 
 const CATEGORY_ICON: Record<string, IconName> = {
   Projects: "folder",
@@ -17,28 +29,52 @@ const CATEGORY_ICON: Record<string, IconName> = {
   Users: "users",
 };
 
+const DEBOUNCE_MS = 300;
+const MIN_CHARS = 2;
+
 export function SearchBar() {
-  const { data, role } = useApp();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useClickOutside(ref, () => setOpen(false), open);
 
-  const results = useMemo(() => buildSearchResults(data, role, query), [data, role, query]);
+  const { execute, result, isExecuting, reset } = useAction(searchAll);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const trimmed = query.trim();
+    if (trimmed.length < MIN_CHARS) {
+      reset();
+      return;
+    }
+    debounceRef.current = setTimeout(() => execute({ query: trimmed }), DEBOUNCE_MS);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- execute/reset are stable per next-safe-action
+  }, [query]);
+
+  const results: SearchResultDTO[] = result.data ?? [];
   const grouped = useMemo(() => {
-    const map = new Map<string, SearchResult[]>();
-    results.slice(0, 30).forEach((r) => {
+    const map = new Map<string, SearchResultDTO[]>();
+    (result.data ?? []).forEach((r) => {
       const bucket = map.get(r.category);
       if (bucket) bucket.push(r);
       else map.set(r.category, [r]);
     });
     return map;
-  }, [results]);
+  }, [result.data]);
 
   const close = () => {
     setOpen(false);
     setQuery("");
+    reset();
   };
+
+  const trimmedQuery = query.trim();
+  const showDropdown = open && trimmedQuery.length > 0;
+  const tooShort = trimmedQuery.length > 0 && trimmedQuery.length < MIN_CHARS;
 
   return (
     <div className="relative w-64" ref={ref}>
@@ -55,9 +91,17 @@ export function SearchBar() {
           className="w-full bg-transparent outline-none text-[13px] text-foreground placeholder:text-muted-foreground"
         />
       </div>
-      {open && query.trim() && (
+      {showDropdown && (
         <div className="absolute left-0 right-0 top-full z-20 mt-1 bg-card border border-border rounded-lg shadow-lg py-1 max-h-96 overflow-auto">
-          {results.length ? (
+          {tooShort ? (
+            <div className="px-3 py-6 text-center text-muted-foreground text-[13px]">
+              Type at least {MIN_CHARS} characters
+            </div>
+          ) : isExecuting ? (
+            <div className="px-3 py-6 text-center text-muted-foreground text-[13px]">Searching…</div>
+          ) : result.serverError ? (
+            <div className="px-3 py-6 text-center text-muted-foreground text-[13px]">{result.serverError}</div>
+          ) : results.length ? (
             [...grouped.entries()].map(([cat, items]) => (
               <div key={cat}>
                 <div className="px-3 pt-2 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">

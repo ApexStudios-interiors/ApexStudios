@@ -767,6 +767,61 @@ Client session (real JWT via `signInWithPassword`, cleaned up after): the notifi
 and a direct `select * from bills` from that same session still returns zero rows, confirming the
 base table stays closed and the fix is additive only.
 
+### D34 — `LegacyDashboardCards.tsx`'s two TODOs had their build numbers swapped
+
+**Finding, resolved while converting the dashboard's Pending Requests card.** Build 04's own
+comment read *"TODO(build-07): Pending Approvals... TODO(build-08): Pending Requests"* — the
+opposite of build/07-stock-inventory-notifications.md's own explicit instruction ("§2.5 step 6:
+the dashboard's Pending Requests card — the TODO(build-07) left by Build 04") and of what this
+build actually covers (stock/inventory/notifications/search; it never touches approvals).
+**Fixed**: the Pending Requests card is now real (`getStockRequestsForProject`, passed down as a
+prop from the Server Component page). The Pending Approvals card stays on `AppContext` — approvals
+are out of this build's scope entirely — and its comment now correctly reads
+`TODO(build-08): Pending Approvals`.
+
+### D35 — `v_notifications`'s `stock_request` branch returned zero rows for Site, silently
+
+**Finding, resolved while writing the Playwright bell journey.** The exact same bug class as D33,
+one branch over. `stock_request` read `public.stock_requests` directly; that table's only select
+policy, `sr_select_admin` (0007), requires `is_admin()` — there is no policy granting Site a
+select on the base table at all. Site-facing reads go through `v_stock_request_site` (0014), a
+`security_invoker = off` view that does its own `is_member_of()` scoping specifically because no
+RLS policy on `stock_requests` covers Site.
+
+Caught by an actual Playwright run under a real Site session — the notifications bell showed only
+the `inventory_low` items (5) and zero `stock_request` ones, even though both seeded pending
+requests were confirmed still present in the table. It had been masked until then by this build's
+own `tests/integration/notifications.test.ts`, whose Site assertion read
+`stock_request OR inventory_low` — `inventory_low` alone (that table's select policy genuinely does
+include Site) was enough to pass, so `stock_request` being silently empty never surfaced. Fixed in
+the same pass: the assertion is now two separate checks, not one `||`.
+
+**Fixed** in `supabase/migrations/20260914090002_fix_notifications_stock_requests.sql`: the branch
+now reads `public.v_stock_request_site` instead of `public.stock_requests`. `is_member_of()`
+returns true unconditionally for `is_admin()` (0002), so Owner/Admin see exactly the same rows as
+before — a strict widening for Site, not a second, narrower branch. Verified live with a real Site
+JWT: both seeded pending requests now appear; Admin's own count is unchanged.
+
+### D36 — `next_sr_seq` was never advanced past the seeded `SR-BHEL-NCH-0NN` numbers
+
+**Finding, caught by the integration suite's own rate-strip test failing with a raw Postgres
+error.** `next_sr_seq` (migration `20260913090001`) defaulted to 1 for every existing project row,
+including the seeded one that already carries `SR-BHEL-NCH-001` through `-016` (Build 02's own
+seed, inserted directly with hand-picked ref numbers, long before this build's counter column
+existed). The first real `rpc_create_stock_request` calls against that project silently succeeded
+up to seq 8, then failed on seq 9 with `duplicate key value violates unique constraint
+"sr_ref_uq"` — the exact class of bug `next_bill_seq`'s own seed fix (`supabase/seed.sql`, "Keep
+projects.next_bill_seq ahead of the seeded bills") already exists to prevent, just missed when this
+build added the stock-request counter. **Fixed** in `seed.sql`: `next_sr_seq` is set to 17
+(`update ... where next_sr_seq < 17`), mirroring the bills fix exactly. Verified live.
+
+### D37 — `rate_limits` and `projects.next_sr_seq` were missing from the Drizzle schema
+
+**Finding, caught by `tests/integration/drift.test.ts`.** Both were added to the database by this
+build's migrations but never mirrored into `db/schema/` — a real gap the drift test exists
+specifically to catch (and did). **Fixed**: `db/schema/search.ts` (new, `rateLimits`) and
+`projects.nextSrSeq` added alongside the existing `nextBillSeq`.
+
 ---
 
 ## Still open

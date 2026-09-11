@@ -1285,6 +1285,19 @@ middleware. Signatures below are the zod input shape.
 | `deactivateUser` | `{ profileId }` | owner |
 | `retryJob` | `{ jobId }` | admin — resets a `failed` job to `pending` |
 
+### Search
+
+| Action | Input | Guard |
+|---|---|---|
+| `searchAll` | `{ query: string, min 2 chars }` | any authenticated member; rate-limited (`rpc_check_rate_limit`, 20/min per user) |
+
+Build 07 §2.7. Not a single query: each entity (projects, packages, stock requests, approvals,
+bills, inventory, users) goes through its own role-scoped query — the same tables/views every
+other read in this app uses — so scoping is inherited, not reimplemented, and a Client searching
+"marble" cannot learn a stock request exists (that query is never run for that role, not filtered
+after the fact). `ilike` against `pg_trgm` GIN indexes (migration `20260914090001`); capped at 5
+results per category and 25 overall (`features/search/service.ts`'s `capResults`).
+
 **Guard implementation:**
 
 ```ts

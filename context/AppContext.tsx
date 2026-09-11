@@ -2,16 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { seedData } from "@/lib/data";
-import type {
-  AppData,
-  ApprovalStatus,
-  BillFile,
-  BillStatus,
-  Package,
-  RequestStatus,
-  Role,
-  Task,
-} from "@/lib/types";
+import type { AppData, ApprovalStatus, BillFile, BillStatus, Package, Role, Task } from "@/lib/types";
 import { billableItems, lineVal } from "@/lib/logic";
 import { ROLE_LABEL } from "@/lib/rbac/roles";
 
@@ -24,6 +15,7 @@ export type DialogState =
   | { kind: "addTask"; projectId: string; moduleId: string }
   | { kind: "taskDetail"; projectId: string; moduleId: string; taskId: string }
   | { kind: "newRequest"; projectId: string; moduleId?: string }
+  | { kind: "rejectStockRequest"; requestId: string }
   | { kind: "newApproval"; projectId: string; moduleId?: string }
   | { kind: "approvalPhotos"; approvalId: string }
   | { kind: "postUpdate"; projectId: string; moduleId?: string }
@@ -46,7 +38,9 @@ interface AppContextValue {
   toast: (msg: string) => void;
 
   // mutations
-  setRequestStatus: (id: string, status: RequestStatus) => void;
+  // setRequestStatus removed: build/07-stock-inventory-notifications.md
+  // converts ReqTable to real Server Actions (transitionStockRequest), its
+  // only caller.
   setApprovalStatus: (id: string, status: ApprovalStatus) => void;
   setBillStatus: (id: string, status: BillStatus) => void;
   createBill: (projectId: string, selectedKeys: Set<string>) => string | null;
@@ -63,10 +57,8 @@ interface AppContextValue {
   // addTask/updateTask removed: build/05-schedule-and-progress.md converts
   // AddTaskDialog and TaskDetailDialog to real Server Actions
   // (features/schedule/actions.ts), the only two callers these ever had.
-  addRequest: (
-    projectId: string,
-    r: { mod: string; pkg?: string; item: string; qty: number; unit: string; rate: number; need: string }
-  ) => void;
+  // addRequest removed: build/07-stock-inventory-notifications.md converts
+  // NewRequestDialog to createStockRequest, its only caller.
   addApproval: (
     projectId: string,
     a: { mod: string; pkg?: string; type: string; item: string; need: string; note: string; photos: number }
@@ -120,15 +112,6 @@ export function AppProvider({
 
   const openDialog = useCallback((d: DialogState) => setDialog(d), []);
   const closeDialog = useCallback(() => setDialog(null), []);
-
-  const setRequestStatus = useCallback((id: string, status: RequestStatus) => {
-    setData((prev) => {
-      const next = clone(prev);
-      const r = next.requests.find((x) => x.id === id);
-      if (r) r.status = status;
-      return next;
-    });
-  }, []);
 
   const setApprovalStatus = useCallback((id: string, status: ApprovalStatus) => {
     setData((prev) => {
@@ -257,35 +240,6 @@ export function AppProvider({
     []
   );
 
-  const addRequest = useCallback(
-    (
-      projectId: string,
-      r: { mod: string; pkg?: string; item: string; qty: number; unit: string; rate: number; need: string }
-    ) => {
-      setData((prev) => {
-        const next = clone(prev);
-        const by = next.team.find((t) => t.r === role)?.n.split(" ")[0] || "You";
-        const n = next.requests.length + 15;
-        next.requests.unshift({
-          id: "SR-0" + n,
-          proj: projectId,
-          mod: r.mod,
-          pkg: r.pkg,
-          item: r.item || "Item",
-          qty: r.qty || 0,
-          unit: r.unit,
-          rate: r.rate || 0,
-          by,
-          need: r.need,
-          status: "Pending",
-          raised: TODAY_ISO,
-        });
-        return next;
-      });
-    },
-    [role]
-  );
-
   const addApproval = useCallback(
     (
       projectId: string,
@@ -401,14 +355,12 @@ export function AppProvider({
       closeDialog,
       toastMsg,
       toast,
-      setRequestStatus,
       setApprovalStatus,
       setBillStatus,
       createBill,
       markPhaseDone,
       addModule,
       editModule,
-      addRequest,
       addApproval,
       addApprovalPhotos,
       uploadBillFiles,
@@ -425,14 +377,12 @@ export function AppProvider({
       toast,
       openDialog,
       closeDialog,
-      setRequestStatus,
       setApprovalStatus,
       setBillStatus,
       createBill,
       markPhaseDone,
       addModule,
       editModule,
-      addRequest,
       addApproval,
       addApprovalPhotos,
       uploadBillFiles,

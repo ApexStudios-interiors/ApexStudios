@@ -9,7 +9,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(3);
+select plan(4);
 
 select isnt_empty(
   $$ select 1 from pg_views where schemaname = 'public' and viewname = 'v_notifications' $$,
@@ -41,6 +41,18 @@ select ok(
   pg_get_viewdef('public.v_notifications'::regclass) ~ 'v_bill_client'
     and pg_get_viewdef('public.v_notifications'::regclass) !~ 'from public\.bills\b',
   'the bill_submitted branch reads v_bill_client, never public.bills directly (D33)'
+);
+
+-- D35: the same bug class, one branch over — stock_request must read
+-- v_stock_request_site, not public.stock_requests directly. That table's
+-- only select policy is admin-only (sr_select_admin, 0007); Site has no
+-- policy on it at all, so a direct read silently returned zero rows for
+-- exactly the role this notification exists for (01-hld.md §11). Confirmed
+-- live against a real Site JWT before this fix (migration 20260914090002).
+select ok(
+  pg_get_viewdef('public.v_notifications'::regclass) ~ 'v_stock_request_site'
+    and pg_get_viewdef('public.v_notifications'::regclass) !~ 'from public\.stock_requests\b',
+  'the stock_request branch reads v_stock_request_site, never public.stock_requests directly (D35)'
 );
 
 select * from finish();

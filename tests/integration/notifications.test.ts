@@ -93,7 +93,13 @@ describe("v_notifications — Client role", () => {
 describe("v_notifications — Site role", () => {
   it("sees stock_request and inventory_low, never bill_submitted or approval_pending", async () => {
     const rows = await notificationsFor(SITE_EMAIL, "site");
-    expect(rows.some((r) => r.kind === "stock_request" || r.kind === "inventory_low")).toBe(true);
+    // D35: asserted individually, not `a || b` — the OR let stock_request
+    // being silently empty (v_notifications read public.stock_requests
+    // directly; Site has no select policy on that table at all) hide behind
+    // inventory_low alone passing. Caught live via Playwright, not here,
+    // which is the whole reason this is two assertions now, not one.
+    expect(rows.some((r) => r.kind === "stock_request")).toBe(true);
+    expect(rows.some((r) => r.kind === "inventory_low")).toBe(true);
     expect(rows.some((r) => r.kind === "bill_submitted")).toBe(false);
     expect(rows.some((r) => r.kind === "approval_pending")).toBe(false);
   });
