@@ -7,6 +7,7 @@ import { Toast } from "@/components/ui/Toast";
 import { DialogHost } from "@/components/dialogs/DialogHost";
 import { PreviewBanner } from "@/components/auth/PreviewBanner";
 import { getSession } from "@/lib/auth/session";
+import { getNotifications } from "@/features/notifications/queries";
 
 /**
  * The authenticated app shell: Sidebar, Header, the mock-data AppProvider
@@ -25,6 +26,7 @@ export default async function AppShellLayout({ children }: { children: React.Rea
   if (!session) redirect("/login");
 
   const effectiveRole = session.impersonating?.role ?? session.role;
+  const notifications = await getNotifications(session);
 
   return (
     <SessionProvider session={session}>
@@ -33,7 +35,7 @@ export default async function AppShellLayout({ children }: { children: React.Rea
         <div className="grid grid-cols-[250px_1fr] min-h-screen">
           <Sidebar />
           <div className="min-w-0">
-            <Header />
+            <Header notifications={notifications} />
             <div className="p-7 max-w-[1280px]">{children}</div>
           </div>
         </div>

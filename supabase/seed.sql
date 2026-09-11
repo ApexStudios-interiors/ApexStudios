@@ -244,6 +244,38 @@ insert into public.stock_requests (id, org_id, project_id, package_id, phase_id,
   ('00000000-0000-4000-8000-000000000216', '00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', '00000000-0000-4000-8000-0000000000e1', '00000000-0000-4000-8000-0000000000f8', 'SR-BHEL-NCH-016', 'Underwater LED light, IP68, 18 W',                9, 'nos',  8400, date '2026-10-26', 'ordered',   '00000000-0000-4000-8000-0000000000d5', '00000000-0000-4000-8000-0000000000d2', timestamptz '2026-09-08 10:00+05:30', timestamptz '2026-09-08 15:00+05:30', null, null, null, timestamptz '2026-09-07 09:00+05:30')
 on conflict (id) do nothing;
 
+-- Delivered requests link back to the item they delivered — a real delivery
+-- (rpc_transition_stock_request) always sets this; these three rows predate
+-- that RPC, so it's set by hand here for the same referential completeness.
+update public.stock_requests set inventory_item_id = '00000000-0000-4000-8000-000000000605' where id = '00000000-0000-4000-8000-000000000211';
+update public.stock_requests set inventory_item_id = '00000000-0000-4000-8000-000000000601' where id = '00000000-0000-4000-8000-000000000212';
+update public.stock_requests set inventory_item_id = '00000000-0000-4000-8000-000000000602' where id = '00000000-0000-4000-8000-000000000213';
+
+-- ── Stock movements: opening balance ─────────────────────────────────────────
+-- D32 (docs/decisions.md): every inventory_items row above was seeded with a
+-- qty_on_hand directly, with no stock_movements behind it — a real delivery
+-- (SR-011/012/013 above) put some of it there, but each item's CURRENT
+-- quantity doesn't equal what was delivered (site consumption between then
+-- and the seed's own "today" was never modelled, and never asked for).
+-- Build 07's inventory.reconcile job recomputes qty_on_hand from this ledger
+-- and alerts on any disagreement — without a ledger behind the seed, it
+-- would alert on all eight items on its very first run, which is noise, not
+-- a finding. One 'in' / ref_type='adjustment' movement per item, sized to
+-- match its own seeded qty_on_hand exactly, is the same thing a real opening
+-- balance migration would write (build §0's own "opening adjust movements"),
+-- just backdated to the seed's own "today" rather than reconstructing a
+-- history nobody specified.
+insert into public.stock_movements (org_id, inventory_item_id, project_id, direction, qty, unit_cost, ref_type, reason, created_at, created_by) values
+  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000601', '00000000-0000-4000-8000-0000000000c1', 'in', 40,   395,  'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
+  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000602', '00000000-0000-4000-8000-0000000000c1', 'in', 5,    4050, 'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
+  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000604', '00000000-0000-4000-8000-0000000000c1', 'in', 45,   640,  'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
+  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000605', '00000000-0000-4000-8000-0000000000c1', 'in', 3,    2100, 'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
+  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000606', '00000000-0000-4000-8000-0000000000c1', 'in', 1100, 150,  'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2'),
+  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000608', '00000000-0000-4000-8000-0000000000c1', 'in', 60,   380,  'adjustment', 'Opening balance (seed)', timestamptz '2026-08-24 09:00+05:30', '00000000-0000-4000-8000-0000000000d2');
+-- 603 (Pool-grade vitrified tile) and 607 (Aluminium window profile) both
+-- seed at qty_on_hand = 0 — the ledger already agrees with no rows at all,
+-- so they get none.
+
 -- ── Approvals ────────────────────────────────────────────────────────────────
 -- The prototype has pending and approved. §4.9 requires a rejected one too, so
 -- AP-005 is added; the other four are transcribed.

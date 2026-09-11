@@ -361,3 +361,49 @@ confirmation.
 | `inventory.reconcile` is a documented no-op stub | Build 07 fills it in |
 | `bill.pdf` isn't in `lib/jobs/registry.ts` yet (no code enqueues it) | Build 09 adds it, and its own name to `rpc_enqueue_job`'s allowlist |
 | TOTP enrollment UI (D22) | A real admin/owner account cannot use any admin-gated action today |
+
+## Build 07 — Stock Requests, Inventory Ledger, Notifications & Search (in progress)
+
+Branch `build/07-stock-and-inventory`. Not yet merged; not yet opened as a PR. This entry
+records the state of the backend layer, which is complete and verified live; the UI conversions,
+search feature and remaining test tiers are still ahead of it (tracked below, not silently
+dropped).
+
+**Verified so far**: 126/126 unit tests, 77/77 pgTAP (17 new, across `06_stock_inventory_test.sql`
+and `07_notifications_test.sql`), 65/65 integration tests (18 new, across
+`stock-and-inventory.test.ts` and `notifications.test.ts`), typecheck/lint clean. All new RPCs
+smoke-tested live against `apex-dev` from real signed-in sessions (not service_role) for every
+role the build's permission matrix names. The dev database was left exactly seed-consistent after
+every live check — `rpc_inventory_drift()` reports 0 rows as of the last verification pass.
+
+### What shipped
+
+| Area | Status | Notes |
+|---|---|---|
+| `rpc_create_stock_request`, `rpc_transition_stock_request`, `rpc_adjust_inventory` | ✅ | The full lifecycle (pending → approved/rejected → ordered → delivered) with row-lock concurrency safety, rate stripped for non-admin at both the action layer (real role, never impersonated) and the RPC itself, atomic delivery → inventory-item-creation → ledger movement → cache update in one transaction. Fixed a real bug in 02-lld.md §5.4's own pseudocode along the way (before/after audit state captured in the wrong order — see D-series notes in `docs/decisions.md`). |
+| `rpc_inventory_stats`, `rpc_inventory_drift` | ✅ | Stats is `security invoker` (aggregates only already-visible rows); drift is `security definer`, service_role-only, one indexed aggregate comparing the cache against `Σ in − Σ out` per item. |
+| `lib/jobs/handlers/inventory.reconcile.ts` | ✅ | Replaces Build 06's stub. Logs, raises a Sentry message, and throws — landing the job in `failed` is the alert. Deliberately never auto-corrects the cache. Verified live: an injected un-ledgered mutation is detected and the cache is left untouched. |
+| `features/stock/`, `features/inventory/` | ✅ | service/schema/actions/queries for both, role-scoped views throughout (`v_stock_request_site`, `v_inventory_site`, `v_inventory_status`), the established literal-`.from()`-per-branch pattern (a shared runtime table-name variable breaks supabase-js's type inference). |
+| `features/notifications/` | ✅ | Replaces `buildNotifications()` in `lib/logic.ts`. One query over `v_notifications`, filtered by `.contains("for_roles", [effectiveRole])`, scoped across every project the session can access via each underlying table's own RLS. Wired into `app/(app)/layout.tsx` → `Header` → `NotificationsMenu` as a server-fetched prop, no client-side data fetching. No read state, no notifications table (ADR-014). |
+| `scripts/gen-types.mjs` | ✅ | Fixed a real generator bug: `RETURNS TABLE(...)` output columns were leaking into the generated `Args` type because the `information_schema.parameters` query didn't filter by `parameter_mode`. |
+| `supabase/seed.sql` | ✅ | Amended (Build 02's file): linked `inventory_item_id` for the three seeded delivered requests, added one opening-balance movement per item so the ledger and the cache agree from the first `pnpm db:seed`. |
+
+### Real bugs and gaps found only by actually running it
+
+| Finding | Where |
+|---|---|
+| **`v_notifications`'s `bill_submitted` branch returned zero rows for Client, silently, since migration 0015** — it read `public.bills` directly on the stated assumption that RLS scoped it correctly, but `bills` has no select policy for Client at all (client reads go through `v_bill_client`, a `security_invoker = off` view built for exactly this gap). A Client session never saw "Bill RA-... awaiting certification" — the one notification that matters most, since only a Client may certify a bill. Caught by testing from a real Client JWT, not service_role. Fixed by reading `v_bill_client` instead; verified live with a throwaway Client session. | D33, `supabase/migrations/20260913090005_fix_notifications_bills.sql` |
+| **`unit_cost`'s admin/site wording in the build file itself contradicts AGENTS.md**, which names that exact column in its never-to-a-non-admin list. AGENTS.md wins; both pre-existing role-scoped inventory views already agreed with it, not the build file. | D30 |
+| **`movement_direction`'s `'adjust'` enum value has no sign of its own** — `stock_movements.qty` must be positive, so an adjustment is recorded as an ordinary `'in'`/`'out'` movement tagged `ref_type = 'adjustment'`, leaving `'adjust'` defined but unused. | D31 |
+| **Seeded inventory had zero `stock_movements` behind it** — would have made `inventory.reconcile` alert on all eight items on its first real run. Fixed in `seed.sql` before writing the reconcile job. | D32 |
+| **This build's own integration test file initially left the dev database with a real, permanent drift** — a delivery's cache bump was reverted by deleting the movement row in `afterEach` without reverting the cache the movement had justified, and a failed assertion skipped an inline (non-`finally`) restore step entirely. Both are why the suite now creates its own disposable inventory items rather than mutating a seeded one, and wraps the drift-injection test in `try/finally`. Caught and repaired live before it could reach anyone else's session. | `tests/integration/stock-and-inventory.test.ts` |
+
+### Still open
+
+| Item | Blocks |
+|---|---|
+| `features/search/` (`searchAll`, trigram index, debounced `SearchBar`) | This build's own §2.7 exit criteria |
+| UI conversions: `stock/page.tsx` (both levels), `inventory/page.tsx` (both levels), `NewRequestDialog`, `ReqTable`, `InventoryTable`, dashboard's Pending Requests card | Visual-parity and role-journey exit criteria |
+| Playwright role journeys for the new stock/inventory/notifications surfaces | `pnpm test:e2e` exit criterion |
+| `docs/02-lld.md` §7 amendment adding `searchAll` | Housekeeping, blocks nothing else |
+| Commit, push, PR, CI | Merge |

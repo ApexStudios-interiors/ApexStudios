@@ -1,13 +1,41 @@
 import "server-only";
+import * as Sentry from "@sentry/nextjs";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
- * Build 07 fills this in: recompute `qty_on_hand` from `stock_movements`,
- * alert on drift (01-hld.md §10.2). The cron entry, the registry wiring and
- * the Admin ops page all ship now, per build/06-files-jobs-daily-updates.md's
- * own deliverables list, so nothing in that chain has to change the day this
- * handler grows real logic. A safe no-op in the meantime — not a crash the
- * nightly cron would report as a failed job every single night.
+ * build/07-stock-inventory-notifications.md §2.4. Nightly at 02:00 IST.
+ * Recomputes `qty_on_hand` from `stock_movements` (`rpc_inventory_drift`'s
+ * own single indexed aggregate — build §4's own exit criterion is index
+ * scans at 5,000 items, not this handler pulling every row into memory) and
+ * compares it against the cache.
+ *
+ * "Do not silently correct the cache" (build §5): a drift means an
+ * un-ledgered mutation exists somewhere in the code, and overwriting the
+ * evidence removes the only signal that the bug is there. This handler logs,
+ * raises a Sentry event, and THROWS — landing the job in `failed` on the
+ * Admin ops page is the alert. The `inventory-drift.md` runbook (Build 10)
+ * is what actually fixes a drift: find the un-ledgered write, post a
+ * compensating `adjust` movement with a reason, then fix the code path.
  */
 export async function reconcileInventory(): Promise<void> {
-  // TODO(build-07): recompute qty_on_hand from stock_movements; alert on drift.
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.rpc("rpc_inventory_drift");
+  if (error) throw new Error(error.message);
+
+  if (data.length === 0) return;
+
+  for (const d of data) {
+    console.error(
+      `inventory.reconcile: drift on "${d.name}" (${d.item_id}) — cache=${d.cached_qty}, ledger=${d.ledger_qty}`
+    );
+  }
+
+  Sentry.captureMessage(`inventory.reconcile: drift on ${data.length} item(s)`, {
+    level: "error",
+    extra: { items: data },
+  });
+
+  throw new Error(
+    `DRIFT_DETECTED: ${data.length} inventory item(s) disagree with their own ledger — see the inventory-drift.md runbook`
+  );
 }

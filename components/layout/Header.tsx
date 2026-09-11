@@ -6,6 +6,7 @@ import { sectionFromPath } from "@/lib/rbac/nav";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { NotificationsMenu } from "@/components/layout/NotificationsMenu";
 import { SearchBar } from "@/components/layout/SearchBar";
+import type { NotificationDTO } from "@/features/notifications/queries";
 
 const SECTION_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
@@ -18,7 +19,7 @@ const SECTION_LABELS: Record<string, string> = {
   billing: "Billing",
 };
 
-export function Header() {
+export function Header({ notifications }: { notifications: NotificationDTO[] }) {
   const { data, role } = useApp();
   const pathname = usePathname();
   const params = useParams<{ projectId?: string; moduleId?: string }>();
@@ -63,7 +64,7 @@ export function Header() {
       <div className="flex-1" />
       <div className="flex items-center gap-3">
         <SearchBar />
-        <NotificationsMenu />
+        <NotificationsMenu items={notifications} />
         <ThemeToggle />
       </div>
     </div>

@@ -2,18 +2,21 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { useApp } from "@/context/AppContext";
-import { buildNotifications } from "@/lib/logic";
+import type { NotificationDTO } from "@/features/notifications/queries";
 import { Icon } from "@/components/ui/Icon";
 import { useClickOutside } from "@/hooks/useClickOutside";
 
-export function NotificationsMenu() {
-  const { data, role } = useApp();
+/**
+ * build/07-stock-inventory-notifications.md §2.6. Data arrives as a prop from
+ * the server (app/(app)/layout.tsx via features/notifications/queries.ts) —
+ * this component only owns the open/close interaction, same division as
+ * before except the list is now real. No "mark as read": the badge count and
+ * the dropdown are the same `items` array (ADR-014).
+ */
+export function NotificationsMenu({ items }: { items: NotificationDTO[] }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useClickOutside(ref, () => setOpen(false), open);
-
-  const items = buildNotifications(data, role);
 
   return (
     <div className="relative" ref={ref}>
@@ -37,13 +40,15 @@ export function NotificationsMenu() {
           {items.length ? (
             items.map((n) => (
               <Link
-                key={n.id}
+                key={`${n.kind}-${n.entityId}`}
                 href={n.href}
                 onClick={() => setOpen(false)}
                 className="flex flex-col px-3 py-2 text-[13px] hover:bg-accent"
               >
-                <span className="font-medium text-foreground truncate">{n.text}</span>
-                <span className="text-xs text-muted-foreground truncate">{n.sub}</span>
+                <span className="font-medium text-foreground truncate">{n.title}</span>
+                {n.projectName && (
+                  <span className="text-xs text-muted-foreground truncate">{n.projectName}</span>
+                )}
               </Link>
             ))
           ) : (

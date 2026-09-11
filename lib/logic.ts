@@ -186,77 +186,10 @@ export function inventoryFor(data: AppData, projId: string): InventoryItem[] {
   return data.inventory.filter((i) => i.proj === projId);
 }
 
-export interface Notification {
-  id: string;
-  text: string;
-  sub: string;
-  href: string;
-}
-
-/** Flat, role-scoped list of things needing attention across every project. */
-export function buildNotifications(data: AppData, role: Role): Notification[] {
-  const items: Notification[] = [];
-  const projectName = (id: string) => data.projects.find((p) => p.id === id)?.name ?? id;
-
-  if (role !== "client") {
-    data.requests
-      .filter((r) => r.status === "Pending")
-      .forEach((r) =>
-        items.push({
-          id: "req-" + r.id,
-          text: r.item,
-          sub: `Stock request · ${projectName(r.proj)}`,
-          href: `/projects/${r.proj}/stock`,
-        })
-      );
-  }
-
-  if (role === "client") {
-    data.approvals
-      .filter((a) => a.status === "Pending")
-      .forEach((a) =>
-        items.push({
-          id: "ap-" + a.id,
-          text: a.item,
-          sub: `Approval needed · ${projectName(a.proj)}`,
-          href: `/projects/${a.proj}/approvals`,
-        })
-      );
-    data.bills
-      .filter((b) => b.status === "Submitted")
-      .forEach((b) =>
-        items.push({
-          id: "bill-" + b.id,
-          text: `Bill ${b.id}`,
-          sub: `Awaiting your approval · ${projectName(b.proj)}`,
-          href: `/projects/${b.proj}/billing`,
-        })
-      );
-  } else {
-    data.bills
-      .filter((b) => b.status === "Submitted")
-      .forEach((b) =>
-        items.push({
-          id: "bill-" + b.id,
-          text: `Bill ${b.id} submitted`,
-          sub: `Ready to certify · ${projectName(b.proj)}`,
-          href: `/projects/${b.proj}/billing`,
-        })
-      );
-    data.inventory
-      .filter((i) => inventoryStatus(i) !== "OK")
-      .forEach((i) =>
-        items.push({
-          id: "inv-" + i.id,
-          text: i.name,
-          sub: `${inventoryStatus(i)} stock · ${projectName(i.proj)}`,
-          href: `/projects/${i.proj}/inventory`,
-        })
-      );
-  }
-
-  return items;
-}
+// `buildNotifications()` (and its `Notification` type) is retired — build/07
+// replaced it with a live query over `v_notifications`
+// (features/notifications/queries.ts). See docs/decisions.md and
+// docs/build/07-stock-inventory-notifications.md §2.6.
 
 export interface SearchResult {
   id: string;

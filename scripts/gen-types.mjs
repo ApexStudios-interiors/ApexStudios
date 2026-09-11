@@ -193,8 +193,15 @@ try {
             or has_function_privilege('service_role', p.oid, 'EXECUTE'))
      order by p.proname`;
 
+  // `parameter_mode` matters: a `returns table (...)` function reports its
+  // OUTPUT columns through this same view, ordinal-numbered right after the
+  // real IN arguments — found live writing rpc_inventory_stats (Build 07),
+  // the first RETURNS TABLE function in this codebase. Without this filter,
+  // its output columns were generated INTO the Args type, so calling the
+  // function with only its real arguments failed typecheck ("total_items"
+  // etc. required and missing).
   const params = await sql`
-    select specific_name, parameter_name, udt_name, ordinal_position, parameter_default
+    select specific_name, parameter_name, parameter_mode, udt_name, ordinal_position, parameter_default
       from information_schema.parameters
      where specific_schema = 'public'
      order by specific_name, ordinal_position`;
@@ -216,7 +223,9 @@ try {
     // information_schema keys routines by "name_oid"; find the matching one.
     const specificName = [...routineByName.keys()].find((k) => k.endsWith(`_${fn.oid}`));
     const routine = specificName ? routineByName.get(specificName) : undefined;
-    const fnParams = specificName ? (paramsByRoutine.get(specificName) ?? []) : [];
+    const allParams = specificName ? (paramsByRoutine.get(specificName) ?? []) : [];
+    const fnParams = allParams.filter((p) => p.parameter_mode === "IN" || p.parameter_mode === "INOUT");
+    const outParams = allParams.filter((p) => p.parameter_mode === "OUT" || p.parameter_mode === "INOUT");
 
     lines.push(`      ${fn.name}: {`);
     if (fnParams.length === 0) {
@@ -231,7 +240,15 @@ try {
       }
       lines.push("        };");
     }
-    lines.push(`        Returns: ${routine ? tsType(routine.type_udt_name, enumNames) : "unknown"};`);
+    if (outParams.length > 0) {
+      // `returns table (...)`: postgres reports it as a `record` routine
+      // with its columns as OUT parameters here — a set of rows, so the TS
+      // shape is an array of an object built from those same columns.
+      const cols = outParams.map((p) => `${p.parameter_name}: ${tsType(p.udt_name, enumNames)}`).join("; ");
+      lines.push(`        Returns: { ${cols} }[];`);
+    } else {
+      lines.push(`        Returns: ${routine ? tsType(routine.type_udt_name, enumNames) : "unknown"};`);
+    }
     lines.push("      };");
   }
   lines.push("    };");

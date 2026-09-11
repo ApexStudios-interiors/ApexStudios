@@ -669,6 +669,106 @@ renders on every page. All admin baselines were refreshed together for this one,
 
 ---
 
+### D28 — Stock request reference number format
+
+**Question:** `build/07-stock-inventory-notifications.md` §0 requires a final format before the
+first one is issued. The prototype uses `SR-014`; `02-lld.md`'s own schema comment shows
+`SR-BHEL-NCH-014`.
+**Answered:** 2026-09-12 by Voola
+**Answer:** `SR-{project_code}-{n}`, one counter per project — the exact pattern D6 already
+established for bill numbers (`RA-{project_code}-{n}`).
+**Consequence:** `projects` gains `next_sr_seq`, incremented under the same per-project row lock
+`rpc_create_bill` already takes for `next_bill_seq`. `rpc_create_stock_request` is the only path
+that can allocate one — never a `count(*) + 1` in application code, which races.
+
+### D29 — Central store and transfers, in or out for v1
+
+**Question:** `inventory_items.project_id` is nullable, meaning `NULL` = a central store. Does
+Apex actually hold central stock, and if so, are site↔store transfers needed?
+**Answered:** 2026-09-12 by Voola
+**Answer:** No central store for v1. Every `inventory_items` row keeps a real `project_id`.
+**Consequence:** No transfer movement type, no transfer RPC — both stay out of scope, matching
+`01-hld.md` §2.1's own boundary. C2 (delivery challans for warehouse→site transfers,
+`01-hld.md` §8.4 item 4) stays unresolved but genuinely doesn't block anything now: it was only
+ever a blocker for transfers, and there are none. Revisit both together if a central store is
+ever wanted.
+
+**Also confirmed, not re-litigated because the source documents already settle them without
+ambiguity:** who marks Delivered (Admin or Site — `01-hld.md` §7.1's own permission matrix
+already says so explicitly) and rate visibility (`stock_requests.rate` admin-only — same table).
+
+### D30 — `inventory_items.unit_cost`: the build file's own wording contradicts AGENTS.md
+
+**Finding, not a question put to Voola.** `build/07-stock-inventory-notifications.md` §2.3 says
+*"`unit_cost` is admin/site, never client"* — but `AGENTS.md` names `unit_cost` explicitly, by
+that exact column name, in its list of columns that must never reach a non-Admin session
+("internal_amount, unit_cost, rate, internal_cost_amount or margin_amount"). AGENTS.md's own
+precedence rule is that it wins over every other document, always. Both role-scoped inventory
+views already agree with AGENTS.md, not the build file: `v_inventory_status` (0013, admin-only in
+practice — carries `unit_cost`/`stock_value`) and `v_inventory_site` (0014, its own comment: "A
+supervisor needs to know that cement is low, not what it cost"). Read as "the column exists in
+the admin/site inventory *feature area*, but is never actually exposed to Site" — `unit_cost` is
+implemented admin-only throughout `features/inventory/`, per AGENTS.md and per the views that
+already existed before this build started.
+
+### D31 — What does `movement_direction`'s 'adjust' value actually mean?
+
+**Finding, resolved while writing `rpc_adjust_inventory`.** `stock_movements.qty` must be positive
+(`movements_qty_ck`), and `direction` is the only column that could carry a correction's sign.
+The build file's own reconcile formula — "recompute the quantity from `stock_movements`: Σ in −
+Σ out ± adjust" — reads as if `adjust` were a third, separately-summed bucket, but nothing in the
+table lets a third bucket's own rows carry a sign independent of `direction` itself.
+**Resolved:** an adjustment is recorded as an ordinary `'in'` or `'out'` movement — whichever sign
+the correction actually is — tagged `ref_type = 'adjustment'` to distinguish it from a
+stock-request-driven movement. `direction`'s `'adjust'` enum value (migration 0006) is left
+defined but unused by any application code; removing an already-applied enum value isn't
+worthwhile for a value nothing else depends on. **Consequence:** `inventory.reconcile`'s recompute
+is one formula, `Σ in − Σ out` grouped by `inventory_item_id`, with nothing structurally different
+about a correction row — simpler, and loses no information the build file's own formula needed
+either.
+
+### D32 — Seeded inventory had no ledger behind it
+
+**Finding, resolved live before writing `inventory.reconcile`.** All eight of Build 02's seeded
+`inventory_items` carry a `qty_on_hand` inserted directly; zero `stock_movements` rows existed for
+any of them, and none of the three seeded "delivered" `stock_requests` had `inventory_item_id`
+linked. Confirmed live against `apex-dev`. Build 07's own reconcile job recomputes `qty_on_hand`
+from `Σ in − Σ out` and alerts on any disagreement (D31) — with no ledger behind the seed, it
+would have alerted on all eight items the first time it ever ran, which is noise, not a finding.
+**Fixed in `supabase/seed.sql`** (amending Build 02's file, not this build's own migrations): the
+three delivered requests now link `inventory_item_id`; one `'in'`/`ref_type='adjustment'` opening
+movement per item, sized to match its own seeded `qty_on_hand` exactly, stands in for whatever
+real delivery-then-consumption history was never specified — the same thing a real opening-balance
+migration would write (build §0's own phrase for it), just applied to the dev seed too. Verified
+live: ledger and cache now agree exactly for all eight items.
+
+### D33 — `v_notifications`'s `bill_submitted` branch returned zero rows for Client, silently
+
+**Finding, resolved while wiring the live notifications bell.** Migration 0015's `v_notifications`
+is `security_invoker = on`, on the stated assumption that "each branch reads a table whose own
+policy already scopes it correctly." That is false for `public.bills`: its only select policy,
+`bills_select_admin` (0010), requires `is_admin()` — there is no policy granting a Client select on
+the base table at all. Client-facing bill reads go through `v_bill_client` (0014), a
+`security_invoker = off` view that does its own `is_member_of()` scoping specifically because no
+RLS policy on `bills` covers a Client session.
+
+The practical effect, verified live against a real Client JWT (not service_role, which bypasses
+RLS and would have hidden this): a Client session got RLS-filtered to zero `bills` rows before the
+view's own `for_roles` array was ever consulted, so a Client never saw "Bill RA-... awaiting
+certification" — the one notification that matters most, since AGENTS.md's own rule is "Only a
+Client may certify a bill." This predates Build 07 (it was already wrong in 0015) and was never
+caught because nothing had queried `v_notifications` from a real Client session until now.
+
+**Fixed** in `supabase/migrations/20260913090005_fix_notifications_bills.sql`: the branch now reads
+`public.v_bill_client` instead of `public.bills` directly. `is_member_of()` returns true
+unconditionally for `is_admin()` (0002), so Owner/Admin see exactly the same rows as before — this
+is a strict widening for Client, not a second, narrower branch. Verified live with a throwaway
+Client session (real JWT via `signInWithPassword`, cleaned up after): the notification now appears,
+and a direct `select * from bills` from that same session still returns zero rows, confirming the
+base table stays closed and the fix is additive only.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |
