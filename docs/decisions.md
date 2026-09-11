@@ -966,6 +966,49 @@ the build; this pass found several more. Fixed:
   `Promise.all`). All real, none correctness bugs — noted for a follow-up cleanup pass rather than
   reworked under merge pressure across a dozen files at once.
 
+### D41 — the attachments-freeze RLS policy required a PENDING approval to already exist, blocking the create flow
+
+**Finding, caught while implementing `features/approvals/actions.ts`** (build/08-approvals.md §2.2/§2.4),
+not by any test written before this point — the first round of live verification for the freeze
+policy only ever exercised it against an approval that already existed. Migration
+`20260915090003_freeze_approval_attachments.sql`'s own predicate was `entity_type <> 'approval' or
+exists (select 1 from approvals a where a.id = entity_id and a.status = 'pending')` — read literally,
+an attachment insert against an approval id that doesn't exist YET (no row at all) fails that `exists`
+check exactly like one against a decided approval does. That is precisely `NewApprovalDialog`'s own
+create flow: `rpc_create_approval` takes a client-generated `p_id` so `FileUploader`'s sample photos
+can upload and confirm *before* the row exists (0035's own comment, the same pattern `daily_updates`
+established in Build 06) — every one of those uploads would have been silently refused.
+
+**Fixed** in `supabase/migrations/20260915090004_fix_approval_attachment_freeze.sql`: the predicate is
+`not exists (select 1 from approvals a where a.id = entity_id and a.status <> 'pending')` instead — this
+is vacuously true (and therefore allows the insert) when no row exists yet, and only becomes false once
+a row exists and has moved past pending. Applied via `pnpm exec supabase db push`, per D38's own lesson;
+never edited the already-applied 0036 in place, per AGENTS.md database rule 1. Re-verified live against
+`apex-dev` from real signed-in sessions: insert-before-create succeeds, insert-while-pending succeeds,
+insert-after-decided is refused, delete-after-decided is refused even within the 24-hour uploader
+window. Both directions are now also regression-tested in `tests/integration/approvals.test.ts`.
+
+### D42 — the Approvals "All" tab silently re-defaulted to "Pending"
+
+**Finding, caught by the client mobile-viewport Playwright journey** (`e2e/approvals-journey.spec.ts`),
+not by unit or integration tests — this is a client-navigation bug, not a data or RLS one.
+`ApprovalStatusTabs`'s "All" tab (`key: ""`) built its URL as `nextStatus ? `${basePath}?status=${nextStatus}` : basePath` — for `nextStatus = ""` that is falsy, so it navigated to the bare
+`basePath` with **no** `status` query param at all. The page itself treats an *absent* `status` param
+as "never visited this page before, default to Pending" (`rawStatus === undefined ? "pending" : ...`)
+— a necessary rule so a fresh visit opens on Pending, not All, per `docs/ui-guide.md` §6.10's own
+default. Those two rules collided: clicking "All" from any other tab produced a URL indistinguishable
+from a fresh visit, so the page silently bounced back to the Pending-filtered view instead of showing
+every row — a real, user-facing defect (a client trying to see approval history since decided rows
+leave the Pending tab entirely) that would have shipped with zero automated coverage catching it, since
+every other test in this build filtered by an explicit status rather than exercising the tab click
+itself.
+
+**Fixed** in `components/domain/ApprovalStatusTabs.tsx`: `navigate` always sends an explicit
+`?status=${nextStatus}`, never a bare path — `?status=` (empty) is now distinguishable from no param
+at all. Verified live via the Playwright journey that found it (approve, then check the row under
+"All"), and via the admin supersession journey (which needs both a rejected and a pending row visible
+together).
+
 ---
 
 ## Still open

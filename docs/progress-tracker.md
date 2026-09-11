@@ -364,7 +364,8 @@ confirmation.
 
 ## Build 07 — Stock Requests, Inventory Ledger, Notifications & Search
 
-Branch `build/07-stock-and-inventory`. Not yet merged; not yet opened as a PR.
+Branch `build/07-stock-and-inventory`. Opened as PR #11, CI green, reviewed (see "Pre-merge review
+pass" below) and **merged into `main`** via squash (`454d4e8`).
 
 **Verified**: 131/131 unit tests, 84/84 pgTAP (21 new, across `06_stock_inventory_test.sql`,
 `07_notifications_test.sql` and `08_search_test.sql`), 65/65 integration tests (18 new, across
@@ -434,4 +435,57 @@ the full list, fixed and deliberately deferred alike. 84/84 pgTAP, 66/66 integra
 |---|---|
 | `rpc_adjust_inventory` and its siblings have no cross-org isolation beyond `is_admin()` — systemic since Build 02's `is_member_of()`, not a Build 07 regression | A dedicated multi-tenancy hardening pass, before any real second org exists (D3) |
 | Delivered stock requests with no `inventory_item_id` always create a new inventory item rather than matching an existing one by name; the auto-created row's `reorder_level` is hardcoded to 0 — matches `02-lld.md` §5.4's own literal pseudocode | A follow-up build item, not a fix against the LLD's own contract |
+
+## Build 08 — Client Approvals & Sign-off
+
+Branch `build/08-approvals`. Not yet opened as a PR.
+
+**Verified**: 143/143 unit tests (12 new, across `features/approvals/service.test.ts`), 95/95 pgTAP
+(11 new, `09_approvals_test.sql`), 82/82 integration tests (16 new, `approvals.test.ts`),
+typecheck/lint/build all clean. The full client mobile-viewport journey
+(`e2e/approvals-journey.spec.ts`) passes: bell → pending approval → view a sample photo full size in
+the lightbox → Approve with a confirmation step → leaves the bell, "All" tab shows Approved with a
+decided date; reject-with-no-reason blocked with a field error; admin has no Approve/Reject buttons
+anywhere; site can request an approval and attempt to add photos but never sees a decide button;
+admin raises a revised approval from a rejected one and both link to each other. All five converted
+routes visually checked against `proto-v1`, both themes — differences found are content-driven
+(real seed item text vs the frozen mock's own placeholder wording), not layout or colour, and are
+documented below rather than silently accepted. Both new RPCs, the freeze policy, and supersession
+were smoke-tested live against `apex-dev` from real signed-in sessions before any UI was built on
+top of them. The dev database was left exactly seed-consistent after every check.
+
+### What shipped
+
+| Area | Status | Notes |
+|---|---|---|
+| `projects.next_ap_seq`, `rpc_create_approval`, `rpc_decide_approval` | ✅ | Same row-lock pattern as `next_sr_seq`/`rpc_create_stock_request` (D18). `rpc_decide_approval` locks the row FIRST, then role (`client` only, no admin/owner bypass), then membership, then status, then decision validity, then reason-required-for-reject — the exact numbered order build §2.1 specifies. Supersession (not reopening): a new approval may reference a rejected one in the same project only. |
+| Attachments freeze on decision (migrations 0036 + 0037) | ✅ | Two layers per build §2.2: RLS (`att_insert`/`att_delete_uploader` on `attachments`) and the action layer (`addSamplePhotos`'s own pending-only guard). **0036's first version had a real bug (D41)** — fixed in 0037 before any UI was built against it. |
+| `features/approvals/` — schema, service, queries, actions | ✅ | `requestApproval`/`addSamplePhotos` (site), `decideApproval` (client-only, `clientAction`). `getApprovalsForProject` returns the same DTO shape to all three roles (no cost columns exist on `approvals` at all) with presigned attachment thumbnails, requester/decider names, and both directions of a supersession link. `getAgedApprovalsCount` — architecture.md §9.1's "Approvals pending > 7 days" — computed here for Build 10's Admin dashboard to surface, per build §2.4's own instruction. |
+| `lib/rbac/permissions.ts` | ✅ | Added `addSamplePhotos: ["owner","admin","site"]` — not an HLD §7.1 matrix row, so no test-table entry needed; `requestApproval`/`decideApproval` already existed and needed no change. |
+| UI conversion | ✅ | `NewApprovalDialog` (client-generated id, real Package/Phase/Type dropdowns, `FileUploader`, optional supersede pre-fill), `ApprovalPhotosDialog` (pending-only, hidden once decided), `DecideApprovalDialog` (one dialog parameterized by decision — required-reason field for reject, an explicit confirmation step for approve per build §2.5's "commercially meaningful, irreversible click" instruction), `ApprovalTable` (props-driven, real thumbnails with a lightbox reusing `UpdateList`'s exact pattern, per-row actions from `can(role, ...)` plus status, never a role string inline), `ApprovalStatusTabs`, the approvals page (Server Component, status tabs, "+ Request Approval" hidden for client), the dashboard's Pending Approvals card (the last `AppContext`-driven card, TODO(build-08) from Build 04/D34). `AppContext`'s `setApprovalStatus`/`addApproval`/`addApprovalPhotos` mock mutators removed, their only callers converted. |
+| pgTAP (`09_approvals_test.sql`) | ✅ | 11 structural assertions — both RPCs security definer and grant-scoped correctly, no update policy on `approvals`, no cost/margin columns, `ap_reject_ck`/`ap_decided_ck`/`ap_ref_uq` constraints exist, `next_ap_seq` exists, the select policy is membership- not admin-gated. |
+| `tests/integration/approvals.test.ts` | ✅ | 16 assertions: client decision stamps `decided_by`/`decided_at`; illegal-transition and reason-required cases; admin **and** owner **and** site all FORBIDDEN from deciding (02-lld.md §6.3 test 6, plus the owner case the test explicitly calls out as "not just admin"); a non-member client refused; all three roles read a project's approvals; `ap_decided_ck`'s invariant (not just its existence); supersession links both directions and refuses to supersede a pending row; two concurrent creates produce distinct `ref_no` values; the attachments freeze in both directions, including the pre-row-exists create-flow case that caught D41. |
+| `e2e/approvals-journey.spec.ts` | ✅ | 5 journeys (see "Verified" above). Caught D42 live. |
+| `supabase/seed.sql` | ✅ | `next_ap_seq` advanced past the 5 pre-seeded `AP-BHEL-NCH-00N` rows, done **proactively** this time (D36's own lesson applied before hitting it in CI, not after). |
+| Client's "Awaiting Your Approval" dashboard stat | ✅ | Already wired by `getClientBillingStats` (predates this build) — confirmed correct, no change needed. |
+
+### Real bugs and gaps found only by actually running it
+
+| Finding | Where |
+|---|---|
+| **0036's attachments-freeze policy required a PENDING approval row to already exist before allowing a photo insert.** That silently broke `NewApprovalDialog`'s own create flow, which needs to upload sample photos *before* the approval row exists (same client-generated-id pattern as `daily_updates`, Build 06). Never caught by this build's own first round of live verification, which only ever tested the freeze against an approval that already existed. Fixed in migration 0037. | D41 |
+| **The Approvals "All" tab silently re-defaulted to "Pending"** — its own URL-building dropped the `status` query param entirely for the empty-string case, which the page's own "absent param → default to Pending" rule couldn't distinguish from an explicit clear-to-All. Caught by the client mobile-viewport Playwright journey, not by any unit or integration test — a pure client-navigation defect invisible to both. Fixed in `ApprovalStatusTabs.tsx`. | D42 |
+| **`dmy()` was called directly on `approvals.created_at`/`decided_at`, both full `timestamptz` strings**, rendering as `05T03:30:00+00:00 Sep 2026` instead of `05 Sep 2026` — `dmy()` expects a date-only string and `ReqTable.tsx` already established the `.slice(0, 10)` fix for exactly this class of column (`createdAt`) in Build 07. Caught by the visual-parity screenshot diff against `proto-v1`, the same mechanism that caught the equivalent Build 07 finding. | `components/domain/ApprovalTable.tsx` |
+
+Visual-parity diffs against `proto-v1` for `/approvals` (all three roles, both themes) are real but
+expected, the same category Build 07 documented: real seed item text wraps differently than the
+frozen mock's own placeholder wording, and dates now correctly show `05 Sep 2026` rather than the
+mock's arbitrary values. Layout, spacing, fonts, badge colours (amber Pending / green Approved / red
+Rejected) and button styling are pixel-identical once that's accounted for.
+
+### Still open
+
+| Item | Blocks |
+|---|---|
+| Aged-approvals telemetry (`getAgedApprovalsCount`) is computed but not yet surfaced in any UI — by design, per build §2.4's own "compute it here, surface it there" instruction | Build 10's Admin dashboard |
 | Commit, push, PR, CI | Merge |
