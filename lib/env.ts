@@ -41,6 +41,16 @@ const serverSchema = z.object({
   // A blank line in .env is an empty string, not undefined. Treat it as absent
   // so `SENTRY_DSN=` reads as "Sentry off" rather than "malformed URL".
   SENTRY_DSN: z.preprocess((v) => (v === "" ? undefined : v), z.url().optional()),
+
+  // build/09-billing.md §4.8 / architecture.md §10.2: Billing ships dark
+  // until a CA has reviewed a generated RA bill PDF and signed off in
+  // writing (docs/decisions.md). `z.coerce.boolean()` is deliberately NOT
+  // used here — it treats the literal string "false" as truthy, which is
+  // exactly the footgun a feature flag can least afford.
+  BILLING_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
 });
 
 export type ServerEnv = z.infer<typeof serverSchema>;

@@ -21,6 +21,8 @@ const ERROR_MESSAGES = {
   NOT_FOUND: "That record no longer exists.",
   ILLEGAL_TRANSITION: "This request has already moved on. Refresh to see the current status.",
   ALREADY_BILLED: "One or more items are already on another bill.",
+  NOTHING_SELECTED: "Select at least one item to bill.",
+  OVERPAYMENT: "This payment would exceed the amount owed on this bill.",
   NEGATIVE_STOCK: "Not enough stock on hand.",
   REASON_REQUIRED: "Please give a reason.",
   RATE_LIMITED: "Too many requests. Please wait a moment and try again.",
