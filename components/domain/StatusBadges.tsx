@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/Badge";
-import type { BillStatus, RequestStatus } from "@/lib/types";
+import type { RequestStatus } from "@/lib/types";
+import type { BillDTO } from "@/features/billing/queries";
 import { type InventoryStatus, type PhaseStatus } from "@/lib/logic";
 import type { StockRequestStatus } from "@/features/stock/service";
 import type { InventoryStatus as StockLevel } from "@/features/inventory/service";
@@ -43,16 +44,24 @@ export function ApprovalTypeBadge({ type }: { type: ApprovalType }) {
   return <Badge variant="outline">{approvalTypeLabel(type)}</Badge>;
 }
 
-export function BillStatusBadge({ status }: { status: BillStatus }) {
+/**
+ * build/09-billing.md §4.5. Real `bills.status` (lowercase enum) — this
+ * badge's every caller is converted in this same build, so it takes the
+ * real shape directly rather than growing a second, `StockRequestStatusBadge`
+ * -style name next to a now-dead mock version.
+ */
+export function BillStatusBadge({ status }: { status: BillDTO["status"] }) {
   switch (status) {
-    case "Draft":
+    case "draft":
       return <Badge variant="secondary">Draft</Badge>;
-    case "Submitted":
+    case "submitted":
       return <Badge variant="warning">Submitted</Badge>;
-    case "Certified":
+    case "certified":
       return <Badge variant="default">Certified</Badge>;
-    case "Paid":
+    case "paid":
       return <Badge variant="success">Paid</Badge>;
+    case "cancelled":
+      return <Badge variant="destructive">Cancelled</Badge>;
   }
 }
 

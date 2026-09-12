@@ -1,21 +1,22 @@
 "use client";
 
 import { useApp } from "@/context/AppContext";
-import type { Bill, Project } from "@/lib/types";
-import { bills, billTotals, dmy, fmt, fmtS, mno } from "@/lib/logic";
+import type { BillDTO } from "@/features/billing/queries";
+import { formatINR, formatINRCompact } from "@/lib/money";
+import { dmy } from "@/lib/logic";
 import { StatBar } from "@/components/ui/StatBar";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { BillStatusBadge } from "@/components/domain/StatusBadges";
-import { BillFiles } from "@/components/domain/BillFiles";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, sub } from "@/components/ui/table";
 import { Empty } from "@/components/ui/Empty";
 
-export function BillingClient({ project }: { project: Project }) {
-  const { data, openDialog, setBillStatus } = useApp();
-  const bs = bills(data, project.id).filter((b) => b.status !== "Draft");
-  const sum = (f: (b: Bill) => boolean) => bs.filter(f).reduce((a, b) => a + billTotals(b).net, 0);
+type Stats = { billsRaised: number; awaitingApproval: number; approvedUnpaid: number; paid: number };
+
+export function BillingClient({ bills, stats }: { bills: BillDTO[]; stats: Stats }) {
+  const { openDialog } = useApp();
+  const visible = bills.filter((b) => b.status !== "draft");
 
   return (
     <div>
@@ -28,21 +29,25 @@ export function BillingClient({ project }: { project: Project }) {
 
       <StatBar
         stats={[
-          { label: "Bills Raised", value: fmtS(sum(() => true)), sub: `${bs.length} bills` },
+          {
+            label: "Bills Raised",
+            value: formatINRCompact(stats.billsRaised),
+            sub: `${visible.length} bills`,
+          },
           {
             label: "Awaiting Approval",
-            value: fmtS(sum((b) => b.status === "Submitted")),
-            sub: `${bs.filter((b) => b.status === "Submitted").length} bills`,
+            value: formatINRCompact(stats.awaitingApproval),
+            sub: `${bills.filter((b) => b.status === "submitted").length} bills`,
           },
           {
             label: "Approved, Unpaid",
-            value: fmtS(sum((b) => b.status === "Certified")),
-            sub: `${bs.filter((b) => b.status === "Certified").length} bills`,
+            value: formatINRCompact(stats.approvedUnpaid),
+            sub: `${bills.filter((b) => b.status === "certified").length} bills`,
           },
           {
             label: "Paid",
-            value: fmtS(sum((b) => b.status === "Paid")),
-            sub: `${bs.filter((b) => b.status === "Paid").length} bills`,
+            value: formatINRCompact(stats.paid),
+            sub: `${bills.filter((b) => b.status === "paid").length} bills`,
           },
         ]}
       />
@@ -62,59 +67,56 @@ export function BillingClient({ project }: { project: Project }) {
             </tr>
           </thead>
           <tbody>
-            {bs.length ? (
-              bs.map((b) => {
-                const t = billTotals(b);
-                const pk = [...new Set(b.lines.map((l) => l.mod))]
-                  .map((id) => {
-                    const m = project.modules.find((x) => x.id === id);
-                    return m ? `${mno(project, m)} ${m.name}` : "";
-                  })
-                  .join(", ");
-                return (
-                  <tr key={b.id}>
-                    <td className={td}>
-                      {b.id}
-                      <span className={sub}>
-                        {b.paid
-                          ? `Paid ${dmy(b.paid)}`
-                          : b.certified
-                            ? `Approved ${dmy(b.certified)}`
-                            : `Submitted ${dmy(b.submitted)}`}
-                      </span>
-                      <BillFiles files={b.files} />
-                    </td>
-                    <td className={td}>{dmy(b.date)}</td>
-                    <td className={td + " text-muted-foreground"}>{pk}</td>
-                    <td className={tdNum}>{fmt(t.taxable)}</td>
-                    <td className={tdNum}>{fmt(t.gst)}</td>
-                    <td className={tdNum}>{fmt(t.net)}</td>
-                    <td className={td}>
-                      <BillStatusBadge status={b.status} />
-                    </td>
-                    <td className={td}>
-                      <div className="flex gap-1.5 flex-wrap justify-end">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openDialog({ kind: "billView", billId: b.id })}
-                        >
-                          View
-                        </Button>
-                        {b.status === "Submitted" && (
+            {visible.length ? (
+              visible.map((b) => (
+                <tr key={b.id}>
+                  <td className={td}>
+                    {b.refNo}
+                    <span className={sub}>
+                      {b.paidAt
+                        ? `Paid ${dmy(b.paidAt)}`
+                        : b.certifiedAt
+                          ? `Approved ${dmy(b.certifiedAt)}`
+                          : b.submittedAt
+                            ? `Submitted ${dmy(b.submittedAt)}`
+                            : ""}
+                    </span>
+                  </td>
+                  <td className={td}>{dmy(b.billDate)}</td>
+                  <td className={td + " text-muted-foreground"}>{b.packageLabels.join(", ")}</td>
+                  <td className={tdNum}>{formatINR(b.taxableAmount)}</td>
+                  <td className={tdNum}>{formatINR(b.gstAmount)}</td>
+                  <td className={tdNum}>{formatINR(b.netPayable)}</td>
+                  <td className={td}>
+                    <BillStatusBadge status={b.status} />
+                  </td>
+                  <td className={td}>
+                    <div className="flex gap-1.5 flex-wrap justify-end">
+                      <Button variant="ghost" size="sm" onClick={() => openDialog({ kind: "billView", billId: b.id })}>
+                        View
+                      </Button>
+                      {b.status === "submitted" && (
+                        <>
                           <Button
                             variant="primary"
                             size="sm"
-                            onClick={() => setBillStatus(b.id, "Certified")}
+                            onClick={() => openDialog({ kind: "certifyBill", billId: b.id, refNo: b.refNo })}
                           >
                             Approve
                           </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => openDialog({ kind: "rejectBill", billId: b.id, refNo: b.refNo })}
+                          >
+                            Reject
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
             ) : (
               <tr>
                 <td className={td} colSpan={8}>

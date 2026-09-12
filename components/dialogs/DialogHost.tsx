@@ -15,6 +15,9 @@ import { PostUpdateDialog } from "./PostUpdateDialog";
 import { EditUpdateDialog } from "./EditUpdateDialog";
 import { BillUploadDialog } from "./BillUploadDialog";
 import { BillViewDialog } from "./BillViewDialog";
+import { RecordPaymentDialog } from "./RecordPaymentDialog";
+import { RejectBillDialog } from "./RejectBillDialog";
+import { CertifyBillDialog } from "./CertifyBillDialog";
 import { InviteUserDialog } from "./InviteUserDialog";
 
 export function DialogHost() {
@@ -63,9 +66,15 @@ export function DialogHost() {
     case "editUpdate":
       return <EditUpdateDialog updateId={dialog.updateId} body={dialog.body} />;
     case "billUpload":
-      return <BillUploadDialog billId={dialog.billId} />;
+      return <BillUploadDialog billId={dialog.billId} projectId={dialog.projectId} />;
     case "billView":
       return <BillViewDialog billId={dialog.billId} />;
+    case "recordPayment":
+      return <RecordPaymentDialog billId={dialog.billId} refNo={dialog.refNo} netPayable={dialog.netPayable} />;
+    case "rejectBill":
+      return <RejectBillDialog billId={dialog.billId} refNo={dialog.refNo} />;
+    case "certifyBill":
+      return <CertifyBillDialog billId={dialog.billId} refNo={dialog.refNo} />;
     case "inviteUser":
       return <InviteUserDialog />;
     default:
