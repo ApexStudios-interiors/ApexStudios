@@ -54,6 +54,9 @@ export const bills = pgTable(
     marginAmount: money("margin_amount").notNull().default("0"),
 
     notes: text("notes"),
+    /** Client-generated, from the Create Bill button — "a double-clicked
+     *  Create Bill button must not produce two RA bills" (build 09 §4.1). */
+    idempotencyKey: text("idempotency_key"),
     // NOT NULL here, unlike the shared auditColumns: a bill without an author
     // is not a document anyone can defend in a dispute.
     createdBy: uuid("created_by")
@@ -69,7 +72,14 @@ export const bills = pgTable(
     updatedAt: tsz("updated_at").notNull().defaultNow(),
     deletedAt: tsz("deleted_at"),
   },
-  (t) => [index("idx_bills_project_status").on(t.projectId, t.status), index("idx_bills_org").on(t.orgId)]
+  (t) => [
+    index("idx_bills_project_status").on(t.projectId, t.status),
+    index("idx_bills_org").on(t.orgId),
+    // Partial, not `unique nulls not distinct`: this table already has many
+    // pre-existing rows with no key at all, and a plain `unique nulls not
+    // distinct` collapses every one of those NULLs together per project_id.
+    uniqueIndex("bills_idem_uq").on(t.projectId, t.idempotencyKey).where(sql`idempotency_key is not null`),
+  ]
 );
 
 export const billLines = pgTable(
@@ -140,10 +150,16 @@ export const payments = pgTable(
     mode: text("mode"),
     referenceNo: text("reference_no"),
     note: text("note"),
+    /** Client-generated, from the Record Payment dialog. */
+    idempotencyKey: text("idempotency_key"),
     createdBy: uuid("created_by")
       .notNull()
       .references(() => profiles.id),
     createdAt: tsz("created_at").notNull().defaultNow(),
   },
-  (t) => [index("idx_payments_bill").on(t.billId), index("idx_payments_org").on(t.orgId)]
+  (t) => [
+    index("idx_payments_bill").on(t.billId),
+    index("idx_payments_org").on(t.orgId),
+    uniqueIndex("payments_idem_uq").on(t.billId, t.idempotencyKey).where(sql`idempotency_key is not null`),
+  ]
 );
