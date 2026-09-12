@@ -504,3 +504,71 @@ typecheck/lint/format/build all reconfirmed clean after the fixes.
 |---|---|
 | Aged-approvals telemetry (`getAgedApprovalsCount`) is computed but not yet surfaced in any UI — by design, per build §2.4's own "compute it here, surface it there" instruction | Build 10's Admin dashboard |
 | Commit, push, PR, CI | Merge |
+
+## Build 09 — The Billing Engine
+
+Branch `build/09-billing`. Not yet opened as a PR.
+
+The build file's own framing: "This is the hard one. The code written here computes tax on documents
+that go to a client and to an assessing officer." Treated accordingly — 100% branch coverage on the
+arithmetic, every RPC exercised from real signed-in sessions, and every real bug this build found
+(there were several, one serious) is documented rather than quietly fixed and forgotten.
+
+**Verified**: 230/230 unit tests (69 new in `features/billing/service.test.ts`, 16 new in
+`lib/money/__tests__/words.test.ts`, both genuinely 100% branch on their gated files), 116/116 pgTAP
+(21 new, `10_billing_test.sql`), 20/20 integration tests (`billing.test.ts` — the 19 required by the
+build's own test matrix plus one regression test for the bill-numbering bug below), typecheck/lint/
+build all clean, `pnpm db:check-drift` clean. The full 5-journey Playwright suite
+(`e2e/billing-journey.spec.ts`) passes: admin selects Billable Now items, creates a bill, submits it
+(enqueuing `bill.pdf`); client opens a submitted bill, sees GST computed on the taxable value, and
+approves it; admin records two part-payments that together auto-transition a bill to Paid; client
+rejects a submitted bill with a reason, returning it to Draft at revision 2; and the client's own bill
+dialog is proven, by grepping the rendered DOM for seeded internal-cost/margin figures, to never
+receive them at all. The dev database was confirmed clean of every fixture afterward.
+
+### What shipped
+
+| Area | Status | Notes |
+|---|---|---|
+| Migrations 20260916090001–090007 | ✅ | `mobilisation_recovery_pct` (D44), bill/payment idempotency keys (partial unique indexes, not `unique nulls not distinct`), `rpc_create_bill`/`rpc_transition_bill`/`rpc_record_payment`, the `bill.pdf` job-name whitelist extension, `orgs` bank details, and two corrective migrations (ambiguous columns; the bill-number truncation bug below) — never editing an already-applied file, per AGENTS.md database rule 1. |
+| `rpc_create_bill` | ✅ | Row-locks the project (gapless `next_bill_seq`, race-free idempotency check), computes the full A–K order (`01-hld.md` §8.4) with GST on the taxable value **before** retention — the prototype's own carried-forward bug this build's own T-01 test exists specifically to catch — and MAS recovery (T-02) subtracting any prior material bill on the same phase before computing GST. |
+| `rpc_transition_bill` | ✅ | The full state machine (`draft → submitted/cancelled`, `submitted → certified/draft`, `certified → paid`) with role+status legality checked in the build's own exact order. Cancelling a draft hard-deletes its `bill_lines` (the one deliberate exception to soft delete, freeing the double-billing index), resets phases to billable, and reverses `mobilisation_recovered` — that money was never actually netted against a real invoice. |
+| `rpc_record_payment` | ✅ | Part-payment as a table, never a `paid_amount` column. Overpayment is refused, not clamped (D43). Auto-transitions to `paid` once `Σ payments ≥ net_payable`, with the identical check available manually via `certified → paid`. |
+| `features/billing/service.ts` | ✅ | The pure `decimal.js` preview engine Postgres's own arithmetic is proven against — 100% branch coverage, 69 tests including 50 seeded-random reconciliation cases. Exists only to preview totals client-side; Postgres is authoritative. |
+| `lib/money/words.ts` | ✅ | Indian amount-in-words (crore/lakh grouping, not million/billion), 100% branch coverage. |
+| `lib/pdf/BillDocument.tsx`, `lib/jobs/handlers/bill.pdf.ts` | ✅ | A placeholder layout — no real Apex bill was ever supplied to copy (see "Still open") — carrying every field the build requires (org/client identity, the full A–K breakdown with snapshotted rates, amount in words, bank details) and structurally incapable of rendering internal cost or margin. Enqueued from the application layer on submit, idempotent, runs as `service_role` (the documented `lib/jobs/handlers/**` carve-out). |
+| `app/api/bills/[billId]/export.xlsx/route.ts` | ✅ | Admin-only Excel export, streamed from a route handler on request per the build's own explicit instruction — not a job. Carries cost and margin; the accounting hand-off point (Tally/Zoho stay external). |
+| `features/billing/` — schema, queries, actions | ✅ | Client-generated idempotency keys on create/pay; role-scoped DTOs (`v_bill_client`/`v_bill_line_client` omit cost, margin, and — deliberately — `source_id`, so a client cannot correlate cost across bills); `markPhaseComplete` wired to the pre-existing `rpc_mark_phase_complete` RPC whose own comment named this build as its landing spot. |
+| `BILLING_ENABLED` feature flag | ✅ | `lib/env.ts`, default `false`. Gated in both required places (build §4.8): route pages (`notFound()`) and a shared `assertBillingEnabled()` at the top of every exported billing Server Action. |
+| UI conversion | ✅ | `BillingAdmin`/`BillingClient` (real Billable Now preview, Create/Submit/Record Payment/Approve/Reject), `BillViewDialog` (corrected summary order, admin-only Internal box), `BillUploadDialog`, `RecordPaymentDialog`, `RejectBillDialog`, `CertifyBillDialog` (new, matching `DecideApprovalDialog`'s confirmation-step precedent for a commercially irreversible click), `MilestoneTable`, `BillFiles`, `StatusBadges`'s `BillStatusBadge`. `AppContext`'s `setBillStatus`/`createBill`/`markPhaseDone`/`uploadBillFiles` mock mutators removed. |
+| `supabase/tests/10_billing_test.sql` | ✅ | 21 structural assertions — all three RPCs security definer and grant-scoped correctly, no insert/update policy on `bills`/`bill_lines`, no direct insert policy on `payments` (D11 extended to it), the client views' column-absence checks, every constraint's existence. |
+| `tests/integration/billing.test.ts` | ✅ | T-01 through T-05 from the build's own test matrix, idempotency, role guards, rate-snapshot immutability (mutating `gst_rate_pct` mid-test, reverted in `finally`), cancellation reset, payment lifecycle/overpayment/idempotency, and a regression test for the bill-numbering bug below. T-03's own "run 50 times" is adapted to 10 genuinely concurrent creates, documented as a deliberate substitution given this dev project's shared Supabase Auth rate limit (30 sign-ins/5 min). |
+| `e2e/billing-journey.spec.ts` | ✅ | 5 journeys (see "Verified" above). |
+
+### Real bugs and gaps found only by actually running it
+
+| Finding | Where |
+|---|---|
+| **`rpc_create_bill`'s bill numbering silently produced duplicate, truncated bill numbers past `seq_no` 99** — `lpad(v_seq::text, 2, '0')` was written to zero-pad small numbers but Postgres's `lpad` truncates a longer string instead of leaving it alone (`lpad('174', 2, '0')` is `'17'`), so every bill in the same ten-wide seq bucket collided on the same `bill_no`, hit the real `bills_no_uq` constraint, and was misreported as `ALREADY_BILLED` by the function's own defense-in-depth exception handler — actively pointing away from the true cause. Found live when this build's own heavy verification pushed a dev project's counter past 99 and previously-passing integration tests (T-02, T-03) started failing for a reason neither test's own logic had anything to do with. This is a real production-relevant bug: any project doing regular RA billing will cross seq 99 within a few years. Fixed in migration `20260916090007`, regression-tested directly. | D-decisions.md, "Findings from Build 09" |
+| `rpc_create_bill`'s aggregate query had ambiguous column references between `v_billable_now` and the `jsonb_to_recordset` selection — caught on the first live smoke test. | migration `20260916090005` |
+| `bills_idem_uq`/`payments_idem_uq` as `unique nulls not distinct` failed immediately against seeded rows with `null` idempotency keys — fixed with a partial unique index instead. | migration `20260916090002` |
+| `BillingAdmin.tsx`'s idempotency key was generated once per component mount rather than once per create attempt — every bill created after the first from the same mounted table would silently collide and return the stale first bill instead of a new one. Self-caught, not by a test. | `components/domain/BillingAdmin.tsx` |
+| `uploadBillCopy` was written `admin`-only; `02-lld.md` §7 lists it `admin, site`. Self-caught during implementation. | `features/billing/actions.ts` |
+| The Vitest coverage threshold, written in Build 01 before any billing code existed, covered the whole `features/billing/**` directory at 100% branch — including the thin `actions.ts`/`queries.ts` wrappers this codebase's own convention tests via integration tests instead. First coverage run failed outright. Fixed to scope the threshold to `features/billing/service.ts`, matching the build file's own literal wording. | `vitest.config.mts` |
+| The seed's own draft fixture bill (`RA-BHEL-NCH-4`) was left `submitted` by this session's earlier live verification and never reverted, silently breaking a pre-existing pgTAP assertion that the seed covers all four bill statuses. Caught by `pnpm test:rls` going from 116/116 to 115/116 with no code change to explain it. Restored to `draft` directly (no schema or RPC change needed — a fixture-hygiene gap, not a bug). | dev-database cleanliness, not a code fix |
+
+Two decisions this build had to make where the build file itself said "decide, document, test":
+overpayment is **refused**, not clamped (D43); the mobilisation advance recovery formula is automatic,
+computed fresh on every bill from a per-project `mobilisation_recovery_pct` (D44, making D7 concrete).
+Two more were deliberately left open rather than guessed at: the CGST/SGST split (D45) and a retention
+release schedule (D46) — both flagged for the CA, neither invented in code.
+
+### Still open
+
+| Item | Blocks |
+|---|---|
+| **No real past Apex RA bill was ever supplied** (build §0.2's own prerequisite). The golden-file exit criterion — reproduce a real bill from seeded equivalents and match every figure — could not be attempted; `BillDocument.tsx`'s layout is a reasonable placeholder, not a verified copy of what Apex actually sends. | Build 09's own exit criteria; confidence in the PDF layout |
+| **CA sign-off on a generated RA bill PDF** was not obtained — outside what this work can get on its own, same treatment as D4/A-5. | Build 09 go-live |
+| CGST/SGST split (D45) and retention release schedule (D46) — both deliberately left open, not decided in code | First real bill if inter-state; future scope |
+| **The `bill.pdf` job's real R2 upload cannot be verified end-to-end** — the known, pre-existing R2 credential gap (already naming Build 09 in `docs/decisions.md`'s "Still open" table before this build started). The render is real and exercised; the upload's failure against fake-but-valid-shaped credentials is the honest, environment-limited outcome, not a bug — verified via the Playwright journey draining the real cron route and asserting the bill stays Submitted and certifiable regardless. | Live end-to-end PDF delivery |
+| Full multi-dimensional code review pass, then commit, push, PR, CI | Merge |

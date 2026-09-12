@@ -1076,6 +1076,137 @@ through; a second copy in `addSamplePhotos` would be redundant.
 
 ---
 
+### D43 — Overpayment: refuse the record, or clamp it silently?
+
+**Question:** `build/09-billing.md` §4.5 leaves this open: "decide, document, and test whichever" for
+a payment that would push `Σ payments` past `net_payable`.
+**Decided:** 2026-09-11, this build
+**Answer:** Refuse. `rpc_record_payment` raises a new `OVERPAYMENT` domain error
+(`lib/safe-action.ts`'s `ERROR_MESSAGES`, following the established prefix-coded pattern) rather than
+clamping the amount or letting Outstanding go negative.
+**Reasoning:** A clean, explicit error at the point of entry is recoverable — the admin corrects the
+figure and re-submits. A silent clamp hides a real data-entry mistake (the wrong bill, a transposed
+digit) behind a payment that quietly doesn't match what was actually received, and a negative
+Outstanding is exactly the kind of "derived value that can go stale/lie" AGENTS.md already forbids
+storing — it would be worse to let one exist transiently in a live figure a client sees.
+**Consequence:** `features/billing/actions.ts`'s `recordPayment`, `RecordPaymentDialog.tsx`'s
+field-level pre-check, and `tests/integration/billing.test.ts`'s own overpayment test all assume
+refusal, not clamping.
+
+---
+
+### D44 — Mobilisation advance recovery: the concrete mechanism (D7 made concrete)
+
+**Question:** D7 decided advance recovery is tracked; Build 09 had to decide the actual recovery
+formula and where its rate lives.
+**Decided:** 2026-09-11, this build
+**Answer:** A new per-project column, `projects.mobilisation_recovery_pct` (`numeric(6,3)`, default 0,
+checked 0–100), migration `20260916090001_mobilisation_recovery_pct.sql`. Each bill's own
+`advance_recovery` (HLD §8.4 step J) is
+`least(remaining advance (mobilisation_advance − mobilisation_recovered), taxable × mobilisation_recovery_pct / 100)`
+— automatic, computed by `rpc_create_bill` on every bill, not a manually-entered figure per bill.
+**Reasoning:** Matches the LLD's own pseudocode for step J exactly, and keeps the recovery mechanism
+symmetric with `mas_billable_pct`/`retention_pct`/`tds_pct` — one rate column per project, snapshotted
+onto nothing (recovery is recomputed fresh each bill against the running `mobilisation_recovered`
+balance, which is itself the thing being tracked, not a snapshot).
+**Consequence:** Defaults to 0 — no project recovers any advance until Apex confirms a real schedule
+per project. Cancelling a draft bill reverses its own `advance_recovery` out of
+`mobilisation_recovered` (that money was never actually netted against a real invoice) —
+`rpc_transition_bill`'s `draft → cancelled` branch.
+
+---
+
+### D45 — CGST/SGST split: kept as one `gst_amount` column
+
+**Question:** `01-hld.md` §8.4's own open tax questions ask whether GST should split into CGST+SGST
+(intra-state) vs IGST (inter-state) rather than one blended figure.
+**Decided:** 2026-09-11, this build — **not decided, deliberately deferred, same treatment as D4**
+**Answer:** Kept the single `gst_amount` column the schema has carried since Build 02 (D6/`02-lld.md`
+§3.8). No CGST/SGST/IGST split exists anywhere in `bills`, `bill_lines`, the PDF, or the Excel export.
+**Reasoning:** Splitting the tax line is exactly the kind of thing this build's own framing warns
+against deciding in code review — it changes what number appears on a document going to an assessing
+officer. Apex is a single-state contractor in the seed data (no evidence of inter-state billing in
+scope), so blended GST may be entirely correct for their actual invoices; that is the CA's call, not
+this build's guess.
+**Open:** CA confirmation, alongside D4 and the five §8.4 tax questions. If a split is required, it is
+a schema change (two or three amount columns replacing one) and a PDF/Excel layout change, not a
+one-line fix — flagged now so it isn't discovered at the first real bill.
+
+---
+
+### D46 — Retention release: no schedule, deducted and never released
+
+**Question:** `01-hld.md` §8.4's own open tax questions also ask about a retention release schedule
+(e.g., 50% released at handover, 50% after the defect liability period).
+**Decided:** 2026-09-11, this build — **not decided, deliberately deferred**
+**Answer:** `bills.retention_amount` (HLD §8.4 step H) is deducted from every bill and never released
+anywhere in the schema — there is no `retention_released` table, column, or RPC. Retention simply
+lowers `net_payable` forever, on every bill, with no path back to the client.
+**Reasoning:** No release schedule was ever specified in any build document, and inventing one (a
+percentage, a trigger event, a waiting period) would be exactly the kind of undocumented business
+rule AGENTS.md's "when you are unsure" section says to flag rather than decide.
+**Open:** If Apex needs retention release tracking, it is new scope for a later build — a
+`retention_releases` table (or similar) recording when and how much of the accumulated retention
+across a project's bills was actually paid back, referenced nowhere in Build 09.
+
+---
+
+### Findings from Build 09 (Billing)
+
+**A real, live-caught correctness bug, the most serious one this build found:** `rpc_create_bill`'s
+own bill-number generation, `lpad(v_seq::text, 2, '0')`, was written to zero-pad small sequence
+numbers (`'1' → '01'`) but Postgres's `lpad` **truncates** a string already longer than the target
+width rather than leaving it alone — `lpad('174', 2, '0')` returns `'17'`, not `'174'`. Once a
+project's own `next_bill_seq` passes 99 (an ordinary outcome of a few years of monthly RA billing on
+one project, and an outcome this build's own heavy live verification reached in a single day), every
+bill in the same ten-wide bucket (170–179, 180–189, ...) is assigned the *identical* truncated
+`bill_no`. The first bill in a bucket succeeds; every other one hits `bills_no_uq (org_id, bill_no)` —
+a real `unique_violation`, caught by the function's own defense-in-depth
+`exception when unique_violation` backstop (there for the double-billing index) and **misreported as
+`ALREADY_BILLED`**, actively pointing away from the real cause. Found when
+`tests/integration/billing.test.ts`'s T-02 and T-03 both started failing for a reason neither test's
+own logic had anything to do with, after this session's own verification work pushed a dev project's
+counter past 99. Fixed in migration `20260916090007_fix_bill_no_truncation.sql`: the bill number is
+now built with a `case` that zero-pads only when `v_seq < 10` and uses the number as-is otherwise,
+never relying on `lpad`'s truncating behavior. Regression-tested directly: a bill forced to
+`seq_no = 174` produces `bill_no = 'RA-BHEL-NCH-174'`, not `'...-17'`.
+
+**Other bugs found only by actually running this build, not by reading the code:**
+
+- **`rpc_create_bill`'s aggregate query had ambiguous column references.** Joining `v_billable_now`
+  (aliased `bn`) against `jsonb_to_recordset(p_lines)` (aliased `sel`) — both carry
+  `source_type`/`source_id` — meant every unqualified reference in the `SELECT` list was ambiguous.
+  Caught on the first live smoke test ("column reference is ambiguous"). Fixed in migration
+  `20260916090005_fix_create_bill_ambiguous_columns.sql`, qualifying every reference as `bn.*`.
+- **`bills_idem_uq`/`payments_idem_uq` as `unique nulls not distinct` failed immediately against
+  seeded data.** Every pre-existing seeded bill/payment has a `null` `idempotency_key`; `unique nulls
+  not distinct` treats every `null` as equal to every other `null`, so the very first migration push
+  failed with a duplicate-key error against rows that were never meant to collide. Fixed by switching
+  to a **partial unique index** (`where idempotency_key is not null`) instead — the property this
+  build actually needs (a client-generated key is unique when present) without penalizing rows that
+  never had one.
+- **`BillingAdmin.tsx`'s idempotency key was generated once per component mount, not once per create
+  attempt.** `useState(() => crypto.randomUUID())` with no setter meant every bill created after the
+  *first* one from the same mounted Billable Now table would silently collide with the first bill's
+  own idempotency key — `rpc_create_bill`'s own idempotency check would treat the second, genuinely
+  different selection as a duplicate of the first and return the stale first bill instead of creating
+  a new one. This is the same failure class the Excel/PDF-in-a-dialog convention exists to avoid
+  (returning stale data silently rather than an error) and would have been very hard to notice in
+  practice, since the returned bill is real, just wrong. Fixed: the key regenerates via
+  `setIdempotencyKey(crypto.randomUUID())` after every create attempt, success or failure.
+- **`uploadBillCopy` was written with `adminAction`, but `02-lld.md` §7's own API table lists it as
+  `admin, site`.** Self-caught during implementation, not by a test — fixed to use `siteAction`.
+- **The Vitest coverage threshold glob, written in Build 01 before any billing code existed, covered
+  the whole `features/billing/**` directory at 100% branch.** That includes `actions.ts`/`queries.ts`
+  — thin Supabase-calling wrappers with no meaningful unit-testable branch logic, by this codebase's
+  own established convention of testing those via integration tests instead, the same as every other
+  feature folder. The first coverage run failed outright ("Coverage for lines (8.47%) does not meet
+  `features/billing/**` threshold"). Fixed by scoping the threshold to
+  `features/billing/service.ts` specifically, matching the build file's own literal wording:
+  "100% branch on `features/billing/service.ts` and every billing RPC path."
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |
@@ -1085,6 +1216,10 @@ through; a second copy in `addSamplePhotos` would be redundant.
 | CA confirmation: statutory retention period (A-5) | Voola → CA | Build 10 R2 lifecycle rules | 2026-09-09 |
 | CA sign-off: the five tax questions in `01-hld.md` §8.4 | Voola → CA | Build 09 go-live | 2026-09-09 |
 | DPDP Act 2023 obligation set (`architecture.md` §12) | Voola → counsel | Launch | 2026-09-09 |
+| **No real past Apex RA bill was ever supplied** (build/09-billing.md §0.2's own prerequisite: "a real past RA bill, GST invoice sample, and the CA's five confirmed answers"). The build's own exit criterion — "reproduce a real past bill from seeded equivalents and assert every figure matches the document a human already checked" — could not be attempted; there is nothing to reproduce against. `BillDocument.tsx`'s layout is therefore a reasonable placeholder, not a copy of a real Apex bill. | Voola | Build 09's golden-file exit criterion; confidence the PDF layout matches what Apex actually sends clients | 2026-09-11 |
+| **CA sign-off on a generated RA bill PDF** — Build 09's own exit criterion ("a CA has reviewed a generated RA bill PDF and signed off in writing") is outside what this work can obtain on its own. | Voola → CA | Build 09 go-live, alongside D4/D45/D46 and the five §8.4 tax questions | 2026-09-11 |
+| CGST/SGST split vs. one blended `gst_amount` (D45) | Voola → CA | First real bill if Apex bills inter-state | 2026-09-11 |
+| Retention release schedule — none implemented (D46) | Voola | Future scope, not Build 09 | 2026-09-11 |
 | No TOTP enrollment UI exists (D22) — an owner/admin account cannot pass `requireAalForRole`'s AAL2 check anywhere outside the dev-only workaround in `e2e/global-setup.ts`. Every `adminAction`-guarded Server Action is unreachable by a real admin user until this is built. | — | Any real admin using a real account | 2026-09-10 |
 | **No real Cloudflare R2 account exists** — three private buckets (`apex-prod`/`apex-preview`/`apex-backups`), CORS on the first two, two separate API tokens (app-scoped and backups-scoped), lifecycle rules, an 8 GB storage alert (build §0.1). Blocks every live check of the upload pipeline: CORS from a real browser, a real presigned PUT/GET round-trip, a real generated thumbnail (and its EXIF-absence check), the orphan sweep actually deleting anything, and both backup pieces (the GitHub Actions write and `backup.verify`'s read) ever running for real. | Voola | Build 06's own live verification; Build 08 (approval photos); Build 09 (bill PDFs) | 2026-09-12 |
 | **Vercel is not on Pro** — the Hobby tier allows only a couple of cron invocations per day at fixed times, so the per-minute `jobs.drain` (and this build's whole "Queued" job design) does not run for real without it. | Voola | Build 06's own live verification of the drain | 2026-09-12 |
