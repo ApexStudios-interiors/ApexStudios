@@ -49,6 +49,16 @@ const ROUTES: { name: string; path: string; roles: Role[] }[] = [
   { name: "project-stock", path: `/projects/${PROJECT}/stock`, roles: ["admin", "site"] },
   { name: "project-approvals", path: `/projects/${PROJECT}/approvals`, roles: ["admin", "site", "client"] },
   { name: "project-billing", path: `/projects/${PROJECT}/billing`, roles: ["admin", "client"] },
+  {
+    // build/09-billing.md — a new route, not present in proto-v1 (the
+    // prototype's Billing tab lived only at the project level, same
+    // reasoning as package-schedule above). No prior baseline exists for
+    // it; this run establishes one, it does not compare against a frozen
+    // prototype image.
+    name: "package-billing",
+    path: `/projects/${PROJECT}/packages/${MODULE}/billing`,
+    roles: ["admin", "client"],
+  },
 ];
 
 const THEMES = ["light", "dark"] as const;
