@@ -193,9 +193,37 @@ describe("rpc_create_bill — T-02 MAS recovery", () => {
     // somewhere sane rather than hard-coding the factor here too.
     expect(Number(materialBill.material_value)).toBeGreaterThan(0);
 
+    // MAS recovery only counts a committed bill's own material lines — a
+    // still-draft one might yet be cancelled (whose bill_lines are then
+    // hard-deleted), so it must not have already reduced another bill's
+    // taxable value. Submit it before billing the phase, matching the real
+    // admin workflow this build's own review pass caught the RPC skipping.
+    await admin.rpc("rpc_transition_bill", { p_bill_id: materialBill.id, p_to_status: "submitted" });
+
     const phaseBill = await createBill(admin, [{ source_type: "phase", source_id: phaseId }]);
     expect(Number(phaseBill.mas_recovery_amount)).toBeGreaterThan(0);
     expect(Number(phaseBill.taxable_amount)).toBe(50000 - Number(phaseBill.mas_recovery_amount));
+  });
+
+  it("a still-draft material bill does not reduce another bill's MAS recovery", async () => {
+    // Real bug, found in a pre-merge review pass, not a live smoke test:
+    // the MAS recovery join had no filter on the owning bill's own status,
+    // so a material bill left in draft (never submitted or cancelled) was
+    // counted exactly like a real, committed invoice. If that draft bill
+    // were later cancelled, the other bill's already-snapshotted figures
+    // would permanently understate what the client owes. Fixed in
+    // migration 20260916090008 by excluding status = 'draft'.
+    const admin = await client(ADMIN_EMAIL);
+    const phaseId = await insertTestPhase({ allocated: 50000, internal: 30000, refSuffix: "t02-draft" });
+    const srId = await insertTestDeliveredMaterial({ qty: 4, rate: 1000, refSuffix: "t02-draft", phaseId });
+
+    // Billed but deliberately left in draft — never submitted.
+    const materialBill = await createBill(admin, [{ source_type: "material", source_id: srId }]);
+    expect(materialBill.status).toBe("draft");
+
+    const phaseBill = await createBill(admin, [{ source_type: "phase", source_id: phaseId }]);
+    expect(Number(phaseBill.mas_recovery_amount)).toBe(0);
+    expect(Number(phaseBill.taxable_amount)).toBe(50000);
   });
 });
 

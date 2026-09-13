@@ -1205,6 +1205,107 @@ never relying on `lpad`'s truncating behavior. Regression-tested directly: a bil
   `features/billing/service.ts` specifically, matching the build file's own literal wording:
   "100% branch on `features/billing/service.ts` and every billing RPC path."
 
+### Review findings before merge — fixed and deferred
+
+Before merging this PR, a full multi-dimensional review (correctness, security/AGENTS.md
+conventions, removed behavior, reuse/duplication, efficiency, simplification, root-cause altitude)
+ran across the complete diff. Fixed:
+
+- **A Site Supervisor could read a bill's full financials** (`taxableAmount`, `gstAmount`,
+  `netPayable`, line amounts) by calling the exported `getBillDetailForDialog` Server Action
+  directly — the single most serious finding of this pass, a direct violation of AGENTS.md's "Site
+  Supervisors see no money at all." The billing page itself calls `forbidden()` for site, but that
+  page-level gate was the *only* thing standing between a site session and this data:
+  `getBillDetailForDialog` called `requireSession()` (any authenticated user) rather than a role
+  check, and `getBillDetail`'s own non-admin branch reads `v_bill_client`/`v_bill_line_client`,
+  which are gated only by project membership, not role (confirmed live: a signed-in site session
+  can `select` directly from `v_bill_client` and get real bill rows back). Fixed: the action now
+  calls `requireRole(["owner", "admin", "client"])` — `viewBilling`'s own list
+  (`lib/rbac/permissions.ts`) — before ever reaching `getBillDetail`. Every other reachable path
+  into `v_bill_client`/`v_bill_line_client` was individually traced and confirmed already safe
+  (each is gated by an explicit role branch at its own call site: `getBillsForClient` behind the
+  billing page's `forbidden()`, `getClientBillingStats` behind a `packages.role === "client"`
+  render branch, `searchBills` behind `isSite ? [] : ...`) — this was the one gap, not a pattern.
+- **`rpc_create_bill`'s MAS recovery counted material `bill_lines` from a still-draft bill**, not
+  only committed ones — no filter on the owning bill's own `status`. Sequence: admin bills a
+  delivered material against phase P as bill A (left in draft), then bills phase P's own completed
+  milestone as bill B before resolving A; B's `mas_recovery_amount` is reduced by A's line even
+  though A isn't a finalized invoice, and if A is later cancelled (its `bill_lines` hard-deleted,
+  the one deliberate exception to soft delete), B's already-snapshotted taxable/GST/net figures
+  permanently understate what the client owes — bills are immutable once created, so there is no
+  way back. Fixed in migration `20260916090008_fix_mas_recovery_counts_draft_bills.sql`: the
+  recovery query now joins `bills` and excludes `status = 'draft'`. Regression-tested directly
+  (`tests/integration/billing.test.ts`: a draft material bill contributes zero MAS recovery to a
+  later phase bill) and the pre-existing T-02 test was corrected to submit its own material bill
+  first, matching the real admin workflow the RPC was silently not requiring.
+- **Four exported billing reads never called `assertBillingEnabled()`** (`getBillPdfUrl`,
+  `getBillableNowForAdmin`, `getBillDetailForDialog`, `getBillPaymentsSummaryForDialog`),
+  contradicting the file's own doc comment that the flag is "checked... in every billing action."
+  With `BILLING_ENABLED=false`, a caller with a stale or guessed `billId` could still reach real
+  bill data through these four even though the pages themselves return `notFound()`. Fixed: all
+  four now assert first, matching every mutating action in the same file.
+- **`BillViewDialog`'s non-admin "Download PDF" opened its tab *after* an `await`**, losing the
+  click's synchronous user-gesture context — every major browser's popup blocker silently
+  swallows a `window.open` issued outside that stack, so the button did nothing and gave no error.
+  Fixed: the tab now opens synchronously (blank), then gets its `location` set once the presigned
+  URL resolves — the standard pattern for a URL a click needs to await before it's known.
+- **`getBillPdfUrl`'s attachment lookup couldn't tell the system-generated invoice PDF from an
+  admin-uploaded scanned bill copy** — both share `entity_type='bill'`/`entity_id=billId` with no
+  discriminating column, so it just returned whichever was newest. If an admin uploads a scan
+  *after* the real PDF has generated, every subsequent "Download PDF" click (any role) would
+  return the scan instead of the actual GST invoice. Partially mitigated by filtering on
+  `mime_type = 'application/pdf'` (narrows out the common case — a photo); a scanned copy uploaded
+  *as* a PDF would still collide. A complete fix needs a real discriminator column (e.g. a `kind`
+  distinguishing "generated" from "uploaded") — tracked below as a follow-up, not blocking.
+
+**Deferred** (real, not correctness/security-critical, not reworked under merge pressure):
+
+- The `lpad` truncation pattern this PR found and fixed for `bill_no` (D-findings above) is still
+  present, unfixed, in `rpc_create_stock_request` (`SR-<code>-<seq>`) and `rpc_create_approval`
+  (`AP-<code>-<seq>`) — both predate this build and use the identical
+  `lpad(v_seq::text, 3, '0')`, which will truncate the same way once either counter passes 999.
+  Out of this PR's scope (touching either RPC is a different feature's own migration); flagged so
+  it isn't rediscovered the hard way like `bill_no` was.
+- `getMaterialAtSite` (`features/billing/queries.ts`) re-derives the phase→package→1.0
+  cost-to-client fallback in TypeScript instead of importing `costToClientFactor` from
+  `features/packages/service.ts`, which already implements and unit-tests the identical rule. The
+  two agree today; a future change to one won't propagate to the other. Left as-is rather than
+  risk a cross-feature import under merge pressure — a follow-up, not a blocker.
+- `packageLabelsByBill`'s client branch recovers a package name by splitting
+  `v_bill_line_client.description` on `" — "` rather than the view carrying a real column for it —
+  fragile against a future format change, and already incomplete (a material line's description
+  never contains a package name at all, acknowledged in the code's own comment).
+- `BillingAdmin.tsx` fetches its own "Billable Now" rows via a client-side `useEffect` calling a
+  Server Action, rather than receiving them as a prop from the Server Component page that already
+  fetches adjacent billing data — a real extra round trip on every page view, and a
+  code-standards §3 "never fetch in a Client Component" gap, though not a security issue (the
+  action it calls is properly role-scoped).
+- `getAdminBillingStats`/`getClientBillsStats` each independently re-fetch the full bill list
+  (with its own package-label join fan-out) that the billing page already fetched directly,
+  roughly doubling Supabase round trips per page load.
+- `ADMIN_BILL_COLUMNS`/`CLIENT_BILL_COLUMNS` are two independently-maintained column-list strings
+  rather than one derived from the other; `BillingAdmin.tsx`/`BillingClient.tsx` duplicate the
+  same "which timestamp to show" status-timeline formatting; both re-implement the margin-percent
+  formula inline instead of reusing `pct()` from `lib/logic.ts`.
+- `components/layout/Sidebar.tsx`'s nav badge still counts from `AppContext`'s frozen mock
+  `data.bills` for "bills pending" — the same pre-existing, cross-domain gap Build 08 documented
+  for its own equivalent Approvals badge, not something this build introduced or is positioned to
+  fix in isolation.
+- The `bill.pdf` job's idempotency key (`${billId}:submitted`) doesn't vary by `revision`, so a
+  bill that is submitted, rejected, and resubmitted keeps the same key and never regenerates its
+  PDF — the client would certify against a stale, pre-correction document. `RecordPaymentDialog`'s
+  own idempotency key is also never regenerated after a failed submit attempt (unlike
+  `BillingAdmin`'s create-bill flow, which does, per its own documented fix above). Both are real,
+  narrow-trigger gaps worth a follow-up.
+- `BillingAdmin`'s "Billable Now" table is never refreshed after a successful `createBill` — the
+  just-billed rows stay visible and selectable until the next full page load, so re-selecting and
+  submitting again produces a confusing `ALREADY_BILLED` the admin didn't cause.
+- Migrations `20260916090003`/`090005`/`090007`/`090008` are four successive full rewrites of
+  `rpc_create_bill`, each correcting a real bug found after the previous one shipped — the
+  intended trail per AGENTS.md database rule 1 ("never edit an already-applied migration"), not
+  squashed for a cleaner history, since by the time each bug was found the previous migration had
+  already been applied to the shared `apex-dev` project.
+
 ---
 
 ## Still open

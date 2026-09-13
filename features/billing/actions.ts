@@ -5,7 +5,7 @@ import { z } from "zod";
 import { revalidatePath, updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminAction, clientAction, siteAction } from "@/lib/safe-action";
-import { requireSession } from "@/lib/auth/session";
+import { requireSession, requireRole } from "@/lib/auth/session";
 import { enqueue } from "@/lib/jobs/enqueue";
 import { presignGet } from "@/lib/r2/presign";
 import { env } from "@/lib/env";
@@ -175,13 +175,22 @@ export const uploadBillCopy = siteAction
  * route handler itself.
  */
 export async function getBillPdfUrl(billId: string): Promise<string | null> {
+  assertBillingEnabled();
   await requireSession();
   const supabase = await createClient();
+  // `mime_type = 'application/pdf'` narrows this away from a non-PDF scan
+  // uploaded afterward via uploadBillCopy (a photo, most commonly), but a
+  // scanned copy uploaded AS a PDF would still collide — both share
+  // entity_type='bill'/entity_id=billId with no dedicated discriminator
+  // column. A full fix needs one (e.g. a `kind` column distinguishing
+  // "generated" from "uploaded"); tracked as a follow-up, not blocking this
+  // build.
   const { data, error } = await supabase
     .from("attachments")
     .select("r2_key")
     .eq("entity_type", "bill")
     .eq("entity_id", billId)
+    .eq("mime_type", "application/pdf")
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -196,6 +205,7 @@ export async function getBillPdfUrl(billId: string): Promise<string | null> {
  *  file's `"use server"` directive is what makes it reachable from a
  *  client component. */
 export async function getBillableNowForAdmin(projectId: string): Promise<BillableNowLine[]> {
+  assertBillingEnabled();
   return getBillableNow(projectId);
 }
 
@@ -203,14 +213,27 @@ export async function getBillableNowForAdmin(projectId: string): Promise<Billabl
  *  server"` export directly, same as `getPackageOptions`/`getPhaseOptions`
  *  elsewhere: `queries.ts` itself is `server-only` and cannot be imported
  *  into a client bundle, this file's own `"use server"` directive is what
- *  makes it reachable. */
+ *  makes it reachable.
+ *
+ *  `requireRole`, not `requireSession`: `getBillDetail`'s own non-admin
+ *  branch reads `v_bill_client`/`v_bill_line_client`, which are gated only
+ *  by project membership, not role (Build 07's own views, built ahead of
+ *  need). Site is a project member but must see no money at all (AGENTS.md's
+ *  own rule) — `viewBilling` (`lib/rbac/permissions.ts`) is the real
+ *  membership list this action is allowed to serve, and site is
+ *  deliberately not on it. A plain `requireSession` here would let a site
+ *  session reach the client-shaped branch directly, bypassing both the
+ *  billing page's own `forbidden()` for site and the "any non-admin ==
+ *  client" assumption `getBillDetail` itself makes. */
 export async function getBillDetailForDialog(billId: string): Promise<BillDetail | null> {
-  const session = await requireSession();
+  assertBillingEnabled();
+  const session = await requireRole(["owner", "admin", "client"]);
   return getBillDetail(session, billId);
 }
 
 /** `RecordPaymentDialog`'s own "already paid X, Y remaining" fetch. */
 export async function getBillPaymentsSummaryForDialog(billId: string) {
+  assertBillingEnabled();
   return getBillPaymentsSummary(billId);
 }
 

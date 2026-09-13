@@ -74,12 +74,18 @@ export function BillViewDialog({ billId }: { billId: string }) {
           window.open(`/api/bills/${bill.id}/export.xlsx`, "_blank");
           return;
         }
+        // Open the tab synchronously, inside the click's own user-gesture
+        // stack, and point it at the real URL once the fetch resolves —
+        // opening only after the `await` loses that gesture context and
+        // every browser's popup blocker silently swallows it.
+        const tab = window.open("", "_blank");
         const url = await getBillPdfUrl(bill.id);
         if (!url) {
+          tab?.close();
           toast("The PDF isn't ready yet — it appears within a minute of submission.");
           return;
         }
-        window.open(url, "_blank");
+        if (tab) tab.location.href = url;
       }}
     >
       <div className="overflow-x-auto border border-border rounded-lg">
