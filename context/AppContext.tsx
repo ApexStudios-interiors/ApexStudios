@@ -2,11 +2,8 @@
 
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { seedData } from "@/lib/data";
-import type { AppData, BillFile, BillStatus, Package, Role, Task } from "@/lib/types";
-import { billableItems, lineVal } from "@/lib/logic";
+import type { AppData, Package, Role, Task } from "@/lib/types";
 import { ROLE_LABEL } from "@/lib/rbac/roles";
-
-const TODAY_ISO = "2026-09-07";
 
 export type DialogState =
   | { kind: "addProject" }
@@ -35,8 +32,11 @@ export type DialogState =
   | { kind: "decideApproval"; approvalId: string; decision: "approved" | "rejected"; item: string }
   | { kind: "postUpdate"; projectId: string; moduleId?: string }
   | { kind: "editUpdate"; updateId: string; body: string }
-  | { kind: "billUpload"; billId: string }
+  | { kind: "billUpload"; billId: string; projectId: string }
   | { kind: "billView"; billId: string }
+  | { kind: "recordPayment"; billId: string; refNo: string; netPayable: number }
+  | { kind: "rejectBill"; billId: string; refNo: string }
+  | { kind: "certifyBill"; billId: string; refNo: string }
   | { kind: "inviteUser" }
   | null;
 
@@ -59,9 +59,9 @@ interface AppContextValue {
   // setApprovalStatus removed: build/08-approvals.md converts ApprovalTable's
   // Approve/Reject buttons to real Server Actions (decideApproval), its only
   // caller.
-  setBillStatus: (id: string, status: BillStatus) => void;
-  createBill: (projectId: string, selectedKeys: Set<string>) => string | null;
-  markPhaseDone: (projectId: string, moduleId: string, pkgId: string) => void;
+  // setBillStatus/createBill/markPhaseDone removed: build/09-billing.md
+  // converts BillingAdmin/BillingClient/MilestoneTable to real Server
+  // Actions, their only callers.
   addModule: (
     projectId: string,
     m: { name: string; allocated: number; internal: number; lead: string }
@@ -79,7 +79,8 @@ interface AppContextValue {
   // addApproval/addApprovalPhotos removed: build/08-approvals.md converts
   // NewApprovalDialog and ApprovalPhotosDialog to real Server Actions
   // (requestApproval, addSamplePhotos), their only callers.
-  uploadBillFiles: (billId: string, files: BillFile[]) => void;
+  // uploadBillFiles removed: BillUploadDialog converts to the real
+  // uploadBillCopy Server Action, its only caller.
   addProject: (p: {
     name: string;
     client: string;
@@ -128,78 +129,11 @@ export function AppProvider({
   const openDialog = useCallback((d: DialogState) => setDialog(d), []);
   const closeDialog = useCallback(() => setDialog(null), []);
 
-  const setBillStatus = useCallback((id: string, status: BillStatus) => {
-    setData((prev) => {
-      const next = clone(prev);
-      const b = next.bills.find((x) => x.id === id);
-      if (b) {
-        b.status = status;
-        if (status === "Submitted") b.submitted = TODAY_ISO;
-        if (status === "Certified") b.certified = TODAY_ISO;
-        if (status === "Paid") b.paid = TODAY_ISO;
-      }
-      return next;
-    });
-  }, []);
-
-  const createBill = useCallback((projectId: string, selectedKeys: Set<string>): string | null => {
-    let newId: string | null = null;
-    setData((prev) => {
-      const next = clone(prev);
-      const p = next.projects.find((x) => x.id === projectId);
-      if (!p) return prev;
-      const items = billableItems(prev, p).filter((i) => selectedKeys.has(i.key));
-      if (!items.length) return prev;
-      const id = "RA-" + String(next.bills.length + 1).padStart(3, "0");
-      let recovery = 0;
-      const phs = new Set(items.filter((i) => i.type === "milestone").map((i) => i.mod + ":" + i.pkg));
-      next.bills
-        .filter((b) => b.proj === p.id)
-        .forEach((b) =>
-          b.lines.forEach((l) => {
-            if (l.type === "material" && phs.has(l.mod + ":" + l.pkg) && !l.recovered) {
-              recovery += lineVal(l);
-              l.recovered = true;
-            }
-          })
-        );
-      const lines = items.map((i) => ({
-        type: i.type,
-        mod: i.mod,
-        pkg: i.pkg,
-        desc: i.desc,
-        cost: i.cost,
-        client: i.client,
-        pct: i.pct,
-      }));
-      next.bills.push({ id, proj: p.id, date: TODAY_ISO, status: "Draft", lines, recovery, files: [] });
-      items.forEach((i) => {
-        if (i.type === "material") {
-          const key = i.key.slice(2);
-          const r = next.requests.find((x) => x.id === key);
-          if (r) r.billedIn = id;
-        } else {
-          const m = p.modules.find((x) => x.id === i.mod);
-          const k = m?.packages.find((x) => x.id === i.pkg);
-          if (k) k.billedIn = id;
-        }
-      });
-      newId = id;
-      return next;
-    });
-    return newId;
-  }, []);
-
-  const markPhaseDone = useCallback((projectId: string, moduleId: string, pkgId: string) => {
-    setData((prev) => {
-      const next = clone(prev);
-      const m = next.projects.find((x) => x.id === projectId)?.modules.find((x) => x.id === moduleId);
-      const k = m?.packages.find((x) => x.id === pkgId);
-      if (k) k.done = true;
-      return next;
-    });
-  }, []);
-
+  // setBillStatus/createBill/markPhaseDone removed: build/09-billing.md
+  // converts BillingAdmin/BillingClient/MilestoneTable to real Server
+  // Actions (createBill, transitionBill, certifyBill, rejectBill,
+  // recordPayment, and rpc_mark_phase_complete's own Server Action wiring),
+  // their only callers.
   const addModule = useCallback(
     (projectId: string, m: { name: string; allocated: number; internal: number; lead: string }) => {
       setData((prev) => {
@@ -243,18 +177,8 @@ export function AppProvider({
     []
   );
 
-  const uploadBillFiles = useCallback((billId: string, files: BillFile[]) => {
-    setData((prev) => {
-      const next = clone(prev);
-      const b = next.bills.find((x) => x.id === billId);
-      if (b)
-        b.files = (b.files || []).concat(
-          files.length ? files : [{ n: b.id + " Apex Studios Bill.pdf", s: "310 KB" }]
-        );
-      return next;
-    });
-  }, []);
-
+  // uploadBillFiles removed: BillUploadDialog converts to the real
+  // uploadBillCopy Server Action, its only caller.
   const addProject = useCallback(
     (p: { name: string; client: string; location: string; start: string | null; packageNames: string[] }) => {
       const id = "p" + Date.now();
@@ -321,12 +245,8 @@ export function AppProvider({
       closeDialog,
       toastMsg,
       toast,
-      setBillStatus,
-      createBill,
-      markPhaseDone,
       addModule,
       editModule,
-      uploadBillFiles,
       addProject,
       inviteUser,
       updateTeamRole,
@@ -340,12 +260,8 @@ export function AppProvider({
       toast,
       openDialog,
       closeDialog,
-      setBillStatus,
-      createBill,
-      markPhaseDone,
       addModule,
       editModule,
-      uploadBillFiles,
       addProject,
       inviteUser,
       updateTeamRole,

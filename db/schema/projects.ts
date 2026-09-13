@@ -32,6 +32,10 @@ export const projects = pgTable(
     // D7: mobilisation advances are tracked, with recoveries and a balance.
     mobilisationAdvance: money("mobilisation_advance").notNull().default("0"),
     mobilisationRecovered: money("mobilisation_recovered").notNull().default("0"),
+    /** Per-bill recovery rate applied to taxable, capped by the remaining
+     *  balance (build/09-billing.md §0.2/§4.1 step 6). 0 until a project's
+     *  real schedule is confirmed. */
+    mobilisationRecoveryPct: percentage("mobilisation_recovery_pct").notNull().default("0"),
 
     progressPct: smallint("progress_pct").notNull().default(0),
     /** Incremented under a row lock in rpc_create_bill; count(*)+1 would race. */

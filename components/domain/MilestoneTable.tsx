@@ -1,29 +1,61 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useApp } from "@/context/AppContext";
-import type { ModuleT, Project } from "@/lib/types";
-import { amt, factor, fmt, isMoney, phStatus, phTasks } from "@/lib/logic";
-import { MAS } from "@/lib/data";
+import { markPhaseComplete } from "@/features/billing/actions";
+import type { PhaseBillingRow, MaterialAtSiteRow } from "@/features/billing/queries";
 import { PhaseStatusBadge } from "@/components/domain/StatusBadges";
+import type { PhaseStatus } from "@/lib/logic";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { formatINR } from "@/lib/money";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, trTotal, sub } from "@/components/ui/table";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Empty } from "@/components/ui/Empty";
 
-export function MilestoneTable({ project, module }: { project: Project; module: ModuleT }) {
-  const { data, role, markPhaseDone } = useApp();
-  const ks = module.packages;
-  const money = isMoney(role);
-  const materials = data.requests.filter(
-    (r) => r.proj === project.id && r.mod === module.id && r.status === "Delivered" && amt(r) > 0
-  );
+/** ui-guide §6.5's Package Billing tab, admin only: "Phase billing status"
+ *  (Phase, Tasks done, Bill Amount, Status, Mark Complete) and "Material at
+ *  Site" (Cost, Client Value, Billable, Status). `rpc_mark_phase_complete`
+ *  predates this build (migration 20260911090001) — this is its own Server
+ *  Action wiring, as that migration's own comment says would land here. */
+/** `phases.billing_status` (unresolved/billable/billed/paid) collapsed to
+ *  the prototype's own display-only vocabulary — "unresolved" and
+ *  "billable" both read as "Pending" here, exactly like the mock's own
+ *  `phStatus()` never distinguished a not-yet-billable phase from a
+ *  billable-but-unbilled one either. */
+const BILLING_STATUS_LABEL: Record<PhaseBillingRow["billingStatus"], PhaseStatus> = {
+  unresolved: "Pending",
+  billable: "Pending",
+  billed: "Billed",
+  paid: "Paid",
+};
+
+export function MilestoneTable({
+  phases,
+  materials,
+}: {
+  phases: PhaseBillingRow[];
+  materials: MaterialAtSiteRow[];
+}) {
+  const { toast } = useApp();
+  const router = useRouter();
+  const total = phases.reduce((a, p) => a + p.allocatedAmount, 0);
+
+  async function onMarkComplete(phaseId: string) {
+    const result = await markPhaseComplete({ phaseId });
+    if (!result?.data) {
+      toast(result?.serverError ?? "Could not mark this phase complete");
+      return;
+    }
+    router.refresh();
+    toast("Phase marked complete");
+  }
 
   return (
     <>
       <Card>
-        {ks.length ? (
+        {phases.length ? (
           <TableWrap>
             <thead>
               <tr>
@@ -35,36 +67,30 @@ export function MilestoneTable({ project, module }: { project: Project; module: 
               </tr>
             </thead>
             <tbody>
-              {ks.map((k) => {
-                const st = phStatus(data, module, k);
-                const ts = phTasks(module, k);
-                const done = ts.filter((t) => t.p === 100).length;
-                const b = k.billedIn ? data.bills.find((x) => x.id === k.billedIn) : null;
-                return (
-                  <tr key={k.id}>
-                    <td className={td}>{k.name}</td>
-                    <td className={td + " text-muted-foreground text-sm"}>
-                      {ts.length ? `${done} of ${ts.length} done` : "No tasks linked"}
-                    </td>
-                    <td className={tdNum}>{fmt(k.alloc)}</td>
-                    <td className={td}>
-                      <PhaseStatusBadge status={st} />
-                      {b && <span className={sub + " text-xs"}>{b.id}</span>}
-                    </td>
-                    <td className={td} style={{ textAlign: "right" }}>
-                      {st === "Pending" && !ts.length && money ? (
-                        <Button size="sm" onClick={() => markPhaseDone(project.id, module.id, k.id)}>
-                          Mark Complete
-                        </Button>
-                      ) : null}
-                    </td>
-                  </tr>
-                );
-              })}
+              {phases.map((p) => (
+                <tr key={p.id}>
+                  <td className={td}>{p.name}</td>
+                  <td className={td + " text-muted-foreground text-sm"}>
+                    {p.taskCount ? `${p.tasksDone} of ${p.taskCount} done` : "No tasks linked"}
+                  </td>
+                  <td className={tdNum}>{formatINR(p.allocatedAmount)}</td>
+                  <td className={td}>
+                    <PhaseStatusBadge status={BILLING_STATUS_LABEL[p.billingStatus]} />
+                    {p.billRefNo && <span className={sub + " text-xs"}>{p.billRefNo}</span>}
+                  </td>
+                  <td className={td} style={{ textAlign: "right" }}>
+                    {p.canMarkComplete ? (
+                      <Button size="sm" onClick={() => onMarkComplete(p.id)}>
+                        Mark Complete
+                      </Button>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
               <tr className={trTotal}>
                 <td className={td}>Total</td>
                 <td className={td} />
-                <td className={tdNum}>{fmt(ks.reduce((a, k) => a + k.alloc, 0))}</td>
+                <td className={tdNum}>{formatINR(total)}</td>
                 <td className={td} />
                 <td className={td} />
               </tr>
@@ -85,38 +111,34 @@ export function MilestoneTable({ project, module }: { project: Project; module: 
               <th className={th}>Material</th>
               <th className={thNum}>Cost</th>
               <th className={thNum}>Client Value</th>
-              <th className={thNum}>Billable ({MAS}%)</th>
+              <th className={thNum}>Billable</th>
               <th className={th}>Status</th>
             </tr>
           </thead>
           <tbody>
             {materials.length ? (
-              materials.map((r) => {
-                const cv = Math.round(amt(r) * factor(module, r.pkg));
-                const b = r.billedIn ? data.bills.find((x) => x.id === r.billedIn) : null;
-                return (
-                  <tr key={r.id}>
-                    <td className={td}>
-                      {r.item}
-                      <span className={sub}>
-                        {r.id} · {r.qty} {r.unit}
-                      </span>
-                    </td>
-                    <td className={tdNum}>{fmt(amt(r))}</td>
-                    <td className={tdNum}>{fmt(cv)}</td>
-                    <td className={tdNum}>{fmt(Math.round((cv * MAS) / 100))}</td>
-                    <td className={td}>
-                      {b ? (
-                        <Badge variant={b.status === "Paid" ? "default" : "outline"}>
-                          {b.id} · {b.status}
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline">● Billable</Badge>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
+              materials.map((m) => (
+                <tr key={m.id}>
+                  <td className={td}>
+                    {m.materialName}
+                    <span className={sub}>
+                      {m.refNo} · {m.qty} {m.unit}
+                    </span>
+                  </td>
+                  <td className={tdNum}>{formatINR(m.cost)}</td>
+                  <td className={tdNum}>{formatINR(m.clientValue)}</td>
+                  <td className={tdNum}>{formatINR(m.billableAmount)}</td>
+                  <td className={td}>
+                    {m.billRefNo ? (
+                      <Badge variant={m.billStatus === "paid" ? "default" : "outline"}>
+                        {m.billRefNo} · {m.billStatus}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline">● Billable</Badge>
+                    )}
+                  </td>
+                </tr>
+              ))
             ) : (
               <tr>
                 <td className={td} colSpan={5}>

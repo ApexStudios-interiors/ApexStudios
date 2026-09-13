@@ -24,13 +24,19 @@
 --   bill 40   line 50   inventory 60   update 70
 
 -- ── Organisation ─────────────────────────────────────────────────────────────
-insert into public.orgs (id, name, legal_name, gstin, pan, address) values
+-- bank_name/bank_account_no/bank_ifsc added in Build 09 (migration 0045) —
+-- the bill PDF prints them (build/09-billing.md §4.6); same PLACEHOLDER
+-- convention as the four columns above, same open prerequisite (§0.2).
+insert into public.orgs (id, name, legal_name, gstin, pan, address, bank_name, bank_account_no, bank_ifsc) values
   ('00000000-0000-4000-8000-0000000000a0',
    'Apex Studios',
    'PLACEHOLDER — Apex Studios legal name required',
    'PLACEHOLDER-GSTIN',
    'PLACEHOLDER-PAN',
-   'PLACEHOLDER — registered address required')
+   'PLACEHOLDER — registered address required',
+   'PLACEHOLDER — bank name required',
+   'PLACEHOLDER-ACCOUNT-NO',
+   'PLACEHOLDER-IFSC')
 on conflict (id) do nothing;
 
 -- ── Auth users ───────────────────────────────────────────────────────────────

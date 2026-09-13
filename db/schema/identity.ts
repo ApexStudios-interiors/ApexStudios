@@ -11,6 +11,10 @@ export const orgs = pgTable("orgs", {
   pan: text("pan"),
   address: text("address"),
   logoR2Key: text("logo_r2_key"),
+  /** Printed on the bill PDF (build/09-billing.md §4.6). */
+  bankName: text("bank_name"),
+  bankAccountNo: text("bank_account_no"),
+  bankIfsc: text("bank_ifsc"),
   createdAt: tsz("created_at").notNull().defaultNow(),
 });
 

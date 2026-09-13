@@ -4,6 +4,7 @@ import { sweepOrphanAttachments } from "./handlers/attachment.orphan-sweep";
 import { reconcileInventory } from "./handlers/inventory.reconcile";
 import { archiveCompletedProjects } from "./handlers/project.archive";
 import { verifyBackup } from "./handlers/backup.verify";
+import { generateBillPdf } from "./handlers/bill.pdf";
 
 /**
  * build/06-files-jobs-daily-updates.md §3.1: "the single place a job name
@@ -19,11 +20,11 @@ export const JOB_REGISTRY: Record<string, JobHandler> = {
   "inventory.reconcile": reconcileInventory,
   "project.archive": archiveCompletedProjects,
   "backup.verify": verifyBackup,
+  "bill.pdf": generateBillPdf,
 };
 
 /** The names `jobs.drain` claims every minute — everything enqueued ad hoc
  *  from a request path, as opposed to a job a cron route self-enqueues on
  *  its own schedule (those are claimed by their own cron entry instead, see
- *  app/api/cron/[job]/route.ts). Build 09 adds 'bill.pdf' here when it starts
- *  enqueueing it. */
-export const DRAIN_JOB_NAMES = ["attachment.thumbnail"] as const;
+ *  app/api/cron/[job]/route.ts). */
+export const DRAIN_JOB_NAMES = ["attachment.thumbnail", "bill.pdf"] as const;
