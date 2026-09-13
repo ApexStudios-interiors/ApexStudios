@@ -91,7 +91,8 @@ export function RecordPaymentDialog({
     >
       {payments.length > 0 && (
         <div className="mb-3.5 text-[12.5px] text-muted-foreground">
-          Already paid: {formatINR(paidSoFar ?? 0)} across {payments.length} payment{payments.length > 1 ? "s" : ""}
+          Already paid: {formatINR(paidSoFar ?? 0)} across {payments.length} payment
+          {payments.length > 1 ? "s" : ""}
           {payments.map((p) => (
             <div key={p.id}>
               {dmy(p.paidOn)} · {formatINR(p.amount)}

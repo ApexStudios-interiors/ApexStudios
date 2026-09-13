@@ -70,7 +70,9 @@ export function DialogHost() {
     case "billView":
       return <BillViewDialog billId={dialog.billId} />;
     case "recordPayment":
-      return <RecordPaymentDialog billId={dialog.billId} refNo={dialog.refNo} netPayable={dialog.netPayable} />;
+      return (
+        <RecordPaymentDialog billId={dialog.billId} refNo={dialog.refNo} netPayable={dialog.netPayable} />
+      );
     case "rejectBill":
       return <RejectBillDialog billId={dialog.billId} refNo={dialog.refNo} />;
     case "certifyBill":

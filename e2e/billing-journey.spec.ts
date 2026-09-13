@@ -58,13 +58,19 @@ async function insertBillableFixtures(sql: ReturnType<typeof dbConnect>, suffix:
   return { phaseId, srId };
 }
 
-async function cleanupBill(sql: ReturnType<typeof dbConnect>, billId: string | null, phaseId: string, srId: string) {
+async function cleanupBill(
+  sql: ReturnType<typeof dbConnect>,
+  billId: string | null,
+  phaseId: string,
+  srId: string
+) {
   if (billId) {
     // A material fixture billed onto this bill leaves stock_requests
     // pointing at it (sr_billed_on_bill_fk) — clear that reference before
     // the bill row itself can be deleted, same as rpc_transition_bill's own
     // cancel-a-draft path does.
-    if (srId) await sql`update public.stock_requests set billed_on_bill_id = null where billed_on_bill_id = ${billId}`;
+    if (srId)
+      await sql`update public.stock_requests set billed_on_bill_id = null where billed_on_bill_id = ${billId}`;
     await sql`delete from public.jobs where payload->>'billId' = ${billId}`;
     await sql`delete from public.attachments where entity_id = ${billId}`;
     await sql`delete from public.payments where bill_id = ${billId}`;
@@ -77,7 +83,9 @@ async function cleanupBill(sql: ReturnType<typeof dbConnect>, billId: string | n
 }
 
 test.describe("admin: Billable Now selection, Create Bill, Submit, PDF job enqueued", () => {
-  test("running total updates, bill created with correct figures, submit enqueues bill.pdf", async ({ page }, testInfo) => {
+  test("running total updates, bill created with correct figures, submit enqueues bill.pdf", async ({
+    page,
+  }, testInfo) => {
     test.skip(testInfo.project.name !== "admin", "admin-only journey");
     test.setTimeout(60_000);
 
@@ -106,7 +114,8 @@ test.describe("admin: Billable Now selection, Create Bill, Submit, PDF job enque
       await page.getByRole("button", { name: "Create Bill" }).click();
       await expect(page.getByText(/^Bill /)).toBeVisible({ timeout: 10_000 });
 
-      const rows = await sql`select id, bill_no, taxable_amount, gst_amount from public.bills where project_id = ${PROJECT_ID} order by created_at desc limit 1`;
+      const rows =
+        await sql`select id, bill_no, taxable_amount, gst_amount from public.bills where project_id = ${PROJECT_ID} order by created_at desc limit 1`;
       billId = rows[0]?.id ?? null;
       const billNo = rows[0]?.bill_no;
       expect(billId).not.toBeNull();
@@ -129,7 +138,8 @@ test.describe("admin: Billable Now selection, Create Bill, Submit, PDF job enque
       await expect(billRow.getByText("Submitted", { exact: true })).toBeVisible({ timeout: 10_000 });
 
       // The PDF job was enqueued (application layer, on submit).
-      const jobRows = await sql`select id, status from public.jobs where name = 'bill.pdf' and payload->>'billId' = ${billId}`;
+      const jobRows =
+        await sql`select id, status from public.jobs where name = 'bill.pdf' and payload->>'billId' = ${billId}`;
       expect(jobRows.length).toBe(1);
 
       // Drain it for real, through the actual cron route — not a bypass.
@@ -144,8 +154,11 @@ test.describe("admin: Billable Now selection, Create Bill, Submit, PDF job enque
       // picked this job up and the handler actually ran.
       const cronSecret = process.env.CRON_SECRET;
       if (cronSecret) {
-        await page.request.get("/api/cron/jobs.drain", { headers: { Authorization: `Bearer ${cronSecret}` } });
-        const drained = await sql`select status, attempts, last_error from public.jobs where id = ${jobRows[0]?.id}`;
+        await page.request.get("/api/cron/jobs.drain", {
+          headers: { Authorization: `Bearer ${cronSecret}` },
+        });
+        const drained =
+          await sql`select status, attempts, last_error from public.jobs where id = ${jobRows[0]?.id}`;
         expect(Number(drained[0]?.attempts)).toBeGreaterThanOrEqual(1);
         expect(["pending", "failed", "succeeded", "processing"]).toContain(drained[0]?.status);
       }
@@ -213,7 +226,9 @@ test.describe("client: approve a submitted bill", () => {
 });
 
 test.describe("admin: record a part payment, then the balance -> status becomes Paid", () => {
-  test("two instalments covering net_payable auto-transition the bill to paid", async ({ page }, testInfo) => {
+  test("two instalments covering net_payable auto-transition the bill to paid", async ({
+    page,
+  }, testInfo) => {
     test.skip(testInfo.project.name !== "admin", "admin-only journey");
     test.setTimeout(60_000);
 
@@ -272,7 +287,8 @@ test.describe("admin: record a part payment, then the balance -> status becomes 
         from public.bills b where b.id = ${billId}`;
       expect(after[0]?.status).toBe("paid");
       expect(Number(after[0]?.payment_count)).toBe(2);
-      const events = await sql`select note from public.bill_events where bill_id = ${billId} and to_status = 'paid'`;
+      const events =
+        await sql`select note from public.bill_events where bill_id = ${billId} and to_status = 'paid'`;
       expect(events[0]?.note).toContain("Auto-transitioned");
     } finally {
       await cleanupBill(sql, billId, phaseId, "");

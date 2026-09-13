@@ -53,20 +53,23 @@ export async function generateBillPdf(payload: unknown): Promise<void> {
   if (existingErr) throw new Error(existingErr.message);
   if (existing) return;
 
-  const [{ data: lines, error: linesErr }, { data: project, error: projectErr }, { data: org, error: orgErr }] =
-    await Promise.all([
-      supabase
-        .from("bill_lines")
-        .select("description, client_value, pct_billed, amount")
-        .eq("bill_id", billId)
-        .order("sort_order", { ascending: true }),
-      supabase.from("projects").select("client_id").eq("id", bill.project_id).single(),
-      supabase
-        .from("orgs")
-        .select("legal_name, gstin, pan, address, bank_name, bank_account_no, bank_ifsc")
-        .eq("id", bill.org_id)
-        .single(),
-    ]);
+  const [
+    { data: lines, error: linesErr },
+    { data: project, error: projectErr },
+    { data: org, error: orgErr },
+  ] = await Promise.all([
+    supabase
+      .from("bill_lines")
+      .select("description, client_value, pct_billed, amount")
+      .eq("bill_id", billId)
+      .order("sort_order", { ascending: true }),
+    supabase.from("projects").select("client_id").eq("id", bill.project_id).single(),
+    supabase
+      .from("orgs")
+      .select("legal_name, gstin, pan, address, bank_name, bank_account_no, bank_ifsc")
+      .eq("id", bill.org_id)
+      .single(),
+  ]);
   if (linesErr) throw new Error(linesErr.message);
   if (projectErr) throw new Error(projectErr.message);
   if (orgErr) throw new Error(orgErr.message);

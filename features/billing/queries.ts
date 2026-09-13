@@ -72,7 +72,8 @@ export async function getBillableNow(projectId: string): Promise<BillableNowLine
       if (priorErr) throw new Error(priorErr.message);
       for (const line of priorLines) {
         const phaseId = line.source_id ? phaseIdByStockRequest.get(line.source_id) : undefined;
-        if (phaseId) priorAdvanceByPhase.set(phaseId, (priorAdvanceByPhase.get(phaseId) ?? 0) + Number(line.amount));
+        if (phaseId)
+          priorAdvanceByPhase.set(phaseId, (priorAdvanceByPhase.get(phaseId) ?? 0) + Number(line.amount));
       }
     }
   }
@@ -85,7 +86,8 @@ export async function getBillableNow(projectId: string): Promise<BillableNowLine
     pctBilled: Number(r.pct_billed),
     amount: Number(r.amount),
     internalCost: Number(r.internal_cost),
-    priorMaterialAdvanceOnThisPhase: r.source_type === "phase" ? (priorAdvanceByPhase.get(r.source_id) ?? 0) : 0,
+    priorMaterialAdvanceOnThisPhase:
+      r.source_type === "phase" ? (priorAdvanceByPhase.get(r.source_id) ?? 0) : 0,
   }));
 }
 
@@ -256,7 +258,10 @@ async function packageLabelsByBill(billIds: string[], isAdmin: boolean): Promise
   }
   const packageIdByStockRequest = new Map<string, string>();
   if (materialSourceIds.length > 0) {
-    const { data, error } = await supabase.from("stock_requests").select("id, package_id").in("id", materialSourceIds);
+    const { data, error } = await supabase
+      .from("stock_requests")
+      .select("id, package_id")
+      .in("id", materialSourceIds);
     if (error) throw new Error(error.message);
     for (const s of data) if (s.package_id) packageIdByStockRequest.set(s.id, s.package_id);
   }
@@ -272,7 +277,9 @@ async function packageLabelsByBill(billIds: string[], isAdmin: boolean): Promise
   for (const line of lineRows) {
     if (!line.source_id) continue;
     const packageId =
-      line.source_type === "phase" ? packageIdByPhase.get(line.source_id) : packageIdByStockRequest.get(line.source_id);
+      line.source_type === "phase"
+        ? packageIdByPhase.get(line.source_id)
+        : packageIdByStockRequest.get(line.source_id);
     const name = packageId ? packageNameById.get(packageId) : undefined;
     if (!name) continue;
     const existing = result.get(line.bill_id) ?? [];
@@ -313,7 +320,12 @@ function toBillDTO(r: AdminBillRow, admin: boolean, packageLabels: string[]): Bi
     certificationNote: r.certification_note,
     paidAt: r.paid_at,
     createdAt: r.created_at,
-    ...(admin ? { internalCostAmount: Number(r.internal_cost_amount ?? 0), marginAmount: Number(r.margin_amount ?? 0) } : {}),
+    ...(admin
+      ? {
+          internalCostAmount: Number(r.internal_cost_amount ?? 0),
+          marginAmount: Number(r.margin_amount ?? 0),
+        }
+      : {}),
     packageLabels,
   };
 }
@@ -332,7 +344,10 @@ export async function getBillsForAdmin(projectId: string): Promise<BillDTO[]> {
     .order("seq_no", { ascending: false });
   if (error) throw new Error(error.message);
   const rows = data as AdminBillRow[];
-  const labels = await packageLabelsByBill(rows.map((r) => r.id), true);
+  const labels = await packageLabelsByBill(
+    rows.map((r) => r.id),
+    true
+  );
   return rows.map((r) => toBillDTO(r, true, labels.get(r.id) ?? []));
 }
 
@@ -352,11 +367,18 @@ export async function getBillsForClient(projectId: string): Promise<BillDTO[]> {
     .order("seq_no", { ascending: false });
   if (error) throw new Error(error.message);
   const rows = data as AdminBillRow[];
-  const labels = await packageLabelsByBill(rows.map((r) => r.id), false);
+  const labels = await packageLabelsByBill(
+    rows.map((r) => r.id),
+    false
+  );
   return rows.map((r) => toBillDTO(r, false, labels.get(r.id) ?? []));
 }
 
-export type BillDetail = { bill: BillDTO; lines: BillLineDTO[]; billCopyUrls: { id: string; url: string; name: string }[] };
+export type BillDetail = {
+  bill: BillDTO;
+  lines: BillLineDTO[];
+  billCopyUrls: { id: string; url: string; name: string }[];
+};
 
 async function fetchBillCopyUrls(billId: string): Promise<{ id: string; url: string; name: string }[]> {
   const supabase = await createClient();
@@ -446,7 +468,13 @@ export async function getBillDetail(session: Session, billId: string): Promise<B
   return { bill, lines, billCopyUrls };
 }
 
-export type AdminBillingStats = { billedToDate: number; received: number; outstanding: number; billableNowCount: number; billableNowValue: number };
+export type AdminBillingStats = {
+  billedToDate: number;
+  received: number;
+  outstanding: number;
+  billableNowCount: number;
+  billableNowValue: number;
+};
 
 /** Admin's own stat row (ui-guide §6.11) — distinct from the dashboard's
  *  mini "Bills Raised" summary (`getClientBillingStats`, features/projects),
@@ -477,7 +505,10 @@ export async function getAdminBillingStats(projectId: string): Promise<AdminBill
 
 /** The Record Payment dialog's own "already paid X, Y remaining" figures —
  *  admin only (`payments` has no select policy for any other role). */
-export async function getBillPaymentsSummary(billId: string): Promise<{ paidSoFar: number; payments: { id: string; amount: number; paidOn: string; mode: string | null; referenceNo: string | null }[] }> {
+export async function getBillPaymentsSummary(billId: string): Promise<{
+  paidSoFar: number;
+  payments: { id: string; amount: number; paidOn: string; mode: string | null; referenceNo: string | null }[];
+}> {
   await requireSession();
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -489,11 +520,22 @@ export async function getBillPaymentsSummary(billId: string): Promise<{ paidSoFa
   const paidSoFar = data.reduce((a, p) => a + Number(p.amount), 0);
   return {
     paidSoFar,
-    payments: data.map((p) => ({ id: p.id, amount: Number(p.amount), paidOn: p.paid_on, mode: p.mode, referenceNo: p.reference_no })),
+    payments: data.map((p) => ({
+      id: p.id,
+      amount: Number(p.amount),
+      paidOn: p.paid_on,
+      mode: p.mode,
+      referenceNo: p.reference_no,
+    })),
   };
 }
 
-export type ClientBillsStats = { billsRaised: number; awaitingApproval: number; approvedUnpaid: number; paid: number };
+export type ClientBillsStats = {
+  billsRaised: number;
+  awaitingApproval: number;
+  approvedUnpaid: number;
+  paid: number;
+};
 
 /** The client Bills page's own stat row (ui-guide §6.11: "Bills Raised,
  *  Awaiting Approval, Approved Unpaid, Paid") — a different shape from the
@@ -538,7 +580,9 @@ export async function getPhaseBillingStatus(packageId: string): Promise<PhaseBil
   if (error) throw new Error(error.message);
 
   const rows = data.filter(
-    (p): p is typeof p & { phase_id: string; name: string; billing_status: PhaseBillingRow["billingStatus"] } =>
+    (
+      p
+    ): p is typeof p & { phase_id: string; name: string; billing_status: PhaseBillingRow["billingStatus"] } =>
       p.phase_id != null && p.name != null && p.billing_status != null
   );
 
@@ -555,7 +599,10 @@ export async function getPhaseBillingStatus(packageId: string): Promise<PhaseBil
     if (lineErr) throw new Error(lineErr.message);
     const billIds = [...new Set(lineRows.map((l) => l.bill_id))];
     if (billIds.length > 0) {
-      const { data: bills, error: billErr } = await supabase.from("bills").select("id, bill_no").in("id", billIds);
+      const { data: bills, error: billErr } = await supabase
+        .from("bills")
+        .select("id, bill_no")
+        .in("id", billIds);
       if (billErr) throw new Error(billErr.message);
       const billNoById = new Map(bills.map((b) => [b.id, b.bill_no]));
       for (const l of lineRows) {
@@ -573,7 +620,10 @@ export async function getPhaseBillingStatus(packageId: string): Promise<PhaseBil
     tasksDone: p.tasks_done ?? 0,
     allocatedAmount: Number(p.allocated_amount),
     billingStatus: p.billing_status,
-    canMarkComplete: p.task_count === 0 && !p.is_complete && (p.billing_status === "unresolved" || p.billing_status === "billable"),
+    canMarkComplete:
+      p.task_count === 0 &&
+      !p.is_complete &&
+      (p.billing_status === "unresolved" || p.billing_status === "billable"),
     billRefNo: billRefByPhase.get(p.phase_id) ?? null,
   }));
 }
@@ -642,7 +692,10 @@ export async function getMaterialAtSite(packageId: string): Promise<MaterialAtSi
   const billIds = [...new Set(data.map((r) => r.billed_on_bill_id).filter((id): id is string => id != null))];
   const billById = new Map<string, { billNo: string; status: BillDTO["status"] }>();
   if (billIds.length > 0) {
-    const { data: bills, error: billErr } = await supabase.from("bills").select("id, bill_no, status").in("id", billIds);
+    const { data: bills, error: billErr } = await supabase
+      .from("bills")
+      .select("id, bill_no, status")
+      .in("id", billIds);
     if (billErr) throw new Error(billErr.message);
     for (const b of bills) billById.set(b.id, { billNo: b.bill_no, status: b.status });
   }

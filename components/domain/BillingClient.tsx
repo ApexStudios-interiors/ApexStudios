@@ -92,7 +92,11 @@ export function BillingClient({ bills, stats }: { bills: BillDTO[]; stats: Stats
                   </td>
                   <td className={td}>
                     <div className="flex gap-1.5 flex-wrap justify-end">
-                      <Button variant="ghost" size="sm" onClick={() => openDialog({ kind: "billView", billId: b.id })}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openDialog({ kind: "billView", billId: b.id })}
+                      >
                         View
                       </Button>
                       {b.status === "submitted" && (

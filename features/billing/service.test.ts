@@ -82,7 +82,9 @@ describe("previewBill — line composition", () => {
   });
 
   it("accepts a Decimal instance directly, not just number/string", () => {
-    const lines: BillableLine[] = [{ sourceType: "phase", amount: new Decimal(1000), internalCost: new Decimal(600) }];
+    const lines: BillableLine[] = [
+      { sourceType: "phase", amount: new Decimal(1000), internalCost: new Decimal(600) },
+    ];
     const result = previewBill(lines, NO_ADVANCE);
     expect(result.workValue.toNumber()).toBe(1000);
   });
@@ -214,7 +216,12 @@ describe("previewBill — net_payable reconciles across generated cases (T- list
 
   it.each(cases.map((c, i) => [i, c] as const))("case %i reconciles G - H - I - J to the paisa", (_, c) => {
     const lines: BillableLine[] = [
-      { sourceType: "phase", amount: c.workValue, internalCost: c.internalCost, priorMaterialAdvanceOnThisPhase: c.priorAdvance },
+      {
+        sourceType: "phase",
+        amount: c.workValue,
+        internalCost: c.internalCost,
+        priorMaterialAdvanceOnThisPhase: c.priorAdvance,
+      },
       { sourceType: "material", amount: c.materialValue, internalCost: 0 },
     ];
     const result = previewBill(lines, {

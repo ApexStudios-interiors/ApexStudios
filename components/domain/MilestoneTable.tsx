@@ -31,7 +31,13 @@ const BILLING_STATUS_LABEL: Record<PhaseBillingRow["billingStatus"], PhaseStatus
   paid: "Paid",
 };
 
-export function MilestoneTable({ phases, materials }: { phases: PhaseBillingRow[]; materials: MaterialAtSiteRow[] }) {
+export function MilestoneTable({
+  phases,
+  materials,
+}: {
+  phases: PhaseBillingRow[];
+  materials: MaterialAtSiteRow[];
+}) {
   const { toast } = useApp();
   const router = useRouter();
   const total = phases.reduce((a, p) => a + p.allocatedAmount, 0);

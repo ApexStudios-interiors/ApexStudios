@@ -3,7 +3,12 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { env } from "@/lib/env";
 import { getProjectHeader } from "@/features/projects/queries";
-import { getAdminBillingStats, getBillsForAdmin, getBillsForClient, getClientBillsStats } from "@/features/billing/queries";
+import {
+  getAdminBillingStats,
+  getBillsForAdmin,
+  getBillsForClient,
+  getClientBillsStats,
+} from "@/features/billing/queries";
 import { BillingAdmin } from "@/components/domain/BillingAdmin";
 import { BillingClient } from "@/components/domain/BillingClient";
 
@@ -37,7 +42,9 @@ export default async function BillingPage({ params }: { params: Promise<{ projec
   const supabase = await createClient();
   const { data: project, error } = await supabase
     .from("projects")
-    .select("gst_rate_pct, retention_pct, tds_pct, mobilisation_advance, mobilisation_recovered, mobilisation_recovery_pct")
+    .select(
+      "gst_rate_pct, retention_pct, tds_pct, mobilisation_advance, mobilisation_recovered, mobilisation_recovery_pct"
+    )
     .eq("id", projectId)
     .single();
   if (error) throw new Error(error.message);

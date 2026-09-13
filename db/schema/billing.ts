@@ -78,7 +78,9 @@ export const bills = pgTable(
     // Partial, not `unique nulls not distinct`: this table already has many
     // pre-existing rows with no key at all, and a plain `unique nulls not
     // distinct` collapses every one of those NULLs together per project_id.
-    uniqueIndex("bills_idem_uq").on(t.projectId, t.idempotencyKey).where(sql`idempotency_key is not null`),
+    uniqueIndex("bills_idem_uq")
+      .on(t.projectId, t.idempotencyKey)
+      .where(sql`idempotency_key is not null`),
   ]
 );
 
@@ -160,6 +162,8 @@ export const payments = pgTable(
   (t) => [
     index("idx_payments_bill").on(t.billId),
     index("idx_payments_org").on(t.orgId),
-    uniqueIndex("payments_idem_uq").on(t.billId, t.idempotencyKey).where(sql`idempotency_key is not null`),
+    uniqueIndex("payments_idem_uq")
+      .on(t.billId, t.idempotencyKey)
+      .where(sql`idempotency_key is not null`),
   ]
 );

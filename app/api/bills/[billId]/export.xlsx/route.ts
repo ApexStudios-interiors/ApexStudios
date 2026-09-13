@@ -25,7 +25,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ bil
   try {
     await requireRole(["owner", "admin"]);
   } catch (e) {
-    if (e instanceof UnauthenticatedError) return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
+    if (e instanceof UnauthenticatedError)
+      return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
     if (e instanceof ForbiddenError) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
     throw e;
   }

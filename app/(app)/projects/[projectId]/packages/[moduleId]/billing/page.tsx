@@ -16,6 +16,9 @@ export default async function PackageBillingTab({ params }: { params: Promise<{ 
   const effectiveRole = session.impersonating?.role ?? session.role;
   if (effectiveRole !== "owner" && effectiveRole !== "admin") forbidden();
 
-  const [phases, materials] = await Promise.all([getPhaseBillingStatus(moduleId), getMaterialAtSite(moduleId)]);
+  const [phases, materials] = await Promise.all([
+    getPhaseBillingStatus(moduleId),
+    getMaterialAtSite(moduleId),
+  ]);
   return <MilestoneTable phases={phases} materials={materials} />;
 }

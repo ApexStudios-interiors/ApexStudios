@@ -16,7 +16,13 @@ import {
   transitionBillSchema,
   uploadBillCopySchema,
 } from "./schema";
-import { getBillableNow, getBillDetail, getBillPaymentsSummary, type BillableNowLine, type BillDetail } from "./queries";
+import {
+  getBillableNow,
+  getBillDetail,
+  getBillPaymentsSummary,
+  type BillableNowLine,
+  type BillDetail,
+} from "./queries";
 
 /**
  * build/09-billing.md §4.4. `rpc_create_bill`, `rpc_transition_bill` and

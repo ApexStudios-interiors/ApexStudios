@@ -117,7 +117,10 @@ export function previewBill(lines: readonly BillableLine[], rates: ProjectBillin
   const retentionAmount = round2(taxableAmount.times(d(rates.retentionPct)).dividedBy(100));
   const tdsAmount = round2(taxableAmount.times(d(rates.tdsPct)).dividedBy(100));
 
-  const remainingAdvance = Decimal.max(d(rates.mobilisationAdvance).minus(d(rates.mobilisationRecovered)), ZERO);
+  const remainingAdvance = Decimal.max(
+    d(rates.mobilisationAdvance).minus(d(rates.mobilisationRecovered)),
+    ZERO
+  );
   const advanceRecovery = Decimal.min(
     remainingAdvance,
     round2(taxableAmount.times(d(rates.mobilisationRecoveryPct)).dividedBy(100))

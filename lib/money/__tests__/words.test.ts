@@ -31,7 +31,9 @@ describe("formatINRInWords", () => {
   });
 
   it("lakhs", () => {
-    expect(formatINRInWords(123456)).toBe("Rupees One Lakh Twenty Three Thousand Four Hundred Fifty Six Only");
+    expect(formatINRInWords(123456)).toBe(
+      "Rupees One Lakh Twenty Three Thousand Four Hundred Fifty Six Only"
+    );
   });
 
   it("a round lakh — thousand and rest groups both zero", () => {

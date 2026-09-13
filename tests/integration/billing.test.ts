@@ -88,7 +88,11 @@ afterAll(async () => {
 
 /** A disposable, manually-completed billable phase — never a seeded one, so
  *  this file's own bill creations have nothing shared left to corrupt. */
-async function insertTestPhase(overrides: { allocated: number; internal: number; refSuffix: string }): Promise<string> {
+async function insertTestPhase(overrides: {
+  allocated: number;
+  internal: number;
+  refSuffix: string;
+}): Promise<string> {
   const rows = await sql`
     insert into public.phases (org_id, project_id, package_id, seq_no, name, allocated_amount, internal_amount, billing_status, manual_complete_at, manual_complete_by)
     values (${SEED.org}, ${SEED.project}, ${SEED.poolPackage}, ${900 + Math.floor(Math.random() * 1_000_000)}, ${"Billing test phase " + overrides.refSuffix},
@@ -309,7 +313,9 @@ describe("rpc_create_bill — concurrency (T-03)", () => {
     const N = 10;
     const admin = await client(ADMIN_EMAIL);
     const phaseIds = await Promise.all(
-      Array.from({ length: N }, (_, i) => insertTestPhase({ allocated: 1000 * (i + 1), internal: 500, refSuffix: `conc-${i}` }))
+      Array.from({ length: N }, (_, i) =>
+        insertTestPhase({ allocated: 1000 * (i + 1), internal: 500, refSuffix: `conc-${i}` })
+      )
     );
 
     const results = await Promise.all(
@@ -341,7 +347,10 @@ describe("rpc_transition_bill — lifecycle and T-05", () => {
     const bill = await createBill(admin, [{ source_type: "phase", source_id: phaseId }]);
     await admin.rpc("rpc_transition_bill", { p_bill_id: bill.id, p_to_status: "submitted" });
 
-    const { error } = await admin.rpc("rpc_transition_bill", { p_bill_id: bill.id, p_to_status: "certified" });
+    const { error } = await admin.rpc("rpc_transition_bill", {
+      p_bill_id: bill.id,
+      p_to_status: "certified",
+    });
     expect(error?.message).toMatch(/FORBIDDEN/);
   });
 
@@ -352,7 +361,10 @@ describe("rpc_transition_bill — lifecycle and T-05", () => {
     const bill = await createBill(admin, [{ source_type: "phase", source_id: phaseId }]);
     await admin.rpc("rpc_transition_bill", { p_bill_id: bill.id, p_to_status: "submitted" });
 
-    const { error } = await owner.rpc("rpc_transition_bill", { p_bill_id: bill.id, p_to_status: "certified" });
+    const { error } = await owner.rpc("rpc_transition_bill", {
+      p_bill_id: bill.id,
+      p_to_status: "certified",
+    });
     expect(error?.message).toMatch(/FORBIDDEN/);
   });
 
@@ -363,7 +375,10 @@ describe("rpc_transition_bill — lifecycle and T-05", () => {
     const bill = await createBill(admin, [{ source_type: "phase", source_id: phaseId }]);
     await admin.rpc("rpc_transition_bill", { p_bill_id: bill.id, p_to_status: "submitted" });
 
-    const { data, error } = await clientSession.rpc("rpc_transition_bill", { p_bill_id: bill.id, p_to_status: "certified" });
+    const { data, error } = await clientSession.rpc("rpc_transition_bill", {
+      p_bill_id: bill.id,
+      p_to_status: "certified",
+    });
     expect(error).toBeNull();
     expect((data as BillRow).status).toBe("certified");
   });
@@ -376,19 +391,23 @@ describe("rpc_transition_bill — lifecycle and T-05", () => {
     await admin.rpc("rpc_transition_bill", { p_bill_id: bill.id, p_to_status: "submitted" });
 
     const { error: noReasonErr } = await clientSession.rpc("rpc_transition_bill", {
-      p_bill_id: bill.id, p_to_status: "draft",
+      p_bill_id: bill.id,
+      p_to_status: "draft",
     });
     expect(noReasonErr?.message).toMatch(/REASON_REQUIRED/);
 
     const { data, error } = await clientSession.rpc("rpc_transition_bill", {
-      p_bill_id: bill.id, p_to_status: "draft", p_note: "Wrong package listed",
+      p_bill_id: bill.id,
+      p_to_status: "draft",
+      p_note: "Wrong package listed",
     });
     expect(error).toBeNull();
     const row = data as BillRow;
     expect(row.status).toBe("draft");
     expect(row.revision).toBe(2);
 
-    const events = await sql`select note from public.bill_events where bill_id = ${bill.id} order by created_at desc limit 1`;
+    const events =
+      await sql`select note from public.bill_events where bill_id = ${bill.id} order by created_at desc limit 1`;
     expect(one(events, "latest bill_event").note).toBe("Wrong package listed");
   });
 
@@ -401,7 +420,10 @@ describe("rpc_transition_bill — lifecycle and T-05", () => {
       { source_type: "material", source_id: srId },
     ]);
 
-    const { data, error } = await admin.rpc("rpc_transition_bill", { p_bill_id: bill.id, p_to_status: "cancelled" });
+    const { data, error } = await admin.rpc("rpc_transition_bill", {
+      p_bill_id: bill.id,
+      p_to_status: "cancelled",
+    });
     expect(error).toBeNull();
     expect((data as BillRow).status).toBe("cancelled");
 
@@ -449,7 +471,10 @@ describe("rpc_record_payment", () => {
     const phaseId = await insertTestPhase({ allocated: 50000, internal: 30000, refSuffix });
     const bill = await createBill(admin, [{ source_type: "phase", source_id: phaseId }]);
     await admin.rpc("rpc_transition_bill", { p_bill_id: bill.id, p_to_status: "submitted" });
-    const { data } = await clientSession.rpc("rpc_transition_bill", { p_bill_id: bill.id, p_to_status: "certified" });
+    const { data } = await clientSession.rpc("rpc_transition_bill", {
+      p_bill_id: bill.id,
+      p_to_status: "certified",
+    });
     return data as BillRow;
   }
 
@@ -461,19 +486,26 @@ describe("rpc_record_payment", () => {
 
     const half = Math.floor(net * 50) / 100;
     const { data: afterHalf, error: e1 } = await admin.rpc("rpc_record_payment", {
-      p_bill_id: bill.id, p_amount: half, p_paid_on: "2026-09-16", p_idempotency_key: randomUUID(),
+      p_bill_id: bill.id,
+      p_amount: half,
+      p_paid_on: "2026-09-16",
+      p_idempotency_key: randomUUID(),
     });
     expect(e1).toBeNull();
     expect((afterHalf as BillRow).status).toBe("certified");
 
-    const remainder = Math.round((net * 100 - half * 100)) / 100;
+    const remainder = Math.round(net * 100 - half * 100) / 100;
     const { data: afterFull, error: e2 } = await admin.rpc("rpc_record_payment", {
-      p_bill_id: bill.id, p_amount: remainder, p_paid_on: "2026-09-16", p_idempotency_key: randomUUID(),
+      p_bill_id: bill.id,
+      p_amount: remainder,
+      p_paid_on: "2026-09-16",
+      p_idempotency_key: randomUUID(),
     });
     expect(e2).toBeNull();
     expect((afterFull as BillRow).status).toBe("paid");
 
-    const paidRows = await sql`select coalesce(sum(amount), 0)::numeric as total from public.payments where bill_id = ${bill.id}`;
+    const paidRows =
+      await sql`select coalesce(sum(amount), 0)::numeric as total from public.payments where bill_id = ${bill.id}`;
     expect(Number(one(paidRows, "payments sum").total)).toBe(net);
   });
 
@@ -482,7 +514,9 @@ describe("rpc_record_payment", () => {
     const clientSession = await client(CLIENT_EMAIL);
     const bill = await certifiedBill(admin, clientSession, "overpay");
     const { error } = await admin.rpc("rpc_record_payment", {
-      p_bill_id: bill.id, p_amount: Number(bill.net_payable) + 1, p_paid_on: "2026-09-16",
+      p_bill_id: bill.id,
+      p_amount: Number(bill.net_payable) + 1,
+      p_paid_on: "2026-09-16",
       p_idempotency_key: randomUUID(),
     });
     expect(error?.message).toMatch(/OVERPAYMENT/);
@@ -493,7 +527,10 @@ describe("rpc_record_payment", () => {
     const clientSession = await client(CLIENT_EMAIL);
     const bill = await certifiedBill(admin, clientSession, "client-pay");
     const { error } = await clientSession.rpc("rpc_record_payment", {
-      p_bill_id: bill.id, p_amount: 100, p_paid_on: "2026-09-16", p_idempotency_key: randomUUID(),
+      p_bill_id: bill.id,
+      p_amount: 100,
+      p_paid_on: "2026-09-16",
+      p_idempotency_key: randomUUID(),
     });
     expect(error?.message).toMatch(/FORBIDDEN/);
   });
@@ -505,10 +542,21 @@ describe("rpc_record_payment", () => {
     const key = randomUUID();
     const amount = Math.floor(Number(bill.net_payable) / 3);
 
-    await admin.rpc("rpc_record_payment", { p_bill_id: bill.id, p_amount: amount, p_paid_on: "2026-09-16", p_idempotency_key: key });
-    await admin.rpc("rpc_record_payment", { p_bill_id: bill.id, p_amount: amount, p_paid_on: "2026-09-16", p_idempotency_key: key });
+    await admin.rpc("rpc_record_payment", {
+      p_bill_id: bill.id,
+      p_amount: amount,
+      p_paid_on: "2026-09-16",
+      p_idempotency_key: key,
+    });
+    await admin.rpc("rpc_record_payment", {
+      p_bill_id: bill.id,
+      p_amount: amount,
+      p_paid_on: "2026-09-16",
+      p_idempotency_key: key,
+    });
 
-    const rows = await sql`select count(*)::int as n from public.payments where bill_id = ${bill.id} and idempotency_key = ${key}`;
+    const rows =
+      await sql`select count(*)::int as n from public.payments where bill_id = ${bill.id} and idempotency_key = ${key}`;
     expect(one(rows, "payment count by idempotency key").n).toBe(1);
   });
 });

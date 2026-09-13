@@ -130,7 +130,11 @@ export function BillingAdmin({
             sub: `${bills.filter((b) => b.status === "paid").length} paid`,
           },
           { label: "Outstanding", value: formatINRCompact(stats.outstanding), sub: "Certified, not paid" },
-          { label: "Billable Now", value: formatINRCompact(stats.billableNowValue), sub: `${items?.length ?? 0} items ready` },
+          {
+            label: "Billable Now",
+            value: formatINRCompact(stats.billableNowValue),
+            sub: `${items?.length ?? 0} items ready`,
+          },
         ]}
       />
 
@@ -170,7 +174,11 @@ export function BillingAdmin({
               items.map((i) => (
                 <tr key={i.sourceId}>
                   <td className={td}>
-                    <input type="checkbox" checked={sel.has(i.sourceId)} onChange={() => toggle(i.sourceId)} />
+                    <input
+                      type="checkbox"
+                      checked={sel.has(i.sourceId)}
+                      onChange={() => toggle(i.sourceId)}
+                    />
                   </td>
                   <td className={td}>{i.description}</td>
                   <td className={td}>
@@ -246,7 +254,12 @@ export function BillingAdmin({
                     <Button
                       size="sm"
                       onClick={() =>
-                        openDialog({ kind: "recordPayment", billId: b.id, refNo: b.refNo, netPayable: b.netPayable })
+                        openDialog({
+                          kind: "recordPayment",
+                          billId: b.id,
+                          refNo: b.refNo,
+                          netPayable: b.netPayable,
+                        })
                       }
                     >
                       Record Payment
@@ -282,7 +295,11 @@ export function BillingAdmin({
                     </td>
                     <td className={td}>
                       <div className="flex gap-1.5 flex-wrap justify-end">
-                        <Button variant="ghost" size="sm" onClick={() => openDialog({ kind: "billView", billId: b.id })}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openDialog({ kind: "billView", billId: b.id })}
+                        >
                           View
                         </Button>
                         <Button

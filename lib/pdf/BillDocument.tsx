@@ -23,7 +23,13 @@ const styles = StyleSheet.create({
   h1: { fontSize: 14, fontWeight: 700, marginBottom: 2 },
   small: { fontSize: 8, color: "#555" },
   section: { marginBottom: 12 },
-  sectionTitle: { fontSize: 8, textTransform: "uppercase", color: "#555", marginBottom: 3, letterSpacing: 0.5 },
+  sectionTitle: {
+    fontSize: 8,
+    textTransform: "uppercase",
+    color: "#555",
+    marginBottom: 3,
+    letterSpacing: 0.5,
+  },
   table: { display: "flex", flexDirection: "column", borderWidth: 1, borderColor: "#ccc" },
   tr: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#ccc" },
   trLast: { flexDirection: "row" },
@@ -46,7 +52,15 @@ export type BillPdfData = {
   billDate: string;
   periodFrom: string | null;
   periodTo: string | null;
-  org: { legalName: string; gstin: string; pan: string; address: string; bankName: string; bankAccountNo: string; bankIfsc: string };
+  org: {
+    legalName: string;
+    gstin: string;
+    pan: string;
+    address: string;
+    bankName: string;
+    bankAccountNo: string;
+    bankIfsc: string;
+  };
   client: { name: string; gstin: string; billingAddress: string };
   lines: BillPdfLine[];
   workValue: number;
@@ -73,7 +87,9 @@ export function BillDocument({ data }: { data: BillPdfData }) {
           <View style={styles.orgBlock}>
             <Text style={styles.h1}>{data.org.legalName}</Text>
             <Text style={styles.small}>{data.org.address}</Text>
-            <Text style={styles.small}>GSTIN: {data.org.gstin} · PAN: {data.org.pan}</Text>
+            <Text style={styles.small}>
+              GSTIN: {data.org.gstin} · PAN: {data.org.pan}
+            </Text>
           </View>
           <View style={styles.billBlock}>
             <Text style={styles.h1}>RA Bill</Text>

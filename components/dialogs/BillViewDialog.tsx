@@ -12,7 +12,17 @@ import { formatINR } from "@/lib/money";
 import { dmy } from "@/lib/logic";
 import { Button } from "@/components/ui/Button";
 
-function Row({ label, value, bold, big }: { label: string; value: ReactNode; bold?: boolean; big?: boolean }) {
+function Row({
+  label,
+  value,
+  bold,
+  big,
+}: {
+  label: string;
+  value: ReactNode;
+  bold?: boolean;
+  big?: boolean;
+}) {
   return (
     <div
       className={`flex justify-between px-1 border-b border-border text-[13.5px] ${bold ? "font-bold" : ""} ${
@@ -118,8 +128,12 @@ export function BillViewDialog({ billId }: { billId: string }) {
                 <td className="px-3 py-2.5 border-b border-border last:border-b-0 text-right">
                   {formatINR(l.clientValue)}
                 </td>
-                <td className="px-3 py-2.5 border-b border-border last:border-b-0 text-right">{l.pctBilled}%</td>
-                <td className="px-3 py-2.5 border-b border-border last:border-b-0 text-right">{formatINR(l.amount)}</td>
+                <td className="px-3 py-2.5 border-b border-border last:border-b-0 text-right">
+                  {l.pctBilled}%
+                </td>
+                <td className="px-3 py-2.5 border-b border-border last:border-b-0 text-right">
+                  {formatINR(l.amount)}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -129,13 +143,18 @@ export function BillViewDialog({ billId }: { billId: string }) {
       <div className="flex flex-col mt-3.5">
         <Row label="Gross" value={formatINR(bill.grossAmount)} />
         {bill.masRecoveryAmount > 0 && (
-          <Row label="Less material at site previously billed" value={"-" + formatINR(bill.masRecoveryAmount)} />
+          <Row
+            label="Less material at site previously billed"
+            value={"-" + formatINR(bill.masRecoveryAmount)}
+          />
         )}
         <Row label="Taxable value" value={formatINR(bill.taxableAmount)} bold />
         <Row label={`GST ${bill.gstRatePct}%`} value={formatINR(bill.gstAmount)} />
         <Row label="Invoice total" value={formatINR(bill.invoiceTotal)} bold />
         <Row label={`Less retention ${bill.retentionPct}%`} value={"-" + formatINR(bill.retentionAmount)} />
-        {bill.tdsAmount > 0 && <Row label={`Less TDS ${bill.tdsPct}%`} value={"-" + formatINR(bill.tdsAmount)} />}
+        {bill.tdsAmount > 0 && (
+          <Row label={`Less TDS ${bill.tdsPct}%`} value={"-" + formatINR(bill.tdsAmount)} />
+        )}
         {bill.advanceRecovery > 0 && (
           <Row label="Less mobilisation advance recovery" value={"-" + formatINR(bill.advanceRecovery)} />
         )}
@@ -176,7 +195,11 @@ export function BillViewDialog({ billId }: { billId: string }) {
               <>
                 {formatINR(bill.marginAmount ?? 0)}{" "}
                 <span className="text-muted-foreground text-xs">
-                  ({bill.taxableAmount > 0 ? Math.round(((bill.marginAmount ?? 0) / bill.taxableAmount) * 100) : 0}%)
+                  (
+                  {bill.taxableAmount > 0
+                    ? Math.round(((bill.marginAmount ?? 0) / bill.taxableAmount) * 100)
+                    : 0}
+                  %)
                 </span>
               </>
             }
