@@ -158,6 +158,13 @@ const eslintConfig = defineConfig([
       // assertion — including the client's mobile-viewport lightbox and
       // decision journey — runs through a real signed-in session via the UI.
       "e2e/approvals-journey.spec.ts",
+      // Same exemption, same reason: seeding a throwaway billable phase and
+      // delivered material (admin journey) and a pre-submitted bill (client
+      // journey) directly, and draining the real bill.pdf job's own drift is
+      // read back directly too (there is no UI surface for a job's status).
+      // Every certification/approval assertion still runs through a real
+      // signed-in session via the UI.
+      "e2e/billing-journey.spec.ts",
     ],
     rules: { "no-restricted-imports": ["error", { patterns: [...RLS_BYPASS] }] },
   },

@@ -1,14 +1,24 @@
-"use client";
-
-import { useLegacyModule } from "@/hooks/useLegacyModule";
+import { forbidden, notFound } from "next/navigation";
+import { requireSession } from "@/lib/auth/session";
+import { env } from "@/lib/env";
+import { getPhaseBillingStatus, getMaterialAtSite } from "@/features/billing/queries";
 import { MilestoneTable } from "@/components/domain/MilestoneTable";
-import { Empty } from "@/components/ui/Empty";
 
-/** Still AppContext — Build 09 converts this tab. Admin-only in the tab bar
- *  (layout.tsx), matching the prototype's own level of protection. */
-export default function PackageBillingTab() {
-  const { project, module: mod } = useLegacyModule();
-  if (!mod) return <Empty>Not available yet for a package created outside the demo data.</Empty>;
+/** ui-guide §6.5: "Billing tab (Admin only)." The tab bar itself already
+ *  hides this for non-admin (layout.tsx); `forbidden()` is the second,
+ *  harder boundary against a direct URL visit. `BILLING_ENABLED` (build
+ *  §4.8) gates it the same way the main billing page does. */
+export default async function PackageBillingTab({ params }: { params: Promise<{ moduleId: string }> }) {
+  if (!env.BILLING_ENABLED) notFound();
 
-  return <MilestoneTable project={project} module={mod} />;
+  const { moduleId } = await params;
+  const session = await requireSession();
+  const effectiveRole = session.impersonating?.role ?? session.role;
+  if (effectiveRole !== "owner" && effectiveRole !== "admin") forbidden();
+
+  const [phases, materials] = await Promise.all([
+    getPhaseBillingStatus(moduleId),
+    getMaterialAtSite(moduleId),
+  ]);
+  return <MilestoneTable phases={phases} materials={materials} />;
 }

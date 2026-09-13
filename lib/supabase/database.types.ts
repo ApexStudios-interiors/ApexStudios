@@ -279,6 +279,7 @@ export type Database = {
           created_at: string;
           updated_at: string;
           deleted_at: string | null;
+          idempotency_key: string | null;
         };
         Insert: {
           id?: string;
@@ -318,6 +319,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           deleted_at?: string | null;
+          idempotency_key?: string | null;
         };
         Update: {
           id?: string;
@@ -357,6 +359,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           deleted_at?: string | null;
+          idempotency_key?: string | null;
         };
         Relationships: [];
       };
@@ -565,6 +568,9 @@ export type Database = {
           address: string | null;
           logo_r2_key: string | null;
           created_at: string;
+          bank_name: string | null;
+          bank_account_no: string | null;
+          bank_ifsc: string | null;
         };
         Insert: {
           id?: string;
@@ -575,6 +581,9 @@ export type Database = {
           address?: string | null;
           logo_r2_key?: string | null;
           created_at?: string;
+          bank_name?: string | null;
+          bank_account_no?: string | null;
+          bank_ifsc?: string | null;
         };
         Update: {
           id?: string;
@@ -585,6 +594,9 @@ export type Database = {
           address?: string | null;
           logo_r2_key?: string | null;
           created_at?: string;
+          bank_name?: string | null;
+          bank_account_no?: string | null;
+          bank_ifsc?: string | null;
         };
         Relationships: [];
       };
@@ -654,6 +666,7 @@ export type Database = {
           note: string | null;
           created_by: string;
           created_at: string;
+          idempotency_key: string | null;
         };
         Insert: {
           id?: string;
@@ -666,6 +679,7 @@ export type Database = {
           note?: string | null;
           created_by: string;
           created_at?: string;
+          idempotency_key?: string | null;
         };
         Update: {
           id?: string;
@@ -678,6 +692,7 @@ export type Database = {
           note?: string | null;
           created_by?: string;
           created_at?: string;
+          idempotency_key?: string | null;
         };
         Relationships: [];
       };
@@ -829,6 +844,7 @@ export type Database = {
           completed_at: string | null;
           next_sr_seq: number;
           next_ap_seq: number;
+          mobilisation_recovery_pct: number;
         };
         Insert: {
           id?: string;
@@ -857,6 +873,7 @@ export type Database = {
           completed_at?: string | null;
           next_sr_seq?: number;
           next_ap_seq?: number;
+          mobilisation_recovery_pct?: number;
         };
         Update: {
           id?: string;
@@ -885,6 +902,7 @@ export type Database = {
           completed_at?: string | null;
           next_sr_seq?: number;
           next_ap_seq?: number;
+          mobilisation_recovery_pct?: number;
         };
         Relationships: [];
       };
@@ -1470,6 +1488,16 @@ export type Database = {
         };
         Returns: unknown;
       };
+      rpc_create_bill: {
+        Args: {
+          p_project_id: string;
+          p_lines: Json;
+          p_bill_date?: string;
+          p_notes?: string;
+          p_idempotency_key?: string;
+        };
+        Returns: unknown;
+      };
       rpc_create_project: {
         Args: {
           p_name: string;
@@ -1545,6 +1573,17 @@ export type Database = {
         };
         Returns: unknown;
       };
+      rpc_record_payment: {
+        Args: {
+          p_bill_id: string;
+          p_amount: number;
+          p_paid_on: string;
+          p_mode?: string;
+          p_reference_no?: string;
+          p_idempotency_key?: string;
+        };
+        Returns: unknown;
+      };
       rpc_retry_job: {
         Args: {
           p_id: string;
@@ -1555,6 +1594,14 @@ export type Database = {
         Args: {
           p_task_id: string;
           p_pct: number;
+        };
+        Returns: unknown;
+      };
+      rpc_transition_bill: {
+        Args: {
+          p_bill_id: string;
+          p_to_status: Database["public"]["Enums"]["bill_status"];
+          p_note?: string;
         };
         Returns: unknown;
       };

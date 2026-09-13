@@ -572,6 +572,19 @@ on `bills` but is only ever selected by an Admin session.
 
 The platform is built so all five are configuration, not code.
 
+**Status as of Build 09 (2026-09-11):** all five remain unanswered — none has been taken to a CA yet.
+The billing engine (`rpc_create_bill`/`rpc_transition_bill`/`rpc_record_payment`, this section's own
+A–K order, 100% branch-covered) is built, tested, and live-verified against `apex-dev` regardless,
+using the defaults this section already specifies (18% GST, TDS informational only, 75% MAS as a
+secured advance) so that development was not blocked on the CA engagement. Two more questions
+surfaced during Build 09 that belong in this same CA conversation, not decided in code
+(`docs/decisions.md` D45/D46): whether GST should split into CGST+SGST/IGST rather than the single
+blended `gst_amount` this schema carries, and whether retention needs a release schedule (none is
+implemented — retention is deducted and never released). Build 09's own exit criteria — a real past RA
+bill to reconcile the engine's figures against, and a CA's written sign-off on a generated PDF — were
+both blocked by the same prerequisite as this section: nobody has engaged a CA yet. See
+`docs/decisions.md` D4, D45, D46 and the "Still open" table.
+
 ### 8.5 Progress rollup
 
 Task `progress_pct` changes → phase completion recomputed → if all tasks 100%, phase
