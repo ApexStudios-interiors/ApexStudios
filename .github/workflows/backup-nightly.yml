@@ -26,8 +26,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # `awscli` (the apt package) no longer has an installation candidate on
+      # ubuntu-latest's current noble image — Ubuntu dropped it from the repos
+      # this workflow was failing at this very step, before ever touching a
+      # credential, so it was failing identically whether or not the R2
+      # secrets below are real yet. AWS's own official v2 installer doesn't
+      # depend on the distro's package set.
       - name: Install PostgreSQL client and AWS CLI
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client awscli
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-client unzip
+          curl -sf "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
+          unzip -q awscliv2.zip
+          sudo ./aws/install
+          rm -rf awscliv2.zip aws
 
       - name: Dump and compress
         id: dump
