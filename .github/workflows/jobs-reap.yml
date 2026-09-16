@@ -1,0 +1,37 @@
+name: jobs.reap
+
+# Hourly, for the same reason jobs-drain.yml exists: Vercel Hobby caps cron
+# frequency at once per day, and `0 * * * *` in vercel.json was rejected.
+#
+# Kept hourly rather than folded into the 5-minute drain workflow, which would
+# have been fewer files. `reap()` requeues jobs whose lease expired because a
+# worker died mid-run (lib/jobs/runner.ts) — hourly is the cadence build §3.4
+# chose, and running it twelve times as often is a behaviour change this task
+# has no reason to make. It is a separate schedule, so it is a separate file.
+#
+# Safe to run repeatedly: the reap is a single idempotent UPDATE over rows
+# already `running` past `lease_until`, so a second run finds nothing to do.
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch: {} # manual kick after a suspected worker death
+
+jobs:
+  reap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Secret via `env:` and not ${{ }} interpolation — see jobs-drain.yml.
+      - name: Requeue jobs with an expired lease
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          : "${APP_URL:?the APP_URL repository secret is not set}"
+          : "${CRON_SECRET:?the CRON_SECRET repository secret is not set}"
+          curl -sS --fail-with-body --max-time 70 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/jobs.reap"
+          echo

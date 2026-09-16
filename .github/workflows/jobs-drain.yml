@@ -1,0 +1,54 @@
+name: jobs.drain
+
+# Why this is a GitHub Action and not a line in vercel.json.
+#
+# Production runs on Vercel HOBBY. Hobby caps cron FREQUENCY at once per day
+# (the count is not the limit — 100 cron jobs are allowed). `jobs.drain` needs
+# to be near-real-time, so `* * * * *` in vercel.json was rejected at deploy
+# time and took every build with it. Moving it here is what lets the app deploy
+# at all without buying Pro. ADR-010/016 in docs/architecture.md record this.
+#
+# The three remaining crons in vercel.json are daily or weekly, are legal on
+# Hobby, and deliberately stay there — Vercel already runs them in-region.
+#
+# COST TO THE SLO, stated rather than hidden: GitHub's shortest schedule
+# interval is 5 minutes, and `schedule:` is explicitly best-effort — runs are
+# delayed under load and DROPPED rather than backfilled. So this cannot meet
+# architecture.md §8.1's old "Bill PDF within 60 s of submission"; that row now
+# reads 5 minutes typical. Nothing is lost, only delayed: work sits `pending`
+# in the `jobs` table and the next tick takes it.
+#
+# Calling this repeatedly, and concurrently, is safe by construction —
+# `rpc_claim_jobs`'s `FOR UPDATE SKIP LOCKED` under a 5-minute lease is what
+# makes two overlapping ticks claim disjoint work (AGENTS.md background job
+# rule 2). No lock is needed here, which is why there is no `concurrency:` key.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {} # manual kick when a queue is visibly backed up
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # The secret is passed through `env:` and referenced as a shell variable
+      # rather than interpolated into the script text with ${{ }} — that keeps
+      # it out of the rendered command line, and `:?` reports a MISSING secret
+      # by name without ever echoing a set one.
+      - name: Drain the job queue
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          : "${APP_URL:?the APP_URL repository secret is not set}"
+          : "${CRON_SECRET:?the CRON_SECRET repository secret is not set}"
+          # --fail-with-body so a 401 (wrong secret) or 404 (renamed route) is a
+          # RED run with the server's reason, not a silent success. --max-time
+          # just past the route's own maxDuration = 60.
+          curl -sS --fail-with-body --max-time 70 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/jobs.drain"
+          echo

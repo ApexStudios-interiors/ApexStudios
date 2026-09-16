@@ -1151,6 +1151,44 @@ across a project's bills was actually paid back, referenced nowhere in Build 09.
 
 ---
 
+### D47 — Sub-daily cron on Vercel Hobby: GitHub Actions, not a Pro upgrade
+
+**Question:** ADR-016 accepted Vercel Pro partly because Build 06's `jobs.drain` needs per-minute
+cron. Pro has not been purchased and production runs on Hobby, where `vercel.json`'s `* * * * *`
+schedule **fails the entire deployment**. Buy Pro now, or schedule the frequent jobs elsewhere?
+**Decided:** 2026-09-16 by Voola — **schedule them from GitHub Actions. Do not upgrade.**
+**Answer:** The two sub-daily entries (`jobs.drain` every minute, `jobs.reap` hourly) are removed
+from `vercel.json` and triggered instead by `.github/workflows/jobs-drain.yml` (`*/5 * * * *`) and
+`jobs-reap.yml` (`0 * * * *`), each a `curl` to the same `/api/cron/<job>` route carrying the same
+`Authorization: Bearer ${CRON_SECRET}`. The three daily-or-weekly crons stay on Vercel — they are
+legal on Hobby and already run in-region.
+
+**Reasoning:** The Hobby limit is on cron *frequency* (one invocation per day each, ~hourly
+accuracy), not on the number of crons — 100 are allowed. So only two of the five entries were ever
+the problem, and the fix is correspondingly narrow. GitHub Actions is already a trusted caller of
+this app (`backup-nightly.yml` posts to `/api/backup/report` with the same secret), so this adds no
+new trust relationship, no new credential, and no new service. Nothing about job *execution* moved:
+the workflows are pure triggers, and all work still runs in the Vercel function against Postgres.
+
+**Consequence — a real cost, recorded rather than hidden.** GitHub's shortest schedule interval is
+5 minutes and its scheduler is best-effort, dropping delayed runs rather than backfilling them.
+`architecture.md` §8.1's "Bill PDF available within 60 s of submission" is therefore **relaxed to 5
+minutes typical**. This is latency only — submitted work waits in the `jobs` table and the next tick
+drains it, so the >99% job-success SLO is untouched. A second consequence: GitHub disables scheduled
+workflows after 60 days of repository inactivity, so drain and reap can stop silently; `backup.verify`
+remains on Vercel Cron and still alerts, which bounds how long that goes unnoticed.
+
+**Not closed by this.** ADR-016's other two justifications — Supabase PITR, and Hobby forbidding
+commercial use by a system that issues tax invoices — are untouched and still outstanding. This
+decision is "Pro is not required *for cron*", not "Pro is not required".
+
+**The way back to 60 s, without Pro:** drain inline when the job is enqueued (a `bill.pdf` drain
+kicked off from `features/billing/actions.ts` after the response, with the 5-minute poll kept as the
+retry safety net). Deliberately not bundled into the scheduling fix, because it changes the billing
+submit path.
+
+---
+
 ### Findings from Build 09 (Billing)
 
 **A real, live-caught correctness bug, the most serious one this build found:** `rpc_create_bill`'s
@@ -1323,5 +1361,6 @@ ran across the complete diff. Fixed:
 | Retention release schedule — none implemented (D46) | Voola | Future scope, not Build 09 | 2026-09-11 |
 | No TOTP enrollment UI exists (D22) — an owner/admin account cannot pass `requireAalForRole`'s AAL2 check anywhere outside the dev-only workaround in `e2e/global-setup.ts`. Every `adminAction`-guarded Server Action is unreachable by a real admin user until this is built. | — | Any real admin using a real account | 2026-09-10 |
 | **Cloudflare R2 is live and the upload pipeline works end to end — one security gap remains.** Supersedes the original "no R2 account" blocker; re-verified 2026-09-16 against the real account. **Working:** app bucket `HeadBucket` plus a full presigned **PUT → GET → DELETE**; **CORS configured** (preflight returns 204 with a matching `Access-Control-Allow-Origin` for both `localhost:3000` and the deployed origin), so real browser uploads are unblocked; the backup-bucket read grant now works (`backup.verify`'s own `HeadObject` returns **404 not 403** — it can read the bucket, there is simply no dump yet, which is correct until `backup.nightly` first succeeds); and a genuinely generated bill PDF is present in the app bucket, so the `bill.pdf` job has run for real. **Open — the app token is over-privileged on the backup bucket.** A probe `PutObject` *succeeded*, and so did deleting it. `.env.example` and D17 both require this credential be **read-only** there, precisely so a compromised app token cannot destroy the only recovery point; the write-scoped pair belongs solely to `.github/workflows/backup-nightly.yml`. Fix in Cloudflare: scope the app token to Object Read **& Write** on `apex-studios` but Object **Read-only** on `apex-backups`. Still unverified: a real browser PUT from a live page, thumbnail generation and its EXIF-absence check, the orphan sweep actually deleting, and the GitHub Actions backup write. | Voola | The read-only regrant — a compromised app credential can currently wipe the backups | 2026-09-16 |
-| **Vercel is not on Pro** — the Hobby tier allows only a couple of cron invocations per day at fixed times, so the per-minute `jobs.drain` (and this build's whole "Queued" job design) does not run for real without it. | Voola | Build 06's own live verification of the drain | 2026-09-12 |
-| **`.env.local` now holds real values; Vercel and GitHub Actions still hold none.** As of 2026-09-16 the local file has real Supabase, R2 and `CRON_SECRET`/`SESSION_SECRET` values (verified by shape and by the live R2 and `select 1` probes above) — the Build 01 placeholders are gone. What is still missing is everywhere *else*. **Vercel Production + Preview** need: `DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_BACKUP_BUCKET`, `CRON_SECRET`, `SESSION_SECRET`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_SITE_URL` (the deployed URL, **not** the local `localhost:3000`; it must also be allow-listed in Supabase's Redirect URLs). `BILLING_ENABLED` should be `false` in production — it is `true` locally for testing. Until these exist, `next build` on Vercel dies in `lib/env.ts`'s eager zod parse before it compiles a page, which is the whole reason Vercel deployments fail. **GitHub Actions repo secrets** for `.github/workflows/backup-nightly.yml` need: `SUPABASE_DB_URL`, `R2_ACCOUNT_ID`, `R2_BACKUP_BUCKET`, `R2_BACKUP_ACCESS_KEY_ID`/`R2_BACKUP_SECRET_ACCESS_KEY` (the **write**-scoped pair, distinct from the app's read-only one), `APP_URL`, and the same `CRON_SECRET` as Vercel's. | Voola | Vercel deployments; the nightly backup ever running | 2026-09-16 |
+| ~~**Vercel is not on Pro** — the per-minute `jobs.drain` does not run without it.~~ **Resolved 2026-09-16 by D47**, and the original wording was wrong about the limit: Hobby allows 100 crons, capped at *one invocation per day each*. `jobs.drain` and `jobs.reap` now run from GitHub Actions; the three daily/weekly crons stayed on Vercel. Still unverified **live** — the drain has never been observed draining a real queue in production, because production is four builds behind and the Vercel env vars below are still unset. | Voola | Live verification of the drain, once production deploys | 2026-09-12 |
+| **Vercel is still not on Pro, for the reasons D47 did *not* resolve.** ADR-016 also bought Supabase PITR (RPO 24 h → 15 min) and, more pressingly, Hobby's terms **forbid commercial use** — this system issues GST tax invoices. Cron was only one of three justifications and is now handled without paying; these two are not. | Voola | Production go-live (licensing), `architecture.md` §7.2's stated RPO | 2026-09-16 |
+| **`.env.local` now holds real values; Vercel and GitHub Actions still hold none.** As of 2026-09-16 the local file has real Supabase, R2 and `CRON_SECRET`/`SESSION_SECRET` values (verified by shape and by the live R2 and `select 1` probes above) — the Build 01 placeholders are gone. What is still missing is everywhere *else*. **Vercel Production + Preview** need: `DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_BACKUP_BUCKET`, `CRON_SECRET`, `SESSION_SECRET`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_SITE_URL` (the deployed URL, **not** the local `localhost:3000`; it must also be allow-listed in Supabase's Redirect URLs). `BILLING_ENABLED` should be `false` in production — it is `true` locally for testing. Until these exist, `next build` on Vercel dies in `lib/env.ts`'s eager zod parse before it compiles a page, which is the whole reason Vercel deployments fail. **GitHub Actions repo secrets** for `.github/workflows/backup-nightly.yml` need: `SUPABASE_DB_URL`, `R2_ACCOUNT_ID`, `R2_BACKUP_BUCKET`, `R2_BACKUP_ACCESS_KEY_ID`/`R2_BACKUP_SECRET_ACCESS_KEY` (the **write**-scoped pair, distinct from the app's read-only one), `APP_URL`, and the same `CRON_SECRET` as Vercel's. As of 2026-09-16 only `CRON_SECRET`, `SUPABASE_DB_URL`, `SUPABASE_PROD_PROJECT_REF` and the two `NEXT_PUBLIC_SUPABASE_*` keys exist — so the nightly backup is currently failing at its upload step. **`APP_URL` is now needed by the two D47 cron workflows as well**, and without it `jobs-drain.yml` and `jobs-reap.yml` fail fast with a named-but-unprinted secret error on every tick. | Voola | Vercel deployments; the nightly backup ever running; the D47 cron workflows | 2026-09-16 |

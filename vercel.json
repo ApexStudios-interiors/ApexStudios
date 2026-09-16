@@ -2,8 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["bom1"],
   "crons": [
-    { "path": "/api/cron/jobs.drain", "schedule": "* * * * *" },
-    { "path": "/api/cron/jobs.reap", "schedule": "0 * * * *" },
     { "path": "/api/cron/inventory.reconcile", "schedule": "30 20 * * *" },
     { "path": "/api/cron/weekly.maintenance", "schedule": "0 21 * * 0" },
     { "path": "/api/cron/backup.verify", "schedule": "0 21 * * *" }

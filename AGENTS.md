@@ -246,8 +246,13 @@ machine-checked when it is not is how it quietly stops being followed.
    double-running a job.
 3. **Never do real work in the cron route handler.** Claim, dispatch to `lib/jobs/handlers`,
    record via `rpc_finish_job`. Handlers are pure and unit-testable.
-4. Vercel cron schedules are **UTC**. IST is UTC+5:30 — `30 19 * * *` is 01:00 IST. Getting
-   this wrong runs the backup during the working day.
+4. Cron schedules are **UTC**, on both Vercel and GitHub Actions. IST is UTC+5:30 —
+   `30 19 * * *` is 01:00 IST. Getting this wrong runs the backup during the working day.
+   **`vercel.json` may only contain daily-or-less-frequent crons**: production is on Vercel
+   Hobby, which caps cron frequency at once per day and **rejects the entire deployment** if a
+   schedule is more frequent. Anything needing to run more often is triggered from
+   `.github/workflows/` by a `curl` to the same `/api/cron/*` route — see `architecture.md`
+   §5.4. That is why `jobs.drain` and `jobs.reap` are not in `vercel.json`.
 5. `/api/cron/*` must reject any request lacking `Authorization: Bearer ${CRON_SECRET}`.
 6. Don't add a job for work that fits in a request. Excel export renders inline; only
    long-running or retry-needing work is queued.
