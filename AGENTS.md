@@ -136,8 +136,9 @@ A Drizzle connection over `postgres-js` / `DATABASE_URL` authenticates as a priv
 role and bypasses Row Level Security completely. Every policy in LLD §6 would become decorative,
 and the promise that a client cannot see `internal_amount` would rest on nothing but application
 code being correct. An ESLint rule restricts `drizzle-orm` imports to `db/**` and
-`lib/jobs/handlers/**`; a second restricts `lib/supabase/admin` to `lib/jobs/handlers/**` and
-`lib/auth/admin.ts`.
+`lib/jobs/handlers/**`; a second restricts `lib/supabase/admin` to `lib/jobs/handlers/**`,
+`lib/jobs/runner.ts` and `app/api/backup/report/route.ts` — the three places that actually hold a
+`service_role` carve-out, and the exact set that rule's own `ignores` list exempts.
 
 Money and stock mutations go through the `security definer` RPCs in LLD §5, which take row locks.
 See `docs/decisions.md` D11 and `docs/architecture.md` §4.1.
@@ -162,15 +163,17 @@ Root layout, not `src/` (D13).
 │     ├─ actions.ts        Server Actions: guard → validate → service → revalidate
 │     ├─ service.ts        pure business logic, NO next/* imports
 │     ├─ schema.ts         zod schemas shared by form and action
-│     └─ components/
+│     └─ components/       this domain's own tables, widgets and dialogs
 ├─ components/
 │  ├─ ui/                  hand-rolled primitives, no business logic, do not restyle
 │  ├─ layout/              Sidebar, Header, SearchBar, NotificationsMenu
-│  ├─ domain/              tables and domain widgets
-│  └─ dialogs/             modal flows
+│  ├─ auth/                SessionProvider, PreviewBanner
+│  ├─ upload/              FileUploader
+│  └─ shared/              genuinely cross-module pieces: DialogHost, StatusBadges,
+│                          OpenDialogButton, NewRequestDialog (spans schedule + stock)
 ├─ context/                AppContext — prototype state, retired feature by feature
 ├─ hooks/
-├─ lib/                    supabase, r2, money, rbac, jobs, pdf, xlsx, observability, env
+├─ lib/                    supabase, r2, money, rbac, jobs, xlsx, observability, env
 ├─ db/                     Drizzle schema + generated types
 ├─ supabase/
 │  ├─ migrations/          versioned SQL. THE source of truth for schema.
@@ -179,15 +182,25 @@ Root layout, not `src/` (D13).
 └─ e2e/                    Playwright, incl. __screenshots__/proto-v1 visual baseline
 ```
 
-**Layering rules — do not violate these.** They are enforced by ESLint, not by good intentions.
+**Layering rules — do not violate these.** Every one is binding. They differ only in what catches a
+violation: some fail the build, the rest fail review. Each is marked, because believing a rule is
+machine-checked when it is not is how it quietly stops being followed.
 
-- `service.ts` must never import from `next/*` or `server-only`. It must be testable with a plain
-  database connection.
-- `actions.ts` must contain no business arithmetic. Guard, parse, delegate, revalidate.
-- Components must never query the database directly. Data comes from `queries.ts` via a
-  Server Component and arrives as props.
-- `components/ui/` holds generic primitives. Do not add domain logic there. Do not restyle them.
-- Dependency direction is strictly downward. Nothing depends on `app/`.
+- **[ESLint]** `service.ts` must never import from `next/*` or `server-only`. It must be testable
+  with a plain database connection.
+- **[ESLint]** Components must never query the database directly. Data comes from `queries.ts` via a
+  Server Component and arrives as props. Covers `components/**` and `features/*/components/**`;
+  type-only imports are allowed.
+- **[ESLint, partial]** A component specific to one domain lives in that domain's
+  `features/<domain>/components/`, not in the top-level `components/` tree. Only genuinely
+  cross-module or generic components belong in `components/` (`ui/`, `layout/`, `auth/`, `upload/`,
+  `shared/`). See `MODULARIZATION_REPORT.md`. The rule only blocks the two old directory names
+  (`components/domain`, `components/dialogs`) from reappearing — a domain component filed anywhere
+  else in `components/` is a review catch, not a build failure.
+- **[review]** `actions.ts` must contain no business arithmetic. Guard, parse, delegate, revalidate.
+- **[review]** `components/ui/` holds generic primitives. Do not add domain logic there. Do not
+  restyle them.
+- **[review]** Dependency direction is strictly downward. Nothing depends on `app/`.
 
 ---
 

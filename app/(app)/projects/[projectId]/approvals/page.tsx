@@ -4,9 +4,9 @@ import { getProjectHeader } from "@/features/projects/queries";
 import { getApprovalsForProject } from "@/features/approvals/queries";
 import { can } from "@/lib/rbac/permissions";
 import type { ApprovalStatus } from "@/features/approvals/service";
-import { ApprovalTable } from "@/components/domain/ApprovalTable";
-import { ApprovalStatusTabs } from "@/components/domain/ApprovalStatusTabs";
-import { OpenDialogButton } from "@/components/domain/OpenDialogButton";
+import { ApprovalTable } from "@/features/approvals/components/ApprovalTable";
+import { ApprovalStatusTabs } from "@/features/approvals/components/ApprovalStatusTabs";
+import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 

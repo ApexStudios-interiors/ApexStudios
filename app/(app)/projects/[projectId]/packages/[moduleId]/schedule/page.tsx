@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getScheduleForPackage } from "@/features/schedule/queries";
-import { Gantt } from "@/components/domain/Gantt";
+import { Gantt } from "@/features/schedule/components/Gantt";
 import { Card } from "@/components/ui/Card";
 
 /** build/05-schedule-and-progress.md §3.5 step 2: the same Gantt, scoped to

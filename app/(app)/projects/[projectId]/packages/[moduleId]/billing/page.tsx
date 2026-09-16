@@ -2,7 +2,7 @@ import { forbidden, notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { env } from "@/lib/env";
 import { getPhaseBillingStatus, getMaterialAtSite } from "@/features/billing/queries";
-import { MilestoneTable } from "@/components/domain/MilestoneTable";
+import { MilestoneTable } from "@/features/billing/components/MilestoneTable";
 
 /** ui-guide §6.5: "Billing tab (Admin only)." The tab bar itself already
  *  hides this for non-admin (layout.tsx); `forbidden()` is the second,

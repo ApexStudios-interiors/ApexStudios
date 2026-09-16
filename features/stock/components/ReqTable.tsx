@@ -9,7 +9,7 @@ import { availableTransitions } from "@/features/stock/service";
 import { transitionStockRequest } from "@/features/stock/actions";
 import { dmy } from "@/lib/logic";
 import { formatINR } from "@/lib/money";
-import { StockRequestStatusBadge } from "@/components/domain/StatusBadges";
+import { StockRequestStatusBadge } from "@/components/shared/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, sub } from "@/components/ui/table";
 import { Button } from "@/components/ui/Button";

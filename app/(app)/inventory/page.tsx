@@ -1,8 +1,8 @@
 import { requireSession } from "@/lib/auth/session";
 import { getBusinessInventory } from "@/features/inventory/queries";
 import { getPortfolio } from "@/features/projects/queries";
-import { InventoryTable } from "@/components/domain/InventoryTable";
-import { InventoryProjectFilterSelect } from "@/components/domain/InventoryProjectFilterSelect";
+import { InventoryTable } from "@/features/inventory/components/InventoryTable";
+import { InventoryProjectFilterSelect } from "@/features/inventory/components/InventoryProjectFilterSelect";
 import { formatINRCompact } from "@/lib/money";
 import { StatBar } from "@/components/ui/StatBar";
 import { Card } from "@/components/ui/Card";

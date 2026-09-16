@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useApp } from "@/context/AppContext";
 import { markPhaseComplete } from "@/features/billing/actions";
 import type { PhaseBillingRow, MaterialAtSiteRow } from "@/features/billing/queries";
-import { PhaseStatusBadge } from "@/components/domain/StatusBadges";
+import { PhaseStatusBadge } from "@/components/shared/StatusBadges";
 import type { PhaseStatus } from "@/lib/logic";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";

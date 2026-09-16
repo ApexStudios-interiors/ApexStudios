@@ -5,10 +5,10 @@ import { getPackagesForProject, type PackagesForProject } from "@/features/packa
 import { getUpdatesForProject } from "@/features/updates/queries";
 import { getStockRequestsForProject } from "@/features/stock/queries";
 import { getApprovalsForProject } from "@/features/approvals/queries";
-import { BudgetStatBar } from "@/components/domain/BudgetStatBar";
+import { BudgetStatBar } from "@/features/billing/components/BudgetStatBar";
 import { StatBar } from "@/components/ui/StatBar";
-import { ModuleTable } from "@/components/domain/ModuleTable";
-import { OpenDialogButton } from "@/components/domain/OpenDialogButton";
+import { ModuleTable } from "@/features/packages/components/ModuleTable";
+import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 import { LegacyDashboardCards } from "./LegacyDashboardCards";

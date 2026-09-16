@@ -5,10 +5,10 @@ import { getProjectHeader } from "@/features/projects/queries";
 import { getStockRequestsForProject } from "@/features/stock/queries";
 import { getPackageOptions } from "@/features/stock/actions";
 import type { StockRequestStatus } from "@/features/stock/service";
-import { ReqTable } from "@/components/domain/ReqTable";
-import { StockStatusTabs } from "@/components/domain/StockStatusTabs";
-import { PackageFilterSelect } from "@/components/domain/PackageFilterSelect";
-import { OpenDialogButton } from "@/components/domain/OpenDialogButton";
+import { ReqTable } from "@/features/stock/components/ReqTable";
+import { StockStatusTabs } from "@/features/stock/components/StockStatusTabs";
+import { PackageFilterSelect } from "@/features/packages/components/PackageFilterSelect";
+import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { PackagesForProject } from "@/features/packages/queries";
 import { Bar } from "@/components/ui/Bar";
-import { ModuleStatusBadge } from "@/components/domain/StatusBadges";
+import { ModuleStatusBadge } from "@/components/shared/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, trClick, trTotal, sub } from "@/components/ui/table";
 import { formatINR } from "@/lib/money";

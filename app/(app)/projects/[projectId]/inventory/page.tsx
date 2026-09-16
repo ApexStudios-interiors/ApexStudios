@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getProjectHeader } from "@/features/projects/queries";
 import { getProjectInventory } from "@/features/inventory/queries";
-import { InventoryTable } from "@/components/domain/InventoryTable";
+import { InventoryTable } from "@/features/inventory/components/InventoryTable";
 import { formatINRCompact } from "@/lib/money";
 import { StatBar } from "@/components/ui/StatBar";
 import { Card } from "@/components/ui/Card";
