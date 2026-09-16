@@ -15,12 +15,26 @@ import { env } from "@/lib/env";
  * `R2_BUCKET` (the app bucket) by construction, and this check reads a
  * DIFFERENT bucket (`R2_BACKUP_BUCKET`) — sharing the client would mean
  * sharing its bucket, not just its credentials.
+ *
+ * And its own CREDENTIALS where they exist, which is the half that was
+ * missing. A Cloudflare R2 token carries one permission level across every
+ * bucket it is scoped to, so the app token — necessarily read-write on
+ * `R2_BUCKET` — cannot also be read-only on the backup bucket. Using it here
+ * would mean anything holding `R2_SECRET_ACCESS_KEY` could delete the only
+ * recovery point, which is the exact thing D17 exists to prevent. A second,
+ * Object Read-only token scoped to the backup bucket closes that.
+ *
+ * Falls back to the app credential when the read-only pair is unset, so this
+ * keeps working on an environment that has not been given one yet.
  */
 export async function verifyBackup(): Promise<void> {
   const client = new S3Client({
     region: "auto",
     endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    credentials: { accessKeyId: env.R2_ACCESS_KEY_ID, secretAccessKey: env.R2_SECRET_ACCESS_KEY },
+    credentials: {
+      accessKeyId: env.R2_BACKUP_ACCESS_KEY_ID ?? env.R2_ACCESS_KEY_ID,
+      secretAccessKey: env.R2_BACKUP_SECRET_ACCESS_KEY ?? env.R2_SECRET_ACCESS_KEY,
+    },
   });
 
   const todayKey = `pg_dump/${new Date().toISOString().slice(0, 10)}.sql.gz`;

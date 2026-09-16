@@ -9,6 +9,12 @@ import { z } from "zod";
 
 config({ path: ".env.local", quiet: true });
 
+// Keep in step with lib/env.ts. This is a hand-kept copy — it cannot import
+// the real schema, because lib/env.ts starts with `import "server-only"` and
+// parses eagerly, which is precisely what this script exists to check without
+// booting. It had drifted: R2_BACKUP_BUCKET, SESSION_SECRET and
+// NEXT_PUBLIC_SITE_URL were all missing, so `pnpm env:check` could report
+// "server environment OK" on a config that could not actually start.
 const server = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]),
   DATABASE_URL: z.url(),
@@ -17,13 +23,20 @@ const server = z.object({
   R2_ACCESS_KEY_ID: z.string().min(1),
   R2_SECRET_ACCESS_KEY: z.string().min(1),
   R2_BUCKET: z.string().min(1),
+  R2_BACKUP_BUCKET: z.string().min(1),
+  // Optional: the Object Read-only token for backup.verify. Unset is valid —
+  // it falls back to the app credential (see .env.example).
+  R2_BACKUP_ACCESS_KEY_ID: z.string().min(1).optional(),
+  R2_BACKUP_SECRET_ACCESS_KEY: z.string().min(1).optional(),
   CRON_SECRET: z.string().min(32),
+  SESSION_SECRET: z.string().min(32),
   SENTRY_DSN: z.preprocess((v) => (v === "" ? undefined : v), z.url().optional()),
 });
 
 const client = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
+  NEXT_PUBLIC_SITE_URL: z.url(),
 });
 
 let failed = false;

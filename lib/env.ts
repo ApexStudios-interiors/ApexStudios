@@ -30,6 +30,22 @@ const serverSchema = z.object({
   // exception, not a bypass of it (docs/decisions.md D17).
   R2_BACKUP_BUCKET: z.string().min(1),
 
+  // The read-only half of D17, and the reason it needs its own credential: a
+  // Cloudflare R2 token carries ONE permission level across every bucket it is
+  // scoped to. The app token must be read-WRITE on R2_BUCKET (presigned
+  // uploads, bill PDFs, thumbnails, the orphan sweep's deletes), so scoping it
+  // to the backup bucket as well would hand write and delete over the backups
+  // to anything holding R2_SECRET_ACCESS_KEY — precisely what D17 forbids.
+  // "Grant the app credential read-only access to apex-backups" is therefore
+  // unsatisfiable with a single token; it takes a second, Object Read-only one.
+  //
+  // Optional on purpose. Unset, backup.verify falls back to the app credential
+  // and behaves exactly as before — a missing var must never be the thing that
+  // fails a Vercel build. Set, the app can read the backups and provably
+  // cannot write them.
+  R2_BACKUP_ACCESS_KEY_ID: z.string().min(1).optional(),
+  R2_BACKUP_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+
   // Guards every /api/cron/* route. 32 bytes base64 is 44 characters.
   CRON_SECRET: z.string().min(32),
 
