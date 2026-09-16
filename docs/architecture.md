@@ -64,8 +64,9 @@ These are the tie-breakers. When a decision is genuinely balanced, resolve it in
                      └──────────┘ └──────────┘
                             ▲
                      ┌──────┴──────────┐
-                     │ Vercel Cron     │  → /api/cron/*
-                     │ + jobs table    │     (durability lives in Postgres)
+                     │ Cron triggers   │  → /api/cron/*
+                     │ + jobs table    │     (Vercel Cron + GitHub Actions, §5.4;
+                     │                 │      durability lives in Postgres)
                      └─────────────────┘
 
 Out of band: accounting (Tally/Zoho) — humans move exported XLSX. No integration in v1.
@@ -194,6 +195,7 @@ Everything in **ap-south (Mumbai)**:
 | Supabase project | `ap-south-1` | Co-located with compute — cross-region DB round trips dominate P95 |
 | Cloudflare R2 | `APAC` location hint | Site photos uploaded from mobile data connections |
 | Vercel Cron | Invokes `bom1` functions | Same runtime and region as the app |
+| GitHub Actions (cron triggers) | GitHub-hosted, region not chosen | Only issues an HTTPS request; the work still runs in `bom1` (§5.4) |
 
 Co-locating Vercel and Supabase is the single highest-leverage latency decision. A page that
 issues six queries pays six round trips; at 200 ms cross-region that is 1.2 s of pure wait.
@@ -228,6 +230,48 @@ Production database changes only ever arrive through a merged, CI-verified migra
 Rules: no secret in the repo, `.env.local` gitignored, `.env.example` lists every key with
 placeholder values. Any `NEXT_PUBLIC_*` variable is public — treat it as printed on a
 billboard. CI fails on a secret-scanning hit (gitleaks).
+
+### 5.4 Scheduled execution — split between Vercel Cron and GitHub Actions
+
+Production runs on the Vercel **Hobby** plan. Hobby's cron restriction is on *frequency*, not
+count: up to 100 cron jobs, but **at most one invocation per day each**, with roughly per-hour
+accuracy. A `vercel.json` containing a more frequent schedule is rejected at deploy time — it
+fails the whole deployment, not just the cron. ADR-016 chose Vercel Pro (which allows
+per-minute cron) but that upgrade has not been purchased, so the schedules had to move.
+
+Where each scheduled job runs, and why:
+
+| Job | Schedule | Runs on | Why there |
+|---|---|---|---|
+| `jobs.drain` | every 5 min | **GitHub Actions** | Must be near-real-time; far more frequent than Hobby permits |
+| `jobs.reap` | hourly | **GitHub Actions** | Hourly is more frequent than Hobby permits |
+| `inventory.reconcile` | daily 02:00 IST | Vercel Cron | Daily — legal on Hobby, and in-region |
+| `backup.verify` | daily 02:30 IST | Vercel Cron | Daily — legal on Hobby, and in-region |
+| `weekly.maintenance` | Sundays 02:30 IST | Vercel Cron | Weekly — legal on Hobby, and in-region |
+| `backup.nightly` | daily 01:00 IST | **GitHub Actions** | Unrelated to plan limits: a Vercel function has no `pg_dump` binary (D17) |
+
+The three daily-or-weekly jobs deliberately **stay** on Vercel Cron. They are legal on Hobby,
+they already run in `bom1` next to the database, and moving them would add a network hop and a
+second failure mode for no benefit.
+
+**This is a scheduling change only.** Nothing about the jobs themselves moved: the GitHub
+workflows are pure triggers that `curl` the same `/api/cron/<job>` route with the same
+`Authorization: Bearer ${CRON_SECRET}`, and all execution still happens in the Vercel function
+against Postgres. The durability guarantee is unchanged, because it never lived in the
+scheduler — it lives in the `jobs` table (§8.3).
+
+Two consequences worth stating plainly:
+
+- **GitHub's scheduler is weaker than Vercel's.** `schedule:` has a 5-minute floor, is
+  best-effort, and drops delayed runs rather than backfilling them. §8.1 records what that
+  costs the bill-PDF latency target.
+- **GitHub disables scheduled workflows in a repository with 60 days of no activity.** On an
+  internal tool with quiet periods this is a real failure mode: the drain would stop silently.
+  `backup.verify` still runs on Vercel and still alerts, so a total stall is detectable, but a
+  long quiet stretch warrants a manual check of the Actions tab.
+
+Moving to Vercel Pro reverses all of this: restore the two entries to `vercel.json`'s `crons`
+and delete the two workflows.
 
 ---
 
@@ -414,7 +458,22 @@ partial indexes for the hot Billable Now query, and streaming with per-segment `
 | P95 mutation (Server Action) | < 500 ms | Rolling 7 days |
 | P99 mutation | < 2 s | Rolling 7 days |
 | Successful background job rate | > 99% | Rolling 7 days |
-| Bill PDF available within | 60 s of submission | Per event |
+| Bill PDF available within | 5 min of submission (typical) | Per event |
+
+**Why the PDF target is 5 minutes and no longer 60 seconds.** It was 60 s when `jobs.drain`
+was a per-minute Vercel cron. Production runs on Vercel **Hobby**, which caps cron frequency
+at once per day, so the drain now runs from GitHub Actions instead (§5.4). GitHub's shortest
+`schedule:` interval is 5 minutes and its scheduler is explicitly best-effort — runs are
+delayed under load and dropped rather than backfilled — so a 60 s target is not achievable by
+polling on this tier at any price short of Vercel Pro. This is a *latency* change only:
+submitted work sits `pending` in the `jobs` table and the next tick drains it, so nothing is
+lost and the >99% job success SLO above is unaffected.
+
+Restoring 60 s does not require Pro. Draining inline when the job is enqueued — a
+`bill.pdf` drain kicked off from `features/billing/actions.ts` after the response, with the
+GitHub Actions poll left in place as the retry safety net — would put the PDF seconds behind
+submission. That is a change to the billing submit path and is deliberately **not** bundled
+into the scheduling fix; it is recorded here as the known way back.
 
 **Error budget policy:** if the availability SLO is breached in a rolling 30 days, the next
 sprint prioritises reliability work over features. Stated up front so it isn't argued about
@@ -431,7 +490,9 @@ This is not a payment gateway; do not design as though it is.
 | Supabase Auth | Down | Existing sessions survive until token expiry; no new logins | Cached session keeps working ≤30 min | Wait |
 | Vercel | Down | **Total** | — | Wait |
 | Cloudflare R2 | Down | Uploads and downloads fail; **rest of app fine** | Upload UI shows retry; `attachments` rows unaffected | Retry; queued thumbnails resume |
-| Vercel Cron | Missed invocation | PDFs, thumbnails, nightly backup delayed | Work stays `pending` in the `jobs` table; the next tick drains it. **Nothing is lost** — state is in Postgres, not in the scheduler. | Automatic on next run |
+| Vercel Cron | Missed invocation | Reconcile, backup verify, weekly maintenance delayed | Work stays `pending` in the `jobs` table; the next tick drains it. **Nothing is lost** — state is in Postgres, not in the scheduler. | Automatic on next run |
+| GitHub Actions | Missed or delayed schedule | PDFs and thumbnails delayed past the 5-min target (§5.4) | Same: the queue is in Postgres. A delayed run is latency, not loss. | Automatic on next run; `workflow_dispatch` to force one |
+| GitHub Actions | Scheduled workflows auto-disabled after 60 days idle | Drain and reap stop **silently** | Not self-healing. `backup.verify` still runs on Vercel and alerts, so a total stall surfaces within a day. | Re-enable in the Actions tab |
 | Sentry | Down | Blind to errors | App unaffected; logs still in Vercel | Wait |
 
 The pattern to notice: **only Postgres and Vercel are single points of failure.** Everything
@@ -680,14 +741,14 @@ No business logic is rewritten. This is the entire reason for the layering rule 
 | **007** | `audit_log`, `stock_movements`, `bill_events` are append-only for every role including `owner` | Disputes surface months later. History that can be edited is not evidence. | Accepted |
 | **008** | Single private R2 bucket; presigned URLs only, no public bucket | Every file here is commercially sensitive or evidentially important. | Accepted |
 | **009** | No long-lived staging tier; Supabase preview branches per PR instead | Migration safety without a second environment to maintain. Billing math must not debut in production. | Accepted (revises the earlier "no staging" decision) |
-| **010** | Vercel Cron + a Postgres `jobs` table, **not** a managed workflow service | Eight simple jobs need scheduling and retry, not durable multi-step orchestration. Removes a vendor and a cost line. We own ~150 lines of retry/lease logic in exchange. Requires Vercel Pro for per-minute cron. | Accepted (revised — Inngest was the earlier choice) |
+| **010** | Vercel Cron + a Postgres `jobs` table, **not** a managed workflow service | Eight simple jobs need scheduling and retry, not durable multi-step orchestration. Removes a vendor and a cost line. We own ~150 lines of retry/lease logic in exchange. Per-minute cron would require Vercel Pro; while production is on Hobby, the two sub-daily schedules are triggered from GitHub Actions instead (§5.4). | Accepted (revised — Inngest was the earlier choice) |
 | **017** | Email notification out of scope for v1; the bell reads live from a DB view | No email dependency to operate. Cost lands on Clients, who now have no external prompt — expect to chase them by phone. Adding email later is a handler + template over the same `v_notifications` view. | Accepted |
 | **011** | Tasks store real dates; the 14-week Gantt grid is a viewport | The prototype's `start_week` integer breaks when a project slips or the start date moves. | Accepted |
 | **012** | Money mutations only through `security definer` RPCs, never app-level read-modify-write | Row locks are the only correct answer to concurrent status transitions. | Accepted |
 | **013** | Soft delete everywhere; indefinite retention with archiving | GST retention plus arithmetic integrity. Supersedes the earlier six-month retention proposal. | Accepted |
 | **014** | Notifications computed live from a view; no notification table, no read state | The notification *is* the work item. It disappears when the work is done. Also decouples the bell from email availability. | Accepted |
 | **015** | Bills gain `cancelled` and a client-rejection path back to `draft` | A disputed bill in the prototype's state machine had nowhere to go. | Accepted |
-| **016** | Upgrade to Vercel Pro and Supabase Pro at go-live | PITR, SLA, and commercial licensing for ~₹4,000/mo. Free tier is a development posture, not a production one. | Accepted 2026-09-09 (`decisions.md` ADR-016) |
+| **016** | Upgrade to Vercel Pro and Supabase Pro at go-live | PITR, SLA, and commercial licensing for ~₹4,000/mo. Free tier is a development posture, not a production one. | Accepted 2026-09-09 (`decisions.md` ADR-016) — **not yet purchased.** Production is on Hobby, so the per-minute cron this decision was partly justified by is served from GitHub Actions (§5.4). The commercial-use and PITR arguments are untouched and still outstanding. |
 
 ---
 
