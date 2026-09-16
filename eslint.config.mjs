@@ -18,7 +18,7 @@ const RLS_BYPASS = [
   {
     group: ["@/lib/supabase/admin", "**/lib/supabase/admin"],
     message:
-      "architecture.md §4.1: the service_role client bypasses RLS. It belongs in lib/jobs/handlers/** and lib/auth/admin.ts only.",
+      "architecture.md §4.1: the service_role client bypasses RLS. It belongs in lib/jobs/handlers/**, lib/jobs/runner.ts and app/api/backup/report/route.ts only — the paths this rule's own `ignores` list actually exempts.",
   },
 ];
 
@@ -244,7 +244,7 @@ const eslintConfig = defineConfig([
       "context/**/*.{ts,tsx}",
     ],
     ignores: [
-      // TODO(build-07): these three format quantities, not money. They move to
+      // TODO(build-07): these two format quantities, not money. They move to
       // a shared quantity formatter when the inventory and stock surfaces are
       // migrated. Listed explicitly so the exemption cannot quietly spread.
       "features/stock/components/ReqTable.tsx",
