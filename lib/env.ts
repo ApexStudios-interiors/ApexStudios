@@ -43,8 +43,13 @@ const serverSchema = z.object({
   // and behaves exactly as before — a missing var must never be the thing that
   // fails a Vercel build. Set, the app can read the backups and provably
   // cannot write them.
-  R2_BACKUP_ACCESS_KEY_ID: z.string().min(1).optional(),
-  R2_BACKUP_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  //
+  // Same `"" -> undefined` preprocess as SENTRY_DSN below, and for the same
+  // reason: a blank line in a .env file is an empty string, not undefined, so
+  // `R2_BACKUP_ACCESS_KEY_ID=` left as a placeholder would fail `.min(1)` and
+  // take the whole app down rather than reading as "not configured".
+  R2_BACKUP_ACCESS_KEY_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  R2_BACKUP_SECRET_ACCESS_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
 
   // Guards every /api/cron/* route. 32 bytes base64 is 44 characters.
   CRON_SECRET: z.string().min(32),

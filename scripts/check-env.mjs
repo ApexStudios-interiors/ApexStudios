@@ -25,9 +25,10 @@ const server = z.object({
   R2_BUCKET: z.string().min(1),
   R2_BACKUP_BUCKET: z.string().min(1),
   // Optional: the Object Read-only token for backup.verify. Unset is valid —
-  // it falls back to the app credential (see .env.example).
-  R2_BACKUP_ACCESS_KEY_ID: z.string().min(1).optional(),
-  R2_BACKUP_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  // it falls back to the app credential (see .env.example). Blank counts as
+  // unset, same preprocess as lib/env.ts, so a placeholder line does not fail.
+  R2_BACKUP_ACCESS_KEY_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  R2_BACKUP_SECRET_ACCESS_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
   CRON_SECRET: z.string().min(32),
   SESSION_SECRET: z.string().min(32),
   SENTRY_DSN: z.preprocess((v) => (v === "" ? undefined : v), z.url().optional()),
