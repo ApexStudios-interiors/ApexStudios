@@ -9,8 +9,8 @@ import {
   getBillsForClient,
   getClientBillsStats,
 } from "@/features/billing/queries";
-import { BillingAdmin } from "@/components/domain/BillingAdmin";
-import { BillingClient } from "@/components/domain/BillingClient";
+import { BillingAdmin } from "@/features/billing/components/BillingAdmin";
+import { BillingClient } from "@/features/billing/components/BillingClient";
 
 /**
  * build/09-billing.md §4.5. Site has no billing access at all (ui-guide

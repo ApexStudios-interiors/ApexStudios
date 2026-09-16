@@ -1,7 +1,7 @@
 "use client";
 
 import { useSelectedLayoutSegment } from "next/navigation";
-import { OpenDialogButton } from "@/components/domain/OpenDialogButton";
+import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { Icon } from "@/components/ui/Icon";
 
 /**

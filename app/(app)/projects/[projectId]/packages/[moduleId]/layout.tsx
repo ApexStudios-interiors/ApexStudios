@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getPackageDetail } from "@/features/packages/queries";
-import { BudgetStatBar } from "@/components/domain/BudgetStatBar";
+import { BudgetStatBar } from "@/features/billing/components/BudgetStatBar";
 import { LinkTabs } from "@/components/ui/LinkTabs";
 import { PackageDetailActions } from "./PackageDetailActions";
 

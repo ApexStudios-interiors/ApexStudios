@@ -1,6 +1,6 @@
 import { requireSession } from "@/lib/auth/session";
 import { getPhasesForPackage } from "@/features/packages/queries";
-import { PhaseTable } from "@/components/domain/PhaseTable";
+import { PhaseTable } from "@/features/packages/components/PhaseTable";
 import { Card } from "@/components/ui/Card";
 
 /** build/04-projects-packages-phases.md §4.4 step 4: the Budget/Phases tab,

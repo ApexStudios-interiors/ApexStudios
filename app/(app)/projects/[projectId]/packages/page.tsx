@@ -2,8 +2,8 @@ import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getProjectHeader } from "@/features/projects/queries";
 import { getPackagesForProject } from "@/features/packages/queries";
-import { ModuleTable } from "@/components/domain/ModuleTable";
-import { OpenDialogButton } from "@/components/domain/OpenDialogButton";
+import { ModuleTable } from "@/features/packages/components/ModuleTable";
+import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 

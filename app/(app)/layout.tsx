@@ -4,7 +4,7 @@ import { SessionProvider } from "@/components/auth/SessionProvider";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { Toast } from "@/components/ui/Toast";
-import { DialogHost } from "@/components/dialogs/DialogHost";
+import { DialogHost } from "@/components/shared/DialogHost";
 import { PreviewBanner } from "@/components/auth/PreviewBanner";
 import { getSession } from "@/lib/auth/session";
 import { getNotifications } from "@/features/notifications/queries";

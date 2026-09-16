@@ -21,7 +21,7 @@ config({ path: ".env.local", quiet: true });
  * and is gated to run under a single project so it executes exactly once.
  *
  * "Appears in Billable Now" is asserted against `v_billable_now` directly,
- * not through the Billing page's DOM: `components/domain/BillingAdmin.tsx`
+ * not through the Billing page's DOM: `features/billing/components/BillingAdmin.tsx`
  * is still Build 09's mock-data territory (billableItems() over AppContext,
  * not the real view) — the same category of honest substitution
  * updates-journey.spec.ts's own comment makes for its unbuildable R2 assertion.

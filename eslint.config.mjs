@@ -182,8 +182,13 @@ const eslintConfig = defineConfig([
   // ── code-standards §1: components take props. Data comes from queries.ts
   //    through a Server Component. A component that reaches the database has
   //    no role context and no place to enforce one.
+  //
+  //    Covers both components/** (the generic ui/layout/auth/upload/shared
+  //    primitives) and features/*/components/** (each module's own dialogs
+  //    and widgets, since the modularization pass) — a moved dialog is still
+  //    a component and this rule still applies to it.
   {
-    files: ["components/**/*.{ts,tsx}"],
+    files: ["components/**/*.{ts,tsx}", "features/*/components/**/*.{ts,tsx}"],
     rules: {
       // core no-restricted-imports has no allowTypeImports; disabled here so
       // the @typescript-eslint version (which does) is the only one active.
@@ -191,6 +196,39 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-restricted-imports": [
         "error",
         { patterns: [...RLS_BYPASS_TS, ...NO_DATA_LAYER] },
+      ],
+    },
+  },
+
+  // ── MODULARIZATION_REPORT.md / MIGRATION_PLAN.md: feature-specific
+  //    components live in features/<domain>/components/ now. components/domain
+  //    and components/dialogs no longer exist — this stops either flat
+  //    directory from being quietly recreated by a future PR.
+  //
+  //    The `/**/*.*` shape is load-bearing, not decoration. @eslint/config-array
+  //    treats any pattern ending in `/*` or `/**` as UNIVERSAL
+  //    (universalPattern = /^\*$|^!|\/\*{1,2}$/u), and a universal-only match
+  //    never sets matchFound — the file comes back UNCONFIGURED and is skipped
+  //    entirely. With the bare `components/domain/**` this rule fired only
+  //    because a different block (files: ["**/*.{ts,tsx,mts}"]) happened to
+  //    match the same path non-universally; anything outside those extensions
+  //    slipped through silently. `**/*.*` is non-universal, so this block
+  //    stands on its own.
+  //
+  //    A .tsx dropped here — the realistic regression — gets the message
+  //    below. A non-JS file (.css, .md) fails on a parse error instead, since
+  //    there is no parser for it: a blunter failure, but still a failure,
+  //    which is the point. The directory must not come back, in any form.
+  {
+    files: ["components/domain/**/*.*", "components/dialogs/**/*.*"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "Program",
+          message:
+            "MODULARIZATION_REPORT.md: feature-specific components belong in features/<domain>/components/, not components/domain or components/dialogs. Genuinely cross-module components belong in components/shared/.",
+        },
       ],
     },
   },
@@ -209,8 +247,8 @@ const eslintConfig = defineConfig([
       // TODO(build-07): these three format quantities, not money. They move to
       // a shared quantity formatter when the inventory and stock surfaces are
       // migrated. Listed explicitly so the exemption cannot quietly spread.
-      "components/domain/ReqTable.tsx",
-      "components/domain/InventoryTable.tsx",
+      "features/stock/components/ReqTable.tsx",
+      "features/inventory/components/InventoryTable.tsx",
     ],
     rules: {
       "no-restricted-properties": [

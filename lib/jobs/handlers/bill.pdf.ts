@@ -5,7 +5,7 @@ import { env } from "@/lib/env";
 import { r2Client } from "@/lib/r2/client";
 import { buildAttachmentKey } from "@/lib/r2/keys";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { BillDocument, type BillPdfData } from "@/lib/pdf/BillDocument";
+import { BillDocument, type BillPdfData } from "@/features/billing/components/BillDocument";
 
 /**
  * build/09-billing.md §4.6. Enqueued on draft -> submitted

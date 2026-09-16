@@ -3,8 +3,8 @@
 import { useState } from "react";
 import type { ProjectHeaderDTO } from "@/features/projects/queries";
 import type { ProjectSchedule } from "@/features/schedule/queries";
-import { OpenDialogButton } from "@/components/domain/OpenDialogButton";
-import { Gantt } from "@/components/domain/Gantt";
+import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
+import { Gantt } from "@/features/schedule/components/Gantt";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";

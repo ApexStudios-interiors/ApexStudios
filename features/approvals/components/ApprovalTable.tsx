@@ -6,7 +6,7 @@ import type { Role } from "@/lib/rbac/roles";
 import { can } from "@/lib/rbac/permissions";
 import type { ApprovalDTO } from "@/features/approvals/queries";
 import { dmy } from "@/lib/logic";
-import { ApprovalStatusBadge, ApprovalTypeBadge } from "@/components/domain/StatusBadges";
+import { ApprovalStatusBadge, ApprovalTypeBadge } from "@/components/shared/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, th, sub } from "@/components/ui/table";
 import { Button } from "@/components/ui/Button";

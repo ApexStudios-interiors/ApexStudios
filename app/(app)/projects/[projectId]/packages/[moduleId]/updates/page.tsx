@@ -1,6 +1,6 @@
 import { requireSession } from "@/lib/auth/session";
 import { getUpdatesForProject } from "@/features/updates/queries";
-import { UpdateList } from "@/components/domain/UpdateList";
+import { UpdateList } from "@/features/updates/components/UpdateList";
 import { Card } from "@/components/ui/Card";
 import Link from "next/link";
 

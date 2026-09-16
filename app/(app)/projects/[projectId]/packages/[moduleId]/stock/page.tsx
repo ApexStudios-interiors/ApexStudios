@@ -1,7 +1,7 @@
 import { forbidden } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getStockRequestsForProject } from "@/features/stock/queries";
-import { ReqTable } from "@/components/domain/ReqTable";
+import { ReqTable } from "@/features/stock/components/ReqTable";
 import { Card } from "@/components/ui/Card";
 
 /**

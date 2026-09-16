@@ -2,9 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import type { Role } from "@/lib/rbac/roles";
-import { ApprovalTable } from "@/components/domain/ApprovalTable";
-import { ReqTable } from "@/components/domain/ReqTable";
-import { UpdateList } from "@/components/domain/UpdateList";
+import { ApprovalTable } from "@/features/approvals/components/ApprovalTable";
+import { ReqTable } from "@/features/stock/components/ReqTable";
+import { UpdateList } from "@/features/updates/components/UpdateList";
 import type { UpdateDTO } from "@/features/updates/queries";
 import type { StockRequestDTO } from "@/features/stock/queries";
 import type { ApprovalDTO } from "@/features/approvals/queries";

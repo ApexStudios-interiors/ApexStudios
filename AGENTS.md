@@ -162,15 +162,17 @@ Root layout, not `src/` (D13).
 │     ├─ actions.ts        Server Actions: guard → validate → service → revalidate
 │     ├─ service.ts        pure business logic, NO next/* imports
 │     ├─ schema.ts         zod schemas shared by form and action
-│     └─ components/
+│     └─ components/       this domain's own tables, widgets and dialogs
 ├─ components/
 │  ├─ ui/                  hand-rolled primitives, no business logic, do not restyle
 │  ├─ layout/              Sidebar, Header, SearchBar, NotificationsMenu
-│  ├─ domain/              tables and domain widgets
-│  └─ dialogs/             modal flows
+│  ├─ auth/                SessionProvider, PreviewBanner
+│  ├─ upload/              FileUploader
+│  └─ shared/              genuinely cross-module pieces: DialogHost, StatusBadges,
+│                          OpenDialogButton, NewRequestDialog (spans schedule + stock)
 ├─ context/                AppContext — prototype state, retired feature by feature
 ├─ hooks/
-├─ lib/                    supabase, r2, money, rbac, jobs, pdf, xlsx, observability, env
+├─ lib/                    supabase, r2, money, rbac, jobs, xlsx, observability, env
 ├─ db/                     Drizzle schema + generated types
 ├─ supabase/
 │  ├─ migrations/          versioned SQL. THE source of truth for schema.
@@ -187,6 +189,9 @@ Root layout, not `src/` (D13).
 - Components must never query the database directly. Data comes from `queries.ts` via a
   Server Component and arrives as props.
 - `components/ui/` holds generic primitives. Do not add domain logic there. Do not restyle them.
+- A component specific to one domain lives in that domain's `features/<domain>/components/`, not
+  in the top-level `components/` tree. Only genuinely cross-module or generic components belong in
+  `components/` (`ui/`, `layout/`, `auth/`, `upload/`, `shared/`). See `MODULARIZATION_REPORT.md`.
 - Dependency direction is strictly downward. Nothing depends on `app/`.
 
 ---

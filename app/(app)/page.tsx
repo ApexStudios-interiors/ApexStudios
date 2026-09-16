@@ -1,8 +1,8 @@
 import { requireSession } from "@/lib/auth/session";
 import { getPortfolio } from "@/features/projects/queries";
 import { StatBar } from "@/components/ui/StatBar";
-import { ProjectCard } from "@/components/domain/ProjectCard";
-import { OpenDialogButton } from "@/components/domain/OpenDialogButton";
+import { ProjectCard } from "@/features/projects/components/ProjectCard";
+import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { Icon } from "@/components/ui/Icon";
 import { formatINRCompact } from "@/lib/money";
 

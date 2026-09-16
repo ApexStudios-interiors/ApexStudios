@@ -1,6 +1,6 @@
 import type { InventoryItemDTO } from "@/features/inventory/queries";
 import { formatINR } from "@/lib/money";
-import { StockLevelBadge } from "@/components/domain/StatusBadges";
+import { StockLevelBadge } from "@/components/shared/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, sub } from "@/components/ui/table";
 import { Empty } from "@/components/ui/Empty";
