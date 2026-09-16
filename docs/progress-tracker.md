@@ -356,8 +356,9 @@ confirmation.
 | Item | Blocks |
 |---|---|
 | ~~**No real Cloudflare R2 account**~~ — **resolved 2026-09-16.** Real credentials are in place and the app bucket is verified working: `HeadBucket` plus a full presigned PUT → GET → DELETE round-trip, and `/api/health` reports `r2: true`. | — |
-| **R2 CORS is not configured** on the app bucket — an `OPTIONS` preflight returns 403 with no `Access-Control-Allow-Origin`. Browsers PUT straight to R2, so every *real* user upload still fails. The server-side round-trip above does not exercise CORS. | Every real browser upload: Build 06 update photos, Build 08 approval photos, Build 09 bill copies |
-| **The app's R2 token cannot read the backup bucket** — 403 AccessDenied (not 404, so the bucket exists). `.env.example`/D17 call for read-only access for one caller. | `backup.verify`, the daily P1 backup assertion |
+| ~~**R2 CORS is not configured**~~ — **resolved 2026-09-16.** Preflight now returns 204 with a matching `Access-Control-Allow-Origin` for `localhost:3000` and the deployed origin. Real browser uploads unblocked. | — |
+| ~~**The app's R2 token cannot read the backup bucket**~~ — **resolved 2026-09-16.** `backup.verify`'s own `HeadObject` now returns 404 rather than 403: it can read the bucket, there is just no dump yet (correct until `backup.nightly` first succeeds). | — |
+| **The app's R2 token has WRITE + DELETE on the backup bucket** — a probe `PutObject` succeeded and deleting it also succeeded. `.env.example`/D17 require read-only there so a compromised app token cannot destroy the only recovery point. Scope it to Object Read-only on `apex-backups`, Read & Write on `apex-studios`. | Backup integrity — currently the app credential can wipe the backups |
 | **Vercel not on Pro** | The real per-minute `jobs.drain` |
 | ~~`CRON_SECRET` and the R2 env vars are local placeholders~~ — **resolved locally 2026-09-16**; still absent in Vercel and GitHub Actions, which is why Vercel builds fail. See `docs/decisions.md`'s "Still open". | Vercel deployments; the nightly backup |
 | `inventory.reconcile` is a documented no-op stub | Build 07 fills it in |
