@@ -111,7 +111,9 @@ export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: strin
                 <Select
                   items={phaseItems}
                   disabled={!phases}
-                  value={field.value || null}
+                  // null until options load: no items means no label, and a
+                  // set id would print as a raw UUID.
+                  value={phases ? field.value || null : null}
                   onValueChange={(value: string | null) => field.onChange(value ?? "")}
                   onOpenChange={(open) => {
                     if (!open) field.onBlur();
@@ -145,7 +147,7 @@ export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: strin
                 <Select
                   items={ownerItems}
                   disabled={!owners}
-                  value={field.value || null}
+                  value={owners ? field.value || null : null}
                   onValueChange={(value: string | null) => field.onChange(value ?? "")}
                   onOpenChange={(open) => {
                     if (!open) field.onBlur();

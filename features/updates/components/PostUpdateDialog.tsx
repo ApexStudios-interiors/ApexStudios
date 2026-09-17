@@ -20,12 +20,6 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 
-/** UTC-anchored, like every other date-only field in this app (Build 05's
- *  own established pattern) — never `new Date().toLocaleDateString()`. */
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 /** The stored value is the same `yyyy-MM-dd` string `<input type="date">`
  *  produced, so `postDailyUpdate` and its zod schema see no change at all —
  *  only the surface the supervisor touches does. Both helpers work in local
@@ -43,6 +37,15 @@ function isoToDate(value: string): Date | undefined {
 
 function dateToIso(date: Date): string {
   return format(date, ISO_DATE);
+}
+
+/** Today in the supervisor's own calendar. This used to be
+ *  `toISOString().slice(0, 10)` (UTC), which before 05:30 IST is still
+ *  yesterday — and the picker, which reads local dates, would then show
+ *  yesterday as selected. Nothing server-side compares against "today";
+ *  `postDailyUpdate` only checks `z.iso.date()`. */
+function todayIso(): string {
+  return dateToIso(new Date());
 }
 
 /**
@@ -133,7 +136,10 @@ export function PostUpdateDialog({ projectId, moduleId }: { projectId: string; m
           <Select
             items={packageItems}
             disabled={!packages}
-            value={packageId || null}
+            // `packageId` can already be a UUID (from `moduleId`) before the
+            // options load; with no items to resolve it against, the trigger
+            // would print that UUID. Show the placeholder until they arrive.
+            value={packages ? packageId || null : null}
             onValueChange={(value) => setPackageId(value ?? "")}
           >
             <SelectTrigger id="pu-package" className="h-9 w-full text-[13.5px]">

@@ -111,7 +111,8 @@ export function AddModuleDialog({ projectId }: { projectId: string }) {
                 <Select
                   items={leadItems}
                   disabled={!staff}
-                  value={field.value || null}
+                  // null until staff loads: no items means no label to show.
+                  value={staff ? field.value || null : null}
                   onValueChange={(value: string | null) => field.onChange(value ?? "")}
                   onOpenChange={(open) => {
                     if (!open) field.onBlur();
