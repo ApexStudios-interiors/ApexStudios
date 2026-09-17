@@ -31,7 +31,14 @@ const PREVIEW_OPTIONS: { value: "client" | "site"; label: string }[] = [
   { value: "client", label: "Client" },
 ];
 
-export function Sidebar() {
+export function Sidebar({
+  /** The real, role-scoped project list, read from the database by the app
+   *  shell. Previously this menu mapped over AppContext's `lib/data.ts`
+   *  fixture, so a project created through the app never appeared here. */
+  projects,
+}: {
+  projects: { id: string; name: string }[];
+}) {
   // `role` here is the EFFECTIVE role (impersonated role while previewing) —
   // exactly what nav filtering should use. `session` is the REAL identity:
   // real name, real role, whether a preview is active. Never mix the two up.
@@ -51,7 +58,17 @@ export function Sidebar() {
   useClickOutside(userMenuRef, () => setUserMenuOpen(false), userMenuOpen);
 
   const isHome = pathname === "/";
-  const project = params?.projectId ? (data.projects.find((p) => p.id === params.projectId) ?? null) : null;
+  // `legacyProject` is the AppContext fixture row — still the only source of
+  // the package list and the pending-count badges until those surfaces are
+  // migrated. `project` is what the nav renders from: the REAL project when
+  // the database has it, so a newly created project gets a working sidebar
+  // instead of none at all. Its `modules` are absent in that case, which the
+  // package list below handles.
+  const legacyProject = params?.projectId
+    ? (data.projects.find((p) => p.id === params.projectId) ?? null)
+    : null;
+  const realProject = params?.projectId ? (projects.find((p) => p.id === params.projectId) ?? null) : null;
+  const project = realProject ?? legacyProject;
   const allowed = ALLOWED_SECTIONS[role];
 
   const canPreview = session.role === "owner" || session.role === "admin";
@@ -93,15 +110,14 @@ export function Sidebar() {
               View all projects
             </Link>
             <div className="border-t border-border my-1" />
-            {data.projects.map((p) => (
+            {projects.map((p) => (
               <Link
                 key={p.id}
                 href={`/projects/${p.id}`}
                 onClick={() => setProjectsMenuOpen(false)}
-                className={`flex flex-col px-3 py-2 text-[13px] hover:bg-accent ${project?.id === p.id ? "bg-accent" : ""}`}
+                className={`flex flex-col px-3 py-2 text-[13px] hover:bg-accent ${params?.projectId === p.id ? "bg-accent" : ""}`}
               >
                 <span className="font-medium text-foreground truncate">{p.name}</span>
-                <span className="text-xs text-muted-foreground truncate">{p.client}</span>
               </Link>
             ))}
           </div>
@@ -198,7 +214,7 @@ export function Sidebar() {
                     </Link>
                     {it.key === "packages" &&
                       modsOpen &&
-                      project.modules.map((m, i) => (
+                      (legacyProject?.modules ?? []).map((m, i) => (
                         <Link
                           key={m.id}
                           href={`/projects/${project.id}/packages/${m.id}`}

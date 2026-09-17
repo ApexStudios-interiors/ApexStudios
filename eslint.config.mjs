@@ -69,6 +69,11 @@ const eslintConfig = defineConfig([
     "test-results/**",
     // Frozen prototype copies and design documents; deliberately not wired in.
     "docs/**",
+    // Claude Code agent worktrees are full checkouts of this repo nested inside
+    // it, and vendored skills are tooling. Linting them reported ~100+ errors
+    // from copies of the repo itself, masking the real result.
+    ".claude/**",
+    ".agents/**",
     "supabase/.temp/**",
   ]),
 
