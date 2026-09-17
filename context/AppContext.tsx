@@ -1,9 +1,7 @@
 "use client";
 
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
-import { seedData } from "@/lib/data";
-import type { AppData, Package, Role, Task } from "@/lib/types";
-import { ROLE_LABEL } from "@/lib/rbac/roles";
+import type { Role } from "@/lib/types";
 
 export type DialogState =
   | { kind: "addProject" }
@@ -47,8 +45,16 @@ export type DialogState =
     }
   | null;
 
+/**
+ * Client-side UI state only. The prototype's `data` (a clone of
+ * `lib/data.ts`'s fixture) and the five `setData` mutations left on it —
+ * addModule, editModule, addProject, inviteUser, updateTeamRole — are gone
+ * with their last reader: every dialog that once called one now calls a real
+ * Server Action, and the Sidebar and Header now read the real project list
+ * the app shell passes them. What is left is genuinely client-side: the
+ * effective role, the open dialog, the toast and the last project visited.
+ */
 interface AppContextValue {
-  data: AppData;
   role: Role;
   setRole: (r: Role) => void;
   lastProjectId: string;
@@ -58,52 +64,9 @@ interface AppContextValue {
   closeDialog: () => void;
   toastMsg: string | null;
   toast: (msg: string) => void;
-
-  // mutations
-  // setRequestStatus removed: build/07-stock-inventory-notifications.md
-  // converts ReqTable to real Server Actions (transitionStockRequest), its
-  // only caller.
-  // setApprovalStatus removed: build/08-approvals.md converts ApprovalTable's
-  // Approve/Reject buttons to real Server Actions (decideApproval), its only
-  // caller.
-  // setBillStatus/createBill/markPhaseDone removed: build/09-billing.md
-  // converts BillingAdmin/BillingClient/MilestoneTable to real Server
-  // Actions, their only callers.
-  addModule: (
-    projectId: string,
-    m: { name: string; allocated: number; internal: number; lead: string }
-  ) => void;
-  editModule: (
-    projectId: string,
-    moduleId: string,
-    m: { name: string; allocated: number; internal: number; lead: string; status: string }
-  ) => void;
-  // addTask/updateTask removed: build/05-schedule-and-progress.md converts
-  // AddTaskDialog and TaskDetailDialog to real Server Actions
-  // (features/schedule/actions.ts), the only two callers these ever had.
-  // addRequest removed: build/07-stock-inventory-notifications.md converts
-  // NewRequestDialog to createStockRequest, its only caller.
-  // addApproval/addApprovalPhotos removed: build/08-approvals.md converts
-  // NewApprovalDialog and ApprovalPhotosDialog to real Server Actions
-  // (requestApproval, addSamplePhotos), their only callers.
-  // uploadBillFiles removed: BillUploadDialog converts to the real
-  // uploadBillCopy Server Action, its only caller.
-  addProject: (p: {
-    name: string;
-    client: string;
-    location: string;
-    start: string | null;
-    packageNames: string[];
-  }) => string;
-  inviteUser: (u: { name: string; email: string; role: Role }) => void;
-  updateTeamRole: (index: number, role: Role, roleLabel: string) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
-
-function clone<T>(v: T): T {
-  return typeof structuredClone === "function" ? structuredClone(v) : JSON.parse(JSON.stringify(v));
-}
 
 export function AppProvider({
   children,
@@ -120,7 +83,6 @@ export function AppProvider({
    */
   initialRole: Role;
 }) {
-  const [data, setData] = useState<AppData>(() => clone(seedData));
   const [role, setRole] = useState<Role>(initialRole);
   const [lastProjectId, setLastProjectId] = useState("bhel");
   const [dialog, setDialog] = useState<DialogState>(null);
@@ -136,113 +98,8 @@ export function AppProvider({
   const openDialog = useCallback((d: DialogState) => setDialog(d), []);
   const closeDialog = useCallback(() => setDialog(null), []);
 
-  // setBillStatus/createBill/markPhaseDone removed: build/09-billing.md
-  // converts BillingAdmin/BillingClient/MilestoneTable to real Server
-  // Actions (createBill, transitionBill, certifyBill, rejectBill,
-  // recordPayment, and rpc_mark_phase_complete's own Server Action wiring),
-  // their only callers.
-  const addModule = useCallback(
-    (projectId: string, m: { name: string; allocated: number; internal: number; lead: string }) => {
-      setData((prev) => {
-        const next = clone(prev);
-        const p = next.projects.find((x) => x.id === projectId);
-        if (!p) return prev;
-        p.modules.push({
-          id: "m" + Date.now(),
-          name: m.name || "New Package",
-          allocated: m.allocated,
-          internal: m.internal,
-          lead: m.lead,
-          status: "Not started",
-          packages: [],
-          tasks: [],
-        });
-        return next;
-      });
-    },
-    []
-  );
-
-  const editModule = useCallback(
-    (
-      projectId: string,
-      moduleId: string,
-      m: { name: string; allocated: number; internal: number; lead: string; status: string }
-    ) => {
-      setData((prev) => {
-        const next = clone(prev);
-        const mod = next.projects.find((x) => x.id === projectId)?.modules.find((x) => x.id === moduleId);
-        if (!mod) return prev;
-        mod.name = m.name;
-        mod.allocated = m.allocated;
-        mod.internal = m.internal;
-        mod.lead = m.lead;
-        mod.status = m.status;
-        return next;
-      });
-    },
-    []
-  );
-
-  // uploadBillFiles removed: BillUploadDialog converts to the real
-  // uploadBillCopy Server Action, its only caller.
-  const addProject = useCallback(
-    (p: { name: string; client: string; location: string; start: string | null; packageNames: string[] }) => {
-      const id = "p" + Date.now();
-      setData((prev) => {
-        const next = clone(prev);
-        const mods = p.packageNames
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .map((n, i) => ({
-            id: id + "m" + i,
-            name: n,
-            allocated: 0,
-            internal: 0,
-            lead: "To assign",
-            status: "Not started",
-            packages: [] as Package[],
-            tasks: [] as Task[],
-          }));
-        next.projects.push({
-          id,
-          name: p.name || "Untitled Project",
-          client: p.client,
-          location: p.location,
-          start: p.start,
-          status: "Active",
-          modules: mods,
-        });
-        return next;
-      });
-      return id;
-    },
-    []
-  );
-
-  const inviteUser = useCallback((u: { name: string; email: string; role: Role }) => {
-    setData((prev) => {
-      const next = clone(prev);
-      next.team.push({ n: u.name || "New user", r: u.role, t: ROLE_LABEL[u.role], e: u.email });
-      return next;
-    });
-  }, []);
-
-  const updateTeamRole = useCallback((index: number, roleValue: Role, roleLabel: string) => {
-    setData((prev) => {
-      const next = clone(prev);
-      const member = next.team[index];
-      if (member) {
-        member.r = roleValue;
-        member.t = roleLabel;
-      }
-      return next;
-    });
-  }, []);
-
   const value = useMemo<AppContextValue>(
     () => ({
-      data,
       role,
       setRole,
       lastProjectId,
@@ -252,27 +109,8 @@ export function AppProvider({
       closeDialog,
       toastMsg,
       toast,
-      addModule,
-      editModule,
-      addProject,
-      inviteUser,
-      updateTeamRole,
     }),
-    [
-      data,
-      role,
-      lastProjectId,
-      dialog,
-      toastMsg,
-      toast,
-      openDialog,
-      closeDialog,
-      addModule,
-      editModule,
-      addProject,
-      inviteUser,
-      updateTeamRole,
-    ]
+    [role, lastProjectId, dialog, toastMsg, toast, openDialog, closeDialog]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
