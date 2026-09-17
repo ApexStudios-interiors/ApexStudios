@@ -1,12 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import { addUserSchema, createClientLoginSchema } from "./schema";
 import {
+  canResetPassword,
   emailForUsername,
   generatePassword,
   GENERATED_PASSWORD_LENGTH,
+  passwordResetRefusal,
   provisionAccount,
+  resetAccountPassword,
   signInEmail,
+  usernameForEmail,
   type ProvisionSteps,
+  type ResetActor,
+  type ResetSteps,
+  type ResetTarget,
 } from "./service";
 
 describe("emailForUsername", () => {
@@ -184,5 +191,170 @@ describe("generatePassword", () => {
     });
     expect(calls).toBeGreaterThan(GENERATED_PASSWORD_LENGTH + 4);
     expect(pw).toHaveLength(GENERATED_PASSWORD_LENGTH);
+  });
+});
+
+describe("usernameForEmail", () => {
+  it("drops the Apex domain", () => {
+    expect(usernameForEmail("Suresh@beapex.in")).toBe("suresh");
+  });
+
+  it("keeps any other address whole, as the sign-in form accepts it", () => {
+    expect(usernameForEmail("tvrao@example.invalid")).toBe("tvrao@example.invalid");
+    expect(signInEmail(usernameForEmail("tvrao@example.invalid"))).toBe("tvrao@example.invalid");
+  });
+});
+
+// D52. Seeded ids: owner d1, admins d2/d3, site d5, client d6.
+const OWNER: ResetActor = { userId: "d1", role: "owner" };
+const ADMIN: ResetActor = { userId: "d2", role: "admin" };
+
+function target(overrides: Partial<ResetTarget> = {}): ResetTarget {
+  return {
+    id: "d5",
+    role: "site",
+    isActive: true,
+    deletedAt: null,
+    email: "ravi@beapex.in",
+    ...overrides,
+  };
+}
+
+describe("passwordResetRefusal — who may reset whom", () => {
+  it.each(["owner", "admin", "site", "client"] as const)("owner may reset another %s", (role) => {
+    expect(passwordResetRefusal(OWNER, target({ id: "x", role }))).toBeNull();
+  });
+
+  it.each(["site", "client"] as const)("admin may reset a %s", (role) => {
+    expect(passwordResetRefusal(ADMIN, target({ id: "x", role }))).toBeNull();
+  });
+
+  it("refuses admin → owner (privilege escalation)", () => {
+    expect(passwordResetRefusal(ADMIN, target({ id: "d1", role: "owner" }))).toBe("forbidden_role");
+  });
+
+  it("refuses admin → another admin", () => {
+    expect(passwordResetRefusal(ADMIN, target({ id: "d3", role: "admin" }))).toBe("forbidden_role");
+  });
+
+  it.each([OWNER, ADMIN])("refuses a reset of your own password ($role)", (actor) => {
+    expect(passwordResetRefusal(actor, target({ id: actor.userId, role: actor.role }))).toBe("self");
+  });
+
+  it("refuses a target the RLS-scoped read did not return (another org, or no such user)", () => {
+    expect(passwordResetRefusal(OWNER, null)).toBe("not_found");
+  });
+
+  it("refuses a soft-deleted target", () => {
+    expect(passwordResetRefusal(OWNER, target({ deletedAt: "2026-09-01T00:00:00Z" }))).toBe("not_found");
+  });
+
+  it("refuses a deactivated target", () => {
+    expect(passwordResetRefusal(OWNER, target({ isActive: false }))).toBe("inactive");
+  });
+
+  it("refuses a target with no email to sign in with", () => {
+    expect(passwordResetRefusal(OWNER, target({ email: null }))).toBe("no_email");
+  });
+
+  it.each(["site", "client"] as const)("refuses a %s caller outright", (role) => {
+    expect(passwordResetRefusal({ userId: "z", role }, target({ id: "d6", role: "client" }))).toBe(
+      "forbidden_role"
+    );
+  });
+
+  it("canResetPassword agrees with the refusal", () => {
+    expect(canResetPassword(ADMIN, target())).toBe(true);
+    expect(canResetPassword(ADMIN, target({ id: "d1", role: "owner" }))).toBe(false);
+  });
+});
+
+describe("resetAccountPassword", () => {
+  function fakeSteps(found: ResetTarget | null, overrides: Partial<ResetSteps> = {}) {
+    const calls: string[] = [];
+    const passwords: string[] = [];
+    const steps: ResetSteps = {
+      loadTarget: async (id) => {
+        calls.push(`loadTarget ${id}`);
+        return found;
+      },
+      recordReset: async (id) => {
+        calls.push(`recordReset ${id}`);
+      },
+      setAuthPassword: async (id, password) => {
+        calls.push(`setAuthPassword ${id}`);
+        passwords.push(password);
+      },
+      ...overrides,
+    };
+    return { steps, calls, passwords };
+  }
+
+  it("audits, then sets a fresh generated password, and returns it once", async () => {
+    const { steps, calls, passwords } = fakeSteps(target());
+    const result = await resetAccountPassword(steps, ADMIN, "d5");
+    expect(calls).toEqual(["loadTarget d5", "recordReset d5", "setAuthPassword d5"]);
+    expect(passwords[0]).toHaveLength(GENERATED_PASSWORD_LENGTH);
+    expect(result).toEqual({
+      status: "reset",
+      userId: "d5",
+      username: "ravi",
+      email: "ravi@beapex.in",
+      password: passwords[0],
+    });
+  });
+
+  it.each([
+    ["admin → owner", ADMIN, target({ id: "d1", role: "owner", email: "hello@beapex.in" }), "forbidden_role"],
+    [
+      "admin → admin",
+      ADMIN,
+      target({ id: "d3", role: "admin", email: "prakash@beapex.in" }),
+      "forbidden_role",
+    ],
+    ["self", ADMIN, target({ id: "d2", role: "admin", email: "suresh@beapex.in" }), "self"],
+    ["other org / not found", OWNER, null, "not_found"],
+    ["deleted", OWNER, target({ deletedAt: "2026-09-01T00:00:00Z" }), "not_found"],
+    ["deactivated", OWNER, target({ isActive: false }), "inactive"],
+  ] as const)(
+    "refuses %s without auditing or touching the password",
+    async (_label, actor, found, reason) => {
+      const { steps, calls } = fakeSteps(found);
+      expect(await resetAccountPassword(steps, actor, found?.id ?? "elsewhere")).toEqual({
+        status: "refused",
+        reason,
+      });
+      expect(calls).toEqual([`loadTarget ${found?.id ?? "elsewhere"}`]);
+    }
+  );
+
+  it("does not change the password when the database refuses", async () => {
+    const setAuthPassword = vi.fn();
+    const { steps } = fakeSteps(target(), {
+      recordReset: async () => {
+        throw new Error("FORBIDDEN: an admin may reset only site and client users");
+      },
+      setAuthPassword,
+    });
+    await expect(resetAccountPassword(steps, ADMIN, "d5")).rejects.toThrow("FORBIDDEN");
+    expect(setAuthPassword).not.toHaveBeenCalled();
+  });
+
+  it("never puts the password in the error or the audit call", async () => {
+    let password = "";
+    const recorded: unknown[] = [];
+    const { steps } = fakeSteps(target(), {
+      recordReset: async (...args) => {
+        recorded.push(...args);
+      },
+      setAuthPassword: async (_id, pw) => {
+        password = pw;
+        throw new Error("setAuthPassword: weak_password: Password is known to be weak");
+      },
+    });
+    const error = await resetAccountPassword(steps, OWNER, "d5").catch((e: unknown) => e);
+    expect(password).toHaveLength(GENERATED_PASSWORD_LENGTH);
+    expect(String(error)).not.toContain(password);
+    expect(JSON.stringify(recorded)).not.toContain(password);
   });
 });

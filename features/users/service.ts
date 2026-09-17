@@ -3,6 +3,8 @@
  * connection at all (HLD §4.3, code-standards §1).
  */
 
+import type { Role } from "@/lib/rbac/roles";
+
 /**
  * Every seeded staff account is @beapex.in (supabase/seed.sql: hello@,
  * suresh@, prakash@, meena@, ravi@), and it is the address the owner already
@@ -85,6 +87,114 @@ export async function provisionAccount(
   }
 
   return { status: "created", userId: created.userId, email, password };
+}
+
+/**
+ * The username shown for an existing account: the part before the @ for an
+ * Apex address (what the sign-in form accepts on its own), else the whole
+ * address — which signInEmail also accepts as typed, e.g. the seeded client.
+ */
+export function usernameForEmail(email: string): string {
+  const suffix = `@${USER_EMAIL_DOMAIN}`;
+  const value = email.trim().toLowerCase();
+  return value.endsWith(suffix) ? value.slice(0, -suffix.length) : value;
+}
+
+// ── Reset password (D52) ─────────────────────────────────────────────────────
+
+/** The caller, by their REAL session role — never the D20 preview role. */
+export type ResetActor = { userId: string; role: Role };
+
+/** The target as read through the caller's RLS-scoped client. */
+export type ResetTarget = {
+  id: string;
+  role: Role;
+  isActive: boolean;
+  deletedAt: string | null;
+  email: string | null;
+};
+
+export type ResetRefusal =
+  /** Not visible to the caller (another org, never existed) or soft-deleted. */
+  | "not_found"
+  | "self"
+  /** The caller is not owner/admin, or is an admin and the target is owner/admin. */
+  | "forbidden_role"
+  | "inactive"
+  /** No email, so no username to sign in with (D51). */
+  | "no_email";
+
+/**
+ * Who may reset whom. The single source of the rule for both the Users page
+ * (whether to offer the button) and resetUserPassword (whether to do it);
+ * rpc_record_password_reset re-checks the same rule in the database.
+ *
+ *   owner → any other user
+ *   admin → site and client only. Never the owner and never another admin:
+ *           resetting a higher-or-equal account's password and signing in as
+ *           it is privilege escalation.
+ *   nobody → themselves
+ *
+ * A null target is one the caller's RLS-scoped read did not return, which is
+ * exactly what a user in another org looks like.
+ */
+export function passwordResetRefusal(actor: ResetActor, target: ResetTarget | null): ResetRefusal | null {
+  if (actor.role !== "owner" && actor.role !== "admin") return "forbidden_role";
+  if (!target || target.deletedAt !== null) return "not_found";
+  if (target.id === actor.userId) return "self";
+  if (actor.role === "admin" && target.role !== "site" && target.role !== "client") return "forbidden_role";
+  if (!target.isActive) return "inactive";
+  if (!target.email) return "no_email";
+  return null;
+}
+
+export function canResetPassword(actor: ResetActor, target: ResetTarget): boolean {
+  return passwordResetRefusal(actor, target) === null;
+}
+
+/** The steps of a reset, injected like ProvisionSteps; real ones in actions.ts. */
+export type ResetSteps = {
+  /** The target through the caller's RLS-scoped client; null if not visible. */
+  loadTarget: (userId: string) => Promise<ResetTarget | null>;
+  /** rpc_record_password_reset: re-authorises in the database and writes the
+   *  audit row. Throws if the database refuses. Takes no password. */
+  recordReset: (userId: string) => Promise<void>;
+  /** GoTrue admin update. Also deletes every session the user has (D52). */
+  setAuthPassword: (userId: string, password: string) => Promise<void>;
+};
+
+export type ResetResult =
+  | { status: "refused"; reason: ResetRefusal }
+  | { status: "reset"; userId: string; username: string; email: string; password: string };
+
+/**
+ * Check → audit (with the database's own check) → set the password. The
+ * password is generated only after both checks pass, is handed only to
+ * setAuthPassword, and appears only in the success result — never in a
+ * refusal, and never in an error, which is always the failing step's own.
+ */
+export async function resetAccountPassword(
+  steps: ResetSteps,
+  actor: ResetActor,
+  targetId: string,
+  random: RandomSource = webCrypto
+): Promise<ResetResult> {
+  const target = await steps.loadTarget(targetId);
+  const refusal = passwordResetRefusal(actor, target);
+  if (refusal || !target?.email) return { status: "refused", reason: refusal ?? "no_email" };
+
+  await steps.recordReset(target.id);
+
+  const password = generatePassword(random);
+  await steps.setAuthPassword(target.id, password);
+
+  return {
+    status: "reset",
+    userId: target.id,
+    username: usernameForEmail(target.email),
+    email: target.email,
+    password,
+  };
 }
 
 const LOWER = "abcdefghijkmnpqrstuvwxyz"; // no l, o

@@ -1579,6 +1579,12 @@ export type Database = {
         };
         Returns: string;
       };
+      rpc_record_password_reset: {
+        Args: {
+          p_target_id: string;
+        };
+        Returns: unknown;
+      };
       rpc_record_payment: {
         Args: {
           p_bill_id: string;

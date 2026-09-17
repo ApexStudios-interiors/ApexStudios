@@ -55,3 +55,13 @@ export const createClientLoginSchema = z.object({
   fullName: z.string().trim().max(120).optional(),
 });
 export type CreateClientLoginInput = z.infer<typeof createClientLoginSchema>;
+
+/**
+ * Reset password (D52). Only the target's id: the password is generated on the
+ * server, and the target's role is read from the database, never taken from
+ * the request.
+ */
+export const resetPasswordSchema = z.object({
+  userId: z.uuid(),
+});
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

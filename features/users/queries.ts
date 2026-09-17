@@ -8,6 +8,8 @@ export type UserRow = {
   /** Email, else phone — the prototype's single Contact column. */
   contact: string | null;
   role: Role;
+  email: string | null;
+  isActive: boolean;
 };
 
 /**
@@ -19,7 +21,7 @@ export async function listUsers(): Promise<UserRow[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, email, phone, role")
+    .select("id, full_name, email, phone, role, is_active")
     .is("deleted_at", null)
     .order("full_name", { ascending: true });
   if (error) throw new Error(error.message);
@@ -28,5 +30,7 @@ export async function listUsers(): Promise<UserRow[]> {
     fullName: p.full_name,
     contact: p.email ?? p.phone,
     role: p.role,
+    email: p.email,
+    isActive: p.is_active,
   }));
 }

@@ -1,6 +1,8 @@
 import { requireRole } from "@/lib/auth/session";
 import { listUsers } from "@/features/users/queries";
 import { UserRoleSelect } from "@/features/users/components/UserRoleSelect";
+import { ResetPasswordButton } from "@/features/users/components/ResetPasswordButton";
+import { passwordResetRefusal } from "@/features/users/service";
 import { initials } from "@/lib/logic";
 import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { Button } from "@/components/ui/button";
@@ -19,9 +21,15 @@ import { td, th } from "@/components/ui/table";
  * revoke sessions (build/03-auth-and-rbac.md §2.10's deactivateUser), which is
  * not built — the prototype's "Removed" toast against a real account would
  * claim something that did not happen.
+ *
+ * Reset password (D52) is offered per row where passwordResetRefusal allows it
+ * and disabled, with the reason as its title, where it does not. The server
+ * action and the database check the same rule again.
  */
 export default async function UsersPage() {
-  await requireRole(["owner", "admin"]);
+  const session = await requireRole(["owner", "admin"]);
+  // The REAL role, as resetUserPassword uses: a preview never changes who may reset whom.
+  const actor = { userId: session.userId, role: session.role };
   const users = await listUsers();
 
   return (
@@ -64,9 +72,17 @@ export default async function UsersPage() {
                   <UserRoleSelect role={u.role} />
                 </td>
                 <td className={td} style={{ textAlign: "right" }}>
-                  <Button variant="ghost" size="sm" disabled title="Removing a user is not available yet.">
-                    Remove
-                  </Button>
+                  <div className="flex justify-end gap-1">
+                    <ResetPasswordButton
+                      userId={u.id}
+                      fullName={u.fullName}
+                      // listUsers returns live rows only, so deletedAt is null here.
+                      refusal={passwordResetRefusal(actor, { ...u, deletedAt: null })}
+                    />
+                    <Button variant="ghost" size="sm" disabled title="Removing a user is not available yet.">
+                      Remove
+                    </Button>
+                  </div>
                 </td>
               </tr>
             ))}

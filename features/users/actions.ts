@@ -4,11 +4,12 @@ import "server-only";
 import { revalidatePath, updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminAction } from "@/lib/safe-action";
-import { createAuthUser, deleteAuthUser } from "@/lib/auth/admin";
+import { createAuthUser, deleteAuthUser, setAuthPassword } from "@/lib/auth/admin";
+import { ForbiddenError } from "@/lib/auth/session";
 import type { Role } from "@/lib/rbac/roles";
 import { insertProjectMember } from "@/features/projects/members";
-import { addUserSchema, createClientLoginSchema } from "./schema";
-import { provisionAccount, type ProvisionSteps } from "./service";
+import { addUserSchema, createClientLoginSchema, resetPasswordSchema } from "./schema";
+import { provisionAccount, resetAccountPassword, type ProvisionSteps } from "./service";
 
 /**
  * build/03-auth-and-rbac.md §2.10's inviteUser, reshaped by the owner
@@ -127,6 +128,75 @@ export const createClientLogin = adminAction
     return {
       status: "created" as const,
       username: parsedInput.username,
+      email: result.email,
+      password: result.password,
+    };
+  });
+
+/**
+ * Reset password (D52): the only recovery path since D51 removed every
+ * self-service one, and so also an account-takeover primitive. Three checks,
+ * all on the server:
+ *
+ *  1. adminAction — the caller's REAL role (requireRole ignores the D20
+ *     preview cookie) is owner or admin.
+ *  2. passwordResetRefusal (./service.ts) — the target is read through the
+ *     caller's RLS-scoped client, so a user in another org is simply not
+ *     found; then deleted, self, admin → owner/admin, and deactivated are
+ *     refused against `ctx.session.role`, never `ctx.session.impersonating`.
+ *  3. rpc_record_password_reset — the database re-checks the same rule
+ *     against the JWT's role and writes the audit_log row, before the
+ *     password changes. If the database refuses, nothing is changed.
+ *
+ * Then GoTrue sets the new password and deletes every session the user has
+ * (lib/auth/admin.ts setAuthPassword). The password is returned once, here,
+ * and nowhere else: not logged, not in any table or audit row, not in an
+ * error, and no revalidation is needed because nothing on the page changes.
+ */
+export const resetUserPassword = adminAction
+  .inputSchema(resetPasswordSchema)
+  .action(async ({ parsedInput, ctx }) => {
+    const supabase = await createClient();
+    const result = await resetAccountPassword(
+      {
+        loadTarget: async (userId) => {
+          const { data, error } = await supabase
+            .from("profiles")
+            .select("id, role, is_active, deleted_at, email")
+            .eq("id", userId)
+            .maybeSingle();
+          if (error) throw new Error(error.message);
+          return data
+            ? {
+                id: data.id,
+                role: data.role,
+                isActive: data.is_active,
+                deletedAt: data.deleted_at,
+                email: data.email,
+              }
+            : null;
+        },
+        recordReset: async (userId) => {
+          const { error } = await supabase.rpc("rpc_record_password_reset", { p_target_id: userId });
+          // The RPC raises "FORBIDDEN: …" / "NOT_FOUND: …", which mapDomainError
+          // turns into user copy. Its messages never carry a password.
+          if (error) throw new Error(error.message);
+        },
+        setAuthPassword,
+      },
+      // The REAL role. ctx.session.impersonating is deliberately not consulted.
+      { userId: ctx.session.userId, role: ctx.session.role },
+      parsedInput.userId
+    );
+
+    if (result.status === "refused") {
+      if (result.reason === "not_found") throw new Error("NOT_FOUND: user");
+      throw new ForbiddenError(`resetUserPassword: ${result.reason}`);
+    }
+
+    return {
+      status: "reset" as const,
+      username: result.username,
       email: result.email,
       password: result.password,
     };

@@ -1518,8 +1518,9 @@ owner/admin.
 
 - **The app sends no auth email at all.** Nothing calls `signInWithOtp`, an invite or a recovery
   email, so SMTP and the 2-emails-per-hour limit stop being a concern for signing in.
-- **There is no self-service password reset.** Someone who loses a password needs an owner/admin,
-  and resetting one is not built yet.
+- **There is no self-service password reset.** Someone who loses a password needs an owner/admin.
+  _Amended 2026-09-17:_ that path now exists — **Reset password** on the Users page, with the
+  who-may-reset-whom rule and session revocation recorded in **D52**.
 - `NEXT_PUBLIC_SITE_URL` is no longer read by the application and no longer needs to be in Supabase's
   Redirect URLs, but it is **still required** by `lib/env.client.ts` and `scripts/check-env.mjs`. Left
   in place deliberately: dropping a required variable from the schema is a separate change, and a
@@ -1527,6 +1528,74 @@ owner/admin.
 - D19 (magic link for clients) and D48's "Clients keep the magic link" are superseded.
 - `docs/build/03-auth-and-rbac.md` and the other build files still describe the magic link. As with
   D50, they are the dated record and are left as written.
+
+### D52 — Owner/admin password reset: who may reset whom, and sessions revoked
+
+**Question:** D51 removed every self-service recovery path, so a user who loses a password is locked
+out until someone runs a service-role script. A reset button fixes that, but it is also an
+account-takeover primitive: whoever can reset a password can sign in as that account. Who may reset
+whom, and what happens to the account's existing sessions?
+**Decided:** 2026-09-17 by Voola — **owner/admin reset from the Users page, with the rule below
+enforced on the server and in the database, and every session the user has revoked in the same
+step.**
+**Answer:**
+
+- **Who may reset whom** (`passwordResetRefusal`, `features/users/service.ts`):
+
+  | Caller | owner | admin | site | client | themselves |
+  | ------ | ----- | ----- | ---- | ------ | ---------- |
+  | owner  | yes (another owner) | yes | yes | yes | **no** |
+  | admin  | **no** | **no** | yes | yes | **no** |
+  | site / client | no | no | no | no | no |
+
+  An admin may not reset the owner or another admin: resetting the owner's password and signing in
+  as the owner is privilege escalation, and admin → admin is the same move sideways. Nobody resets
+  their own password with it — they are already signed in, and it would sign them out everywhere.
+  Deactivated and soft-deleted users are refused too.
+- **Enforced three times, all server-side.** (1) `adminAction`, on the real role. (2)
+  `resetUserPassword` reads the target through the caller's RLS-scoped client — a user in another
+  org is simply not found — and compares it with `session.role`, the **real** role. The D20 preview
+  (`session.impersonating`) is never consulted, so an owner previewing as client is still owner and a
+  preview never widens anyone's rights. (3) `rpc_record_password_reset` (migration
+  `20260917110001`) re-checks the same rule in Postgres against the JWT's `app_role` before anything
+  changes. The Users page disables the button to match, with the reason as its tooltip; that is a
+  courtesy, not the control.
+- **The password** comes from the existing `generatePassword` (20 characters, CSPRNG, unbiased), is
+  sent only to GoTrue (which stores a bcrypt hash), and is returned once in the action's success
+  result for the same `CreatedCredentialsDialog` Add User uses. It is never logged, never written to a
+  table or the audit log, and never part of an error.
+- **Audit:** `rpc_record_password_reset` writes `audit_log` through `fn_audit` — `entity_type
+  'profile'`, `entity_id` the target, `action 'password_reset'`, `actor_id`/`actor_role`/`created_at`
+  from the caller, and `after = {"target_role": …}`. No password material; the function has no
+  password argument. The row is written when the reset is authorised, just **before** GoTrue is
+  called, so no reset is ever unaudited; if GoTrue then fails, the admin sees an error and the row
+  records an attempt that did not take effect.
+- **Sessions are revoked, with no extra SQL.** `auth.admin.signOut` takes a JWT, not a user id, so it
+  cannot do this, and GoTrue has no "sign out user by id" admin route. It does not need one: the
+  password is set with `PUT /admin/users/{id}` (`auth.admin.updateUserById`), and GoTrue's
+  `adminUserUpdate` calls `models.User.UpdatePassword(tx, nil)`, which with a nil session calls
+  `models.Logout` — `DELETE FROM sessions WHERE user_id = ?` — in the same transaction as the password
+  change. `auth.refresh_tokens.session_id` references `auth.sessions` `on delete cascade`, and the
+  newer HMAC refresh-token state lives on the session row itself. So no refresh token survives. A
+  hand-written `security definer` delete from `auth.sessions` was considered and not added: it would
+  duplicate what GoTrue already does atomically, run in a separate transaction after the password
+  change, and depend on the `postgres` role keeping DML rights on Supabase's managed `auth` schema.
+  Verified against the supabase/auth source (`internal/api/admin.go`, `internal/models/user.go`,
+  `internal/models/sessions.go`, `migrations/20220811173540_add_sessions_table.up.sql`), not against
+  a live database.
+- **The access token already issued.** A JWT stays cryptographically valid until it expires
+  (`jwt_expiry = 1800`, 30 minutes). Inside the app it is rejected at once: `middleware.ts` calls
+  `getUser()`, and GoTrue's `/user` loads the JWT's `session_id` and answers `session_not_found` when
+  the row is gone, so every page and Server Action request redirects to `/login`. Only a caller using
+  the stolen access token directly against PostgREST, bypassing the app, keeps RLS-scoped access for
+  the rest of that window.
+
+**Consequence:**
+
+- `setUserRole` and `deactivateUser` still need their own sign-out design: GoTrue deletes sessions on
+  a password change, not on a role or profile change, so this mechanism does not carry over.
+- The migration has to be applied before the button works. Until then the audit RPC call fails, and
+  because it runs first, the password is not changed.
 
 ---
 
