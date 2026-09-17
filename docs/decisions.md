@@ -1208,6 +1208,43 @@ control: an owner/admin account is now protected by its password alone, and thos
 internal cost and margin. Strong, unique passwords for owner/admin, and changing the seeded
 `apex-dev-only` password on every production account (`docs/open-issues.md` #4), matter more as a
 result. Supabase's own sign-in rate limits (`supabase/config.toml` `[auth.rate_limit]`) still apply.
+
+---
+
+### D49 — One Supabase project, which is production; automatic CI paused
+
+**Question:** There is exactly one Supabase project. Vercel Production, `.env.local` and CI all point
+at it, and CI's `migrations · seed · RLS · drift` job ran `supabase db push`, the **seed**, the pgTAP
+suite and the integration tests against it on **every pull request** — writing demo and test rows
+into the live database. Split it into a second (`apex-prod`) project, or something else?
+**Answered:** 2026-09-17 by Voola
+**Answer:** **One Supabase project, and it is production.** No second project is to be created. The
+CI/CD pipeline is not needed yet and standing it up safely would take longer than it is worth right
+now, so **automatic CI is paused** rather than repaired: `.github/workflows/ci.yml` keeps every job
+it had but is triggered by `workflow_dispatch` only. The separate-project work proposed as PR #25 is
+superseded and is not merged.
+**Consequence:**
+
+- Nothing runs `db push`, the seed or the integration suite on a pull request any more, which is what
+  removes the immediate danger. Nothing else about the workflow changed — restoring the
+  `pull_request` and `push` triggers is the whole of re-enabling it, and must not happen until the
+  `database` job has a database that is not the live project.
+- **The durable protection is in the scripts, not in CI.** `scripts/lib/db-target.mjs` holds one
+  production-ref guard, used by `db:reset`, `db:seed`, `db:bootstrap`, the `spike:d15` script, the
+  pgTAP runner (`pnpm test:rls`) and the integration suite's setup. Each refuses when its target
+  resolves to `SUPABASE_PROD_PROJECT_REF` — and, new here, refuses on a non-interactive run when that
+  variable is absent, because an unset guard used to mean no guard at all. The integration suite also
+  checks `NEXT_PUBLIC_SUPABASE_URL`, since its supabase-js sessions write through the API, not the
+  database URL.
+- With CI off, `pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build` run
+  locally is the only gate before a push. `tests/db-target.test.ts` is what keeps the guard honest.
+- Unaffected, deliberately: `backup-nightly.yml`, `jobs-drain.yml` and `jobs-reap.yml`. Those are
+  production operations, not CI, and keep their schedules.
+- D10 (a Supabase preview branch per PR) is not withdrawn but is not in effect: preview branching
+  needs a paid plan and a `SUPABASE_ACCESS_TOKEN` that this repository does not have. Until one
+  exists, "CI has its own database" remains unfunded, which is precisely why CI is paused instead of
+  re-pointed.
+
 ---
 
 ### Findings from Build 09 (Billing)
@@ -1350,20 +1387,88 @@ ran across the complete diff. Fixed:
   `data.bills` for "bills pending" — the same pre-existing, cross-domain gap Build 08 documented
   for its own equivalent Approvals badge, not something this build introduced or is positioned to
   fix in isolation.
-- The `bill.pdf` job's idempotency key (`${billId}:submitted`) doesn't vary by `revision`, so a
+- ~~The `bill.pdf` job's idempotency key (`${billId}:submitted`) doesn't vary by `revision`, so a
   bill that is submitted, rejected, and resubmitted keeps the same key and never regenerates its
   PDF — the client would certify against a stale, pre-correction document. `RecordPaymentDialog`'s
   own idempotency key is also never regenerated after a failed submit attempt (unlike
   `BillingAdmin`'s create-bill flow, which does, per its own documented fix above). Both are real,
-  narrow-trigger gaps worth a follow-up.
-- `BillingAdmin`'s "Billable Now" table is never refreshed after a successful `createBill` — the
+  narrow-trigger gaps worth a follow-up.~~ **Fixed 2026-09-17** (`fix/billing-correctness`). The
+  key is now `billPdfJobKey(billId, revision)` (`features/billing/pdf.ts`, 100% branch), and the
+  handler's own "already generated?" check is keyed on `billPdfFileName(bill_no, revision)` read
+  from the bill row, so a resubmission escapes both `jobs_idem_uq` and the handler's early return
+  while the superseded document stays on the bill as the record of what the client was shown
+  before. No figure is recomputed: a regenerated PDF re-renders the columns `rpc_create_bill`
+  snapshotted, which stay immutable from `submitted` onward; what it picks up is the live half of
+  the document (Apex's and the client's own GSTIN/PAN/address/bank block), which is usually why a
+  bill was rejected in the first place. `RecordPaymentDialog` now regenerates its key after every
+  attempt, exactly as `BillingAdmin` does.
+- ~~`BillingAdmin`'s "Billable Now" table is never refreshed after a successful `createBill` — the
   just-billed rows stay visible and selectable until the next full page load, so re-selecting and
-  submitting again produces a confusing `ALREADY_BILLED` the admin didn't cause.
+  submitting again produces a confusing `ALREADY_BILLED` the admin didn't cause.~~ **Fixed
+  2026-09-17**: the effect's fetch is now a named `loadBillable`, re-run after a successful create
+  alongside `router.refresh()` — the refresh only re-renders the server components, never this
+  component's own client-side fetch (the underlying "it shouldn't be a client-side fetch at all"
+  gap, two bullets up, is untouched and still open).
+
+**Investigated and found not to be a gap (2026-09-17):** "recording a payment leaves a stale bill
+PDF the client then certifies against." It cannot happen, in two independent ways.
+`rpc_record_payment` refuses any bill not already `certified` or `paid`, so certification strictly
+precedes the first payment — there is no order of events in which a client certifies after a
+payment. And a payment changes no figure the PDF renders: it inserts into `payments` (never a
+`paid_amount` column on `bills`) and at most flips `status`/`paid_at`, while `BillPdfData` carries
+no payment, balance or outstanding field at all. Regenerating a PDF on payment would have been
+motion against AGENTS.md's own "bills are immutable from `submitted` onward" for no gain, so it
+was deliberately not done.
 - Migrations `20260916090003`/`090005`/`090007`/`090008` are four successive full rewrites of
   `rpc_create_bill`, each correcting a real bug found after the previous one shipped — the
   intended trail per AGENTS.md database rule 1 ("never edit an already-applied migration"), not
   squashed for a cleaner history, since by the time each bug was found the previous migration had
   already been applied to the shared `apex-dev` project.
+
+---
+
+### D50 — Sentry removed entirely
+
+**Question:** Sentry was wired in Build 01 §3.13 but has never reported an event: no organisation,
+DSN or auth token was ever created (`progress-tracker.md`'s own blocker list, raised 2026-09-09), so
+`enabled` evaluated to `false` in every environment and `withSentryConfig` uploaded nothing. Create
+the organisation, or drop it?
+**Decided:** 2026-09-17 by Voola — **drop it. Out of scope for v1.** No third-party error-tracking
+service.
+**Answer:** `@sentry/nextjs` is gone from `package.json` and the lockfile; `sentry.server.config.ts`,
+`sentry.edge.config.ts`, `instrumentation-client.ts` and `instrumentation.ts` are deleted;
+`next.config.ts` exports the plain config instead of `withSentryConfig`; `SENTRY_DSN` is out of
+`lib/env.ts`, `scripts/check-env.mjs` and `.env.example`; and the four `Sentry.capture*` call sites
+(`lib/safe-action.ts`, `lib/jobs/runner.ts`, `lib/jobs/handlers/inventory.reconcile.ts`,
+`app/(app)/error.tsx`) are removed. Recorded as ADR-018 in `architecture.md` §15.
+
+**Where an error goes now — nothing silently swallows one.** A failed job still writes its message
+to `jobs.last_error` through `rpc_finish_job`, which is what the Admin ops page reads and what
+`inventory.reconcile`'s deliberate throw relies on; that path is untouched. An unmapped Server
+Action error is now `console.error`-ed with the same `request_id` the user is shown, which is new —
+`mapDomainError` previously handed the error to Sentry and to nothing else, so removing the call
+without replacing it would have made the reference id the user quotes unfindable. `app/(app)/error.tsx`
+adds no logging of its own: React already logs a client error to the console, and a server error is
+logged by Next.js with the `digest` the page displays.
+
+**Consequence — recorded, not hidden.** There is no error aggregation, no error-rate alert (that row
+is removed from `architecture.md` §9.2 rather than left as a promise nothing keeps), no release
+tagging and no source-map upload, so a production stack trace reads against the deployed bundle.
+This is a real loss of a signal — it is affordable only because the signal was never actually
+switched on.
+
+**Kept deliberately:** `lib/observability/redact.ts` and its 11 tests. It has no caller now — the
+Sentry `beforeSend` hooks were its only ones — but `architecture.md` §6.4's "never a monetary value
+in logs or analytics" is a data-classification control that outlives any one sink, and
+`build/10-hardening-and-launch.md` §2.4 still requires the redaction test to exist. Deleting it
+would mean rewriting it the day an error sink of any kind is added.
+
+**Not touched:** `docs/build/01…09` are the dated record of how the system was built and still
+describe wiring Sentry. They are history, not instructions, and are left as written — as is
+`01-hld.md` §17's Phase 0 plan, which also still says "Next.js 15" and "shadcn". The one exception
+is `build/10-hardening-and-launch.md`: it is a to-do list nobody has worked through yet, so its
+Sentry setup and go-live checklist items would have been read as instructions. Those are struck
+out or removed; its redaction-test requirement stays, now worded without a vendor.
 
 ---
 

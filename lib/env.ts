@@ -44,8 +44,8 @@ const serverSchema = z.object({
   // fails a Vercel build. Set, the app can read the backups and provably
   // cannot write them.
   //
-  // Same `"" -> undefined` preprocess as SENTRY_DSN below, and for the same
-  // reason: a blank line in a .env file is an empty string, not undefined, so
+  // The `"" -> undefined` preprocess below is there because a blank line in a
+  // .env file is an empty string, not undefined, so
   // `R2_BACKUP_ACCESS_KEY_ID=` left as a placeholder would fail `.min(1)` and
   // take the whole app down rather than reading as "not configured".
   R2_BACKUP_ACCESS_KEY_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
@@ -58,10 +58,6 @@ const serverSchema = z.object({
   // HMAC key only — never sent anywhere, never used for anything but proving
   // this application issued the cookie it is currently reading back.
   SESSION_SECRET: z.string().min(32),
-
-  // A blank line in .env is an empty string, not undefined. Treat it as absent
-  // so `SENTRY_DSN=` reads as "Sentry off" rather than "malformed URL".
-  SENTRY_DSN: z.preprocess((v) => (v === "" ? undefined : v), z.url().optional()),
 
   // build/09-billing.md §4.8 / architecture.md §10.2: Billing ships dark
   // until a CA has reviewed a generated RA bill PDF and signed off in

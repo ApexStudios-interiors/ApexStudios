@@ -2,6 +2,7 @@ import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { connect, SEED } from "./db";
 import { one } from "./expect-row";
+import { billPdfJobKey } from "@/features/billing/pdf";
 
 /**
  * build/06-files-jobs-daily-updates.md §5. AGENTS.md database rule 8: RLS
@@ -95,6 +96,50 @@ describe("rpc_enqueue_job", () => {
     const site = await signedInAs("ravi@beapex.in");
     const { error } = await site.rpc("rpc_enqueue_job", { p_name: "backup.nightly", p_payload: {} });
     expect(error?.message).toMatch(/FORBIDDEN/);
+  });
+
+  /**
+   * The other side of T-24, and the regression this asserts is real: a bill
+   * rejected by the client goes back to draft at `revision + 1`
+   * (`rpc_transition_bill`), and the admin resubmits it. Keyed on
+   * `${billId}:submitted` — no revision — the resubmission hit
+   * `jobs_idem_uq` and produced NO second job, so the PDF the client
+   * certified against was still the pre-rejection one. `billPdfJobKey`
+   * (features/billing/pdf.ts) is what `features/billing/actions.ts` now
+   * passes; this proves it actually escapes the dedup the old key hit.
+   */
+  it("a resubmitted bill's bill.pdf key enqueues a second job, where the revision-blind key did not", async () => {
+    const admin = await signedInAs("suresh@beapex.in");
+    const billId = crypto.randomUUID();
+
+    const enqueueWith = async (idempotencyKey: string) => {
+      const { data, error } = await admin.rpc("rpc_enqueue_job", {
+        p_name: "bill.pdf",
+        p_payload: { billId },
+        p_idempotency_key: idempotencyKey,
+      });
+      expect(error).toBeNull();
+      if (data) cleanupJobIds.push(data);
+      return data as string;
+    };
+
+    // The pre-fix key: submit, reject, resubmit all collapse onto one job.
+    const blindFirst = await enqueueWith(`${billId}:submitted`);
+    const blindSecond = await enqueueWith(`${billId}:submitted`);
+    expect(blindSecond).toBe(blindFirst);
+
+    // The fix: revision 1's submission and revision 2's resubmission are
+    // separate jobs, while a retried enqueue of either is still just one.
+    const revisionOne = await enqueueWith(billPdfJobKey(billId, 1));
+    const revisionOneAgain = await enqueueWith(billPdfJobKey(billId, 1));
+    const revisionTwo = await enqueueWith(billPdfJobKey(billId, 2));
+    expect(revisionOneAgain).toBe(revisionOne);
+    expect(revisionTwo).not.toBe(revisionOne);
+    expect(revisionTwo).not.toBe(blindFirst);
+
+    const rows = await sql`select count(*)::int as n from public.jobs
+                            where name = 'bill.pdf' and payload->>'billId' = ${billId}`;
+    expect(one(rows, "bill.pdf job count").n).toBe(3);
   });
 });
 

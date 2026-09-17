@@ -31,7 +31,6 @@ const server = z.object({
   R2_BACKUP_SECRET_ACCESS_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
   CRON_SECRET: z.string().min(32),
   SESSION_SECRET: z.string().min(32),
-  SENTRY_DSN: z.preprocess((v) => (v === "" ? undefined : v), z.url().optional()),
 });
 
 const client = z.object({

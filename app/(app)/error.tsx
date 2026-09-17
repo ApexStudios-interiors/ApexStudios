@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useId } from "react";
-import * as Sentry from "@sentry/nextjs";
+import { useId } from "react";
 
 /**
- * code-standards §8: an unmapped exception becomes a generic message plus a
- * Sentry event, with the request id shown to the user — never a raw error, a
- * stack trace, or a blank page.
+ * code-standards §8: an unmapped exception becomes a generic message with the
+ * request id shown to the user — never a raw error, a stack trace, or a blank
+ * page. The error itself stays server-side: Next.js logs it with the same
+ * `digest` that is displayed here, which is what a support conversation
+ * searches the Vercel logs by.
  */
 export default function AppError({
   error,
@@ -17,10 +18,6 @@ export default function AppError({
 }) {
   const fallbackId = useId();
   const requestId = error.digest ?? fallbackId;
-
-  useEffect(() => {
-    Sentry.captureException(error, { extra: { requestId } });
-  }, [error, requestId]);
 
   return (
     <div className="flex flex-col items-center justify-center text-center gap-3 py-24">

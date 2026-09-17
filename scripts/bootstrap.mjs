@@ -12,6 +12,7 @@
  */
 import { config } from "dotenv";
 import { spawnSync } from "node:child_process";
+import { assertNotProduction } from "./lib/db-target.mjs";
 
 config({ path: ".env.local", quiet: true });
 
@@ -20,11 +21,9 @@ if (!url || url.includes("placeholder")) {
   console.error("✗ DATABASE_URL is missing or still a placeholder in .env.local");
   process.exit(1);
 }
-const prod = process.env.SUPABASE_PROD_PROJECT_REF?.trim();
-if (prod && !prod.includes("placeholder") && url.includes(prod)) {
-  console.error("✗ DATABASE_URL points at production. Refusing.");
-  process.exit(1);
-}
+// Migrations, the spike and the seed, in one command — the most destructive
+// entry point there is. Same shared guard as db:reset and db:seed.
+assertNotProduction([url, process.env.NEXT_PUBLIC_SUPABASE_URL], "the Build 02 bootstrap");
 
 const steps = [
   { name: "Inspect the database", cmd: ["pnpm", "db:inspect"], soft: true },

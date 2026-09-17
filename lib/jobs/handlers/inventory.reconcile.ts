@@ -1,5 +1,4 @@
 import "server-only";
-import * as Sentry from "@sentry/nextjs";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -11,8 +10,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
  *
  * "Do not silently correct the cache" (build §5): a drift means an
  * un-ledgered mutation exists somewhere in the code, and overwriting the
- * evidence removes the only signal that the bug is there. This handler logs,
- * raises a Sentry event, and THROWS — landing the job in `failed` on the
+ * evidence removes the only signal that the bug is there. This handler logs
+ * every drifting item and THROWS — landing the job in `failed` on the
  * Admin ops page is the alert. The `inventory-drift.md` runbook (Build 10)
  * is what actually fixes a drift: find the un-ledgered write, post a
  * compensating `adjust` movement with a reason, then fix the code path.
@@ -29,11 +28,6 @@ export async function reconcileInventory(): Promise<void> {
       `inventory.reconcile: drift on "${d.name}" (${d.item_id}) — cache=${d.cached_qty}, ledger=${d.ledger_qty}`
     );
   }
-
-  Sentry.captureMessage(`inventory.reconcile: drift on ${data.length} item(s)`, {
-    level: "error",
-    extra: { items: data },
-  });
 
   throw new Error(
     `DRIFT_DETECTED: ${data.length} inventory item(s) disagree with their own ledger — see the inventory-drift.md runbook`

@@ -141,17 +141,13 @@ visibility.
 │  ┌────────────────────────────────────────────────────────────┐  │
 │  │ Domain services: billing engine, progress rollup, RBAC     │  │
 │  └────────────────────────────────────────────────────────────┘  │
-└──┬────────────────┬───────────────────┬──────────────────┬───────┘
-   │                │                   │                  │
-┌──▼────────────┐ ┌─▼──────────────┐ ┌──▼────────────┐ ┌───▼────────┐
-│ Supabase      │ │ Cloudflare R2  │ │ Vercel Cron   │ │ Sentry     │
-│ Postgres+Auth │ │ private bucket │ │ + jobs table  │ │ errors     │
-│ RLS + RPC     │ │ presigned URLs │ │ (in Postgres) │ │            │
-└───────────────┘ └────────────────┘ └───────────────┘ └────────────┘
-                                              │
-                                     ┌────────▼─────────┐
-                                     │ Sentry (errors)  │
-                                     └──────────────────┘
+└──┬────────────────┬───────────────────┬─────────────────────────┘
+   │                │                   │
+┌──▼────────────┐ ┌─▼──────────────┐ ┌──▼────────────┐
+│ Supabase      │ │ Cloudflare R2  │ │ Vercel Cron   │
+│ Postgres+Auth │ │ private bucket │ │ + jobs table  │
+│ RLS + RPC     │ │ presigned URLs │ │ (in Postgres) │
+└───────────────┘ └────────────────┘ └───────────────┘
 ```
 
 ### 4.2 Decision: there is no separate Node.js backend service
@@ -697,7 +693,7 @@ handler on request. One less moving part.
 | Retry | Automatic, backed off | `attempts`, `max_attempts`, exponential `run_after` |
 | Dead letter | DLQ with replay UI | `status='failed'` rows, listed on an Admin ops page, retryable with a button |
 | Timeout recovery | Automatic | `lease_until` + hourly reaper |
-| Observability | Run history dashboard | The `jobs` table itself, plus Sentry on handler exceptions |
+| Observability | Run history dashboard | The `jobs` table itself — `last_error` on every failed row, listed on the Admin ops page |
 | Concurrency | Managed | `FOR UPDATE SKIP LOCKED` |
 
 That is roughly 150 lines of code in `lib/jobs`, written once. It is a fair trade at this
@@ -790,8 +786,9 @@ Production additions:
 
 ## 14. Observability
 
-- **Sentry** for errors, with `user.id` and `role` tagged on every event (never PII beyond
-  the id).
+- **No error-tracking service** (D50). Errors are logged server-side with the `request_id` the
+  user is shown; a failed job carries its own `last_error` on the Admin ops page. A log line
+  never carries PII beyond the user id.
 - **Structured audit log** in Postgres: every mutation writes `{actor, entity, action,
   before, after, at}` in the same transaction as the change. This is queryable by Admin from
   a Users → Audit screen. For a system where the client's sign-off is the commercial

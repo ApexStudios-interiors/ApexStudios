@@ -1,5 +1,31 @@
 name: CI
 
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │ AUTOMATIC CI IS PAUSED — owner decision, 2026-09-17 (docs/decisions.md    │
+# │ D49). This workflow no longer runs on `pull_request` or on `push`; it can │
+# │ only be started by hand from the Actions tab (`workflow_dispatch`).       │
+# │                                                                          │
+# │ Why: there is exactly ONE Supabase project and it is production. The      │
+# │ `database` job below pushed migrations, ran the SEED and the integration  │
+# │ suite against `secrets.SUPABASE_DB_URL` — that one live project — on      │
+# │ every pull request, writing demo and test rows into production. Pausing   │
+# │ the automatic triggers stops that today; the durable protection is the    │
+# │ production-ref guard in `scripts/lib/db-target.mjs`, which every db:*     │
+# │ script, the pgTAP runner and the integration suite now refuse through.    │
+# │                                                                          │
+# │ Every job below is kept exactly as it was, deliberately: nothing here is  │
+# │ deleted, only un-triggered.                                              │
+# │                                                                          │
+# │ TO RE-ENABLE: restore the two triggers (`pull_request:` and               │
+# │ `push: branches: [main]`) in the `on:` block — but NOT before the         │
+# │ `database` job has a database of its own that is not the live project.    │
+# │ Until CI runs again, `pnpm typecheck && pnpm lint && pnpm format:check &&  │
+# │ pnpm test && pnpm build`, run locally, is the only gate.                  │
+# │                                                                          │
+# │ This pause covers CI only. `backup-nightly.yml`, `jobs-drain.yml` and     │
+# │ `jobs-reap.yml` are production operations and keep their schedules.       │
+# └──────────────────────────────────────────────────────────────────────────┘
+#
 # docs/architecture.md §10.1. The full pipeline is:
 #
 #   install → typecheck → lint → secret scan → unit tests → build
@@ -31,10 +57,11 @@ name: CI
 # │ docs/architecture.md §10.1, docs/ai-workflow-rules.md §8.                │
 # └──────────────────────────────────────────────────────────────────────────┘
 
+# Manual only, by the decision recorded at the top of this file. The
+# `pull_request:` and `push: branches: [main]` triggers that used to live here
+# are what made every PR run the `database` job against the live project.
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch: {}
 
 concurrency:
   group: ci-${{ github.ref }}

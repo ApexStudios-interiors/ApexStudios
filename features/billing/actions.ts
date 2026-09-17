@@ -23,6 +23,7 @@ import {
   type BillableNowLine,
   type BillDetail,
 } from "./queries";
+import { billPdfJobKey } from "./pdf";
 
 /**
  * build/09-billing.md §4.4. `rpc_create_bill`, `rpc_transition_bill` and
@@ -32,7 +33,7 @@ import {
  * nothing more (AGENTS.md's own layering rule).
  */
 
-type BillRow = { id: string; project_id: string; status: string; bill_no: string };
+type BillRow = { id: string; project_id: string; status: string; bill_no: string; revision: number };
 
 /**
  * build §4.8: "checked in the route layout and in every billing action."
@@ -103,8 +104,15 @@ async function transitionBillImpl(input: { billId: string; toStatus: BillTransit
   // draft -> submitted enqueues the PDF render, same place confirmUpload
   // enqueues attachment.thumbnail (application layer, not inside the RPC —
   // a security definer function has no session to enqueue as).
+  //
+  // The key is per (bill, revision), not per (bill, status): a client
+  // rejection sends the bill back to draft with `revision = revision + 1`,
+  // and the resubmission that follows must render its own document. Keyed on
+  // status alone it collided with the first submission under `jobs_idem_uq`
+  // and no second job was ever created — the client then certified against
+  // the pre-rejection PDF. See `./pdf.ts`.
   if (row.status === "submitted") {
-    await enqueue("bill.pdf", { billId: row.id }, { idempotencyKey: `${row.id}:${row.status}` });
+    await enqueue("bill.pdf", { billId: row.id }, { idempotencyKey: billPdfJobKey(row.id, row.revision) });
   }
 
   updateTag(`project:${row.project_id}`);
