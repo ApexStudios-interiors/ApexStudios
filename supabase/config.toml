@@ -312,10 +312,8 @@ auth_token = "env(SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN)"
 max_enrolled_factors = 10
 
 # Control MFA via App Authenticator (TOTP)
-# build/03-auth-and-rbac.md §0.1: enabled at the project level. Supabase has no
-# per-role MFA requirement — "required for owner and admin" is enforced in
-# application code (lib/auth/session.ts checks the session's AAL for those
-# roles), not by a project setting.
+# Enabled at the project level but unused: D48 removed the app's two-factor
+# requirement, and nothing in the app enrolls or challenges a factor.
 [auth.mfa.totp]
 enroll_enabled = true
 verify_enabled = true

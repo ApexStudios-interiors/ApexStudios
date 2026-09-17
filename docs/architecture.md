@@ -333,7 +333,7 @@ what was never serialised.
 | T9 | Stock double-count | Two supervisors tap Delivered | `for update` row lock + status re-check in RPC | Very low |
 | T10 | Tampering with history | Editing a decided approval or issued bill | Immutability constraints; append-only `audit_log`, `stock_movements`, `bill_events` | Low |
 | T11 | Malicious upload (script, oversized) | Presign abuse | MIME allowlist, size cap enforced at presign **and** verified by `HeadObject` at confirm; served with `Content-Disposition: attachment` | Low–Med — no AV scanning in v1 |
-| T12 | Credential stuffing on staff logins | Weak passwords | Supabase password policy, mandatory TOTP for `owner`/`admin` | Low |
+| T12 | Credential stuffing on staff logins | Weak passwords | Supabase password policy and sign-in rate limits; no two-factor (D48) | Medium |
 | T13 | Client magic-link interception | Shared/compromised mailbox | 10-min single-use link; OTP alternative | Med — inherent to email auth. Accepted. |
 | T14 | Denial of wallet (function/DB abuse) | Automated request flood | Vercel WAF rate limiting; per-action throttle on presign and auth endpoints | Med on free tier |
 | T15 | Insider misuse by Admin | Legitimate credentials | Full audit log, immutable, Admin-readable but not writable | Accepted — Admins are trusted by design |

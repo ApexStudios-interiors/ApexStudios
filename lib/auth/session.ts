@@ -11,10 +11,6 @@ export type Session = {
   role: Role;
   fullName: string;
   email: string | null;
-  /** Authenticator Assurance Level. "aal2" means the user completed an MFA
-   *  challenge this session. Used to require TOTP for owner/admin — see
-   *  requireRole below — since Supabase has no per-role MFA project setting. */
-  aal: "aal1" | "aal2";
   /** Set only for owner/admin previewing another role (D20). Reads are shaped
    *  by `impersonating.role`/`projectId`; writes always check the REAL role
    *  above, never this. */
@@ -94,7 +90,6 @@ export const getSession = cache(async (): Promise<Session | null> => {
 
   const role = claimRole ?? profile.role;
   const orgId = claimOrgId ?? profile.org_id;
-  const aal = (claims.aal === "aal2" ? "aal2" : "aal1") as "aal1" | "aal2";
 
   let impersonating: Session["impersonating"] = null;
   if (role === "owner" || role === "admin") {
@@ -109,7 +104,6 @@ export const getSession = cache(async (): Promise<Session | null> => {
     role,
     fullName: profile.full_name,
     email: profile.email ?? claims.email ?? null,
-    aal,
     impersonating,
   };
 });
@@ -123,25 +117,12 @@ export async function requireSession(): Promise<Session> {
 }
 
 /**
- * architecture.md T12: MFA required for owner/admin. Supabase has no per-role
- * project setting for this — it is enforced here, against the session's own
- * AAL, because that is the only place "this specific role" and "was MFA
- * actually completed this session" are both known at once.
- */
-function requireAalForRole(session: Session): void {
-  if ((session.role === "owner" || session.role === "admin") && session.aal !== "aal2") {
-    throw new ForbiddenError("MFA required for this role");
-  }
-}
-
-/**
  * Checks the REAL role, never the impersonated one — impersonation only ever
  * shapes reads (see getSession's doc comment and lib/safe-action.ts), so a
  * guard deciding whether an action may run must not be fooled by it.
  */
 export async function requireRole(roles: Role[]): Promise<Session> {
   const session = await requireSession();
-  requireAalForRole(session);
   if (!roles.includes(session.role)) throw new ForbiddenError(`requires one of: ${roles.join(", ")}`);
   return session;
 }
