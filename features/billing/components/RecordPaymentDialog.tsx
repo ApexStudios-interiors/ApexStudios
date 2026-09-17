@@ -7,11 +7,29 @@ import { recordPayment, getBillPaymentsSummaryForDialog } from "@/features/billi
 import { formatINR } from "@/lib/money";
 import { dmy } from "@/lib/logic";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { DatePicker } from "@/components/shared/DatePicker";
 
 /** UTC-anchored, like every other date-only field in this app. */
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
+
+/** Base UI's `Select.Value` renders the raw value ("neft") unless the root is
+ *  given `items` to resolve its label from. Order matches the old `<option>`s. */
+const PAYMENT_MODES = [
+  { value: "neft", label: "NEFT" },
+  { value: "rtgs", label: "RTGS" },
+  { value: "upi", label: "UPI" },
+  { value: "cheque", label: "Cheque" },
+] as const;
 
 /**
  * build/09-billing.md §4.5's own "Record Payment dialog." Part-payment is
@@ -123,26 +141,29 @@ export function RecordPaymentDialog({
           {error && <p className="text-xs text-destructive mt-1">{error}</p>}
         </div>
         <Field label="Paid On" htmlFor="rp-date">
-          <input
-            id="rp-date"
-            type="date"
-            className={inputClass}
-            value={paidOn}
-            onChange={(e) => setPaidOn(e.target.value)}
-          />
+          <DatePicker id="rp-date" value={paidOn} onChange={setPaidOn} required />
         </Field>
         <Field label="Mode" htmlFor="rp-mode">
-          <select
-            id="rp-mode"
-            className={inputClass}
+          <Select
+            items={PAYMENT_MODES}
             value={mode}
-            onChange={(e) => setMode(e.target.value as typeof mode)}
+            onValueChange={(v) => {
+              if (v) setMode(v);
+            }}
           >
-            <option value="neft">NEFT</option>
-            <option value="rtgs">RTGS</option>
-            <option value="upi">UPI</option>
-            <option value="cheque">Cheque</option>
-          </select>
+            <SelectTrigger id="rp-mode" className="w-full text-[13.5px] data-[size=default]:h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {PAYMENT_MODES.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </Field>
         <div className="col-span-2">
           <Field label="Reference No." htmlFor="rp-ref">

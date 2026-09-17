@@ -9,6 +9,18 @@ import { approvalTypeLabel } from "@/features/approvals/service";
 import { FileUploader } from "@/components/upload/FileUploader";
 import { IMAGE_MIME, MAX_IMAGE_BYTES, MAX_PHOTOS_PER_ENTITY } from "@/lib/r2/constraints";
 import { DialogShell, Field, inputClass, textareaClass } from "@/components/ui/DialogShell";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { DatePicker } from "@/components/shared/DatePicker";
+
+const selectTriggerClass = "w-full text-[13.5px] data-[size=default]:h-9";
+const typeItems = APPROVAL_TYPES.map((t) => ({ value: t, label: approvalTypeLabel(t) }));
 
 /**
  * build/08-approvals.md §2.4/§2.5. `approvalId` is generated once, up front
@@ -65,6 +77,13 @@ export function NewApprovalDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [packageId]);
 
+  const packageItems = packages?.map((p) => ({ value: p.id, label: p.name })) ?? [];
+  // A null-valued "None" item lets a chosen phase be cleared again, as the
+  // native select's blank option did; it maps back to "" in onValueChange.
+  const phaseItems: { value: string | null; label: string }[] = phases?.length
+    ? [{ value: null, label: "None" }, ...phases.map((p) => ({ value: p.id, label: p.name }))]
+    : [];
+
   async function onSubmit() {
     if (!item.trim()) {
       setError("Item is required");
@@ -110,64 +129,80 @@ export function NewApprovalDialog({
     >
       <div className="grid grid-cols-2 gap-3.5">
         <Field label="Package" htmlFor="na-package">
-          <select
-            id="na-package"
-            className={inputClass}
+          {/* State keeps "" for "no package" (the schema's own shape); Base UI
+              wants null, so map at the boundary in both directions. Until the
+              options load there is no label to resolve, so show the
+              placeholder rather than a pre-filled raw uuid. */}
+          <Select
+            items={packageItems}
             disabled={!packages}
-            value={packageId}
-            onChange={(e) => {
-              setPackageId(e.target.value);
+            value={packages ? packageId || null : null}
+            onValueChange={(v) => {
+              setPackageId(v ?? "");
               setPhaseId("");
             }}
           >
-            <option value="">{packages ? "Select a package" : "Loading…"}</option>
-            {packages?.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="na-package" className={selectTriggerClass}>
+              <SelectValue placeholder={packages ? "Select a package" : "Loading…"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {packageItems.map((p) => (
+                  <SelectItem key={p.value} value={p.value}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </Field>
         <Field label="Phase" htmlFor="na-phase">
-          <select
-            id="na-phase"
-            className={inputClass}
+          <Select
+            items={phaseItems}
             disabled={!phases?.length}
-            value={phaseId}
-            onChange={(e) => setPhaseId(e.target.value)}
+            value={phases?.length ? phaseId || null : null}
+            onValueChange={(v) => setPhaseId(v ?? "")}
           >
-            <option value="">
-              {phases?.length ? "None" : packageId ? "Loading…" : "Select a package first"}
-            </option>
-            {phases?.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="na-phase" className={selectTriggerClass}>
+              <SelectValue
+                placeholder={phases?.length ? "None" : packageId ? "Loading…" : "Select a package first"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {phaseItems.map((p) => (
+                  <SelectItem key={p.value ?? "none"} value={p.value}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </Field>
         <Field label="Type" htmlFor="na-type">
-          <select
-            id="na-type"
-            className={inputClass}
+          <Select
+            items={typeItems}
             value={type}
-            onChange={(e) => setType(e.target.value as ApprovalType)}
+            onValueChange={(v) => {
+              if (v) setType(v);
+            }}
           >
-            {APPROVAL_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {approvalTypeLabel(t)}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="na-type" className={selectTriggerClass}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {typeItems.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </Field>
         <Field label="Needed By" htmlFor="na-needed">
-          <input
-            id="na-needed"
-            type="date"
-            className={inputClass}
-            value={neededBy}
-            onChange={(e) => setNeededBy(e.target.value)}
-          />
+          <DatePicker id="na-needed" value={neededBy} onChange={setNeededBy} />
         </Field>
         <div className="col-span-2">
           <Field label="Item" htmlFor="na-item">
