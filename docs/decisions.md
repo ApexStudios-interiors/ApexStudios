@@ -1350,15 +1350,38 @@ ran across the complete diff. Fixed:
   `data.bills` for "bills pending" — the same pre-existing, cross-domain gap Build 08 documented
   for its own equivalent Approvals badge, not something this build introduced or is positioned to
   fix in isolation.
-- The `bill.pdf` job's idempotency key (`${billId}:submitted`) doesn't vary by `revision`, so a
+- ~~The `bill.pdf` job's idempotency key (`${billId}:submitted`) doesn't vary by `revision`, so a
   bill that is submitted, rejected, and resubmitted keeps the same key and never regenerates its
   PDF — the client would certify against a stale, pre-correction document. `RecordPaymentDialog`'s
   own idempotency key is also never regenerated after a failed submit attempt (unlike
   `BillingAdmin`'s create-bill flow, which does, per its own documented fix above). Both are real,
-  narrow-trigger gaps worth a follow-up.
-- `BillingAdmin`'s "Billable Now" table is never refreshed after a successful `createBill` — the
+  narrow-trigger gaps worth a follow-up.~~ **Fixed 2026-09-17** (`fix/billing-correctness`). The
+  key is now `billPdfJobKey(billId, revision)` (`features/billing/pdf.ts`, 100% branch), and the
+  handler's own "already generated?" check is keyed on `billPdfFileName(bill_no, revision)` read
+  from the bill row, so a resubmission escapes both `jobs_idem_uq` and the handler's early return
+  while the superseded document stays on the bill as the record of what the client was shown
+  before. No figure is recomputed: a regenerated PDF re-renders the columns `rpc_create_bill`
+  snapshotted, which stay immutable from `submitted` onward; what it picks up is the live half of
+  the document (Apex's and the client's own GSTIN/PAN/address/bank block), which is usually why a
+  bill was rejected in the first place. `RecordPaymentDialog` now regenerates its key after every
+  attempt, exactly as `BillingAdmin` does.
+- ~~`BillingAdmin`'s "Billable Now" table is never refreshed after a successful `createBill` — the
   just-billed rows stay visible and selectable until the next full page load, so re-selecting and
-  submitting again produces a confusing `ALREADY_BILLED` the admin didn't cause.
+  submitting again produces a confusing `ALREADY_BILLED` the admin didn't cause.~~ **Fixed
+  2026-09-17**: the effect's fetch is now a named `loadBillable`, re-run after a successful create
+  alongside `router.refresh()` — the refresh only re-renders the server components, never this
+  component's own client-side fetch (the underlying "it shouldn't be a client-side fetch at all"
+  gap, two bullets up, is untouched and still open).
+
+**Investigated and found not to be a gap (2026-09-17):** "recording a payment leaves a stale bill
+PDF the client then certifies against." It cannot happen, in two independent ways.
+`rpc_record_payment` refuses any bill not already `certified` or `paid`, so certification strictly
+precedes the first payment — there is no order of events in which a client certifies after a
+payment. And a payment changes no figure the PDF renders: it inserts into `payments` (never a
+`paid_amount` column on `bills`) and at most flips `status`/`paid_at`, while `BillPdfData` carries
+no payment, balance or outstanding field at all. Regenerating a PDF on payment would have been
+motion against AGENTS.md's own "bills are immutable from `submitted` onward" for no gain, so it
+was deliberately not done.
 - Migrations `20260916090003`/`090005`/`090007`/`090008` are four successive full rewrites of
   `rpc_create_bill`, each correcting a real bug found after the previous one shipped — the
   intended trail per AGENTS.md database rule 1 ("never edit an already-applied migration"), not

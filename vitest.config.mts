@@ -32,6 +32,11 @@ export default defineConfig({
       // this project deliberately tests through real sessions instead.
       thresholds: {
         "features/billing/service.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
+        // The bill PDF's revision-keyed job key and file name — pure, and on
+        // the billing side of the same 100%-branch bar for the same reason:
+        // getting either wrong means a client certifies against a superseded
+        // document.
+        "features/billing/pdf.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
         "lib/money/**": { branches: 100, functions: 100, lines: 100, statements: 100 },
       },
     },

@@ -38,7 +38,14 @@ export function RecordPaymentDialog({
   const [paidOn, setPaidOn] = useState(todayIso());
   const [mode, setMode] = useState<"neft" | "cheque" | "upi" | "rtgs">("neft");
   const [referenceNo, setReferenceNo] = useState("");
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  // Regenerated after every attempt, success or failure — the same fix
+  // BillingAdmin's own create-bill flow already carries. This dialog stays
+  // mounted after a failed submit (the error renders inside it), so a fixed
+  // key meant the retry reused the key of an attempt that may already have
+  // committed a payment row: `rpc_record_payment`'s own idempotency check
+  // would return the bill unchanged and the dialog would report success
+  // while the corrected amount was never recorded.
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,6 +78,7 @@ export function RecordPaymentDialog({
       idempotencyKey,
     });
     setPending(false);
+    setIdempotencyKey(crypto.randomUUID());
     if (!result?.data) {
       setError(result?.serverError ?? "Could not record this payment");
       return;

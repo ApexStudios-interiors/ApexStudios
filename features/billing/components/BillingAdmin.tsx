@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/context/AppContext";
 import { createBill, getBillableNowForAdmin, transitionBill } from "@/features/billing/actions";
@@ -55,8 +55,12 @@ export function BillingAdmin({
   // check, returning the first bill again instead of creating a new one.
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
-  useEffect(() => {
-    getBillableNowForAdmin(projectId)
+  // Named, so the create flow below can re-run the exact same fetch. The
+  // deps are `projectId` alone, as before: `toast` comes from AppContext and
+  // is not a stable reference, so including it would re-fetch on every
+  // provider render.
+  const loadBillable = useCallback(() => {
+    return getBillableNowForAdmin(projectId)
       .then((rows) => {
         setItems(rows);
         setSelKeys(new Set(rows.map((r) => r.sourceId)));
@@ -64,6 +68,10 @@ export function BillingAdmin({
       .catch(() => toast("Could not load Billable Now."));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
+
+  useEffect(() => {
+    void loadBillable();
+  }, [loadBillable]);
 
   const sel = useMemo(() => selKeys ?? new Set<string>(), [selKeys]);
   const selItems = useMemo(() => (items ?? []).filter((i) => sel.has(i.sourceId)), [items, sel]);
@@ -102,8 +110,18 @@ export function BillingAdmin({
       toast(result?.serverError ?? "Could not create this bill");
       return;
     }
+    // `router.refresh()` picks up createBill's own updateTag/revalidatePath
+    // for everything server-rendered on this page (the Bills table, the stat
+    // bar). Billable Now is this component's own client-side fetch and a
+    // refresh does not re-run it — without the reload the rows just billed
+    // stay listed and tickable, and re-submitting them produces an
+    // ALREADY_BILLED the admin did not cause. `setItems(null)` puts the
+    // table back into its Loading state meanwhile, rather than leaving
+    // stale rows selectable while the fetch is in flight.
+    setItems(null);
     setSelKeys(null);
     router.refresh();
+    void loadBillable();
     openDialog({ kind: "billView", billId: result.data.id });
     toast(`Bill ${result.data.refNo} created`);
   }
