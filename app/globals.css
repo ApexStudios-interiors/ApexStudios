@@ -1,24 +1,31 @@
 @import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/* This app switches themes with `data-theme` on <html> (app/layout.tsx and
+   ThemeToggle), never a `.dark` class. `shadcn init` wrote `&:is(.dark *)`,
+   which matches nothing here, so every `dark:` utility inside a generated
+   shadcn component was dead and those components rendered light styling in
+   dark mode. Both dark paths the rest of this file already uses are covered. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
+/* Values below are HSL TRIPLETS, not colour functions: `@theme inline` maps
+   most of them through `hsl(var(--x))`. `shadcn init` replaced them with
+   `oklch(...)`, producing `hsl(oklch(...))` — invalid CSS, which is why the
+   light theme broke. The palette is the original one (D13's monochrome). */
 :root {
-  --card: oklch(1 0 0);
-  --sidebar: oklch(0.985 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --border: oklch(0.922 0 0);
+  --card: 0 0% 100%;
+  --sidebar: 0 0% 99%;
+  --muted: 0 0% 96%;
+  --muted-foreground: 0 0% 45%;
+  --border: 0 0% 90%;
   --border-strong: 0 0% 78%;
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --accent: oklch(0.97 0 0);
-  --radius: 0.625rem;
+  --input: 0 0% 87%;
+  --ring: 0 0% 9%;
+  --primary: 0 0% 9%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 95%;
+  --secondary-foreground: 0 0% 9%;
+  --accent: 0 0% 95%;
+  --radius: 10px;
 
   --status-success: 142 71% 35%;
   --status-success-bg: 142 76% 94%;
@@ -26,25 +33,32 @@
   --status-warning-bg: 48 96% 92%;
   --status-destructive: 0 84% 60%;
   --status-destructive-foreground: 0 0% 100%;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: 0 0% 100%;
+  --foreground: 0 0% 9%;
+
+  /* Tokens `shadcn init` added that generated components genuinely need.
+     These are consumed as `var(--x)` (not wrapped in hsl()), so each is a
+     COMPLETE colour. Values are the same monochrome ramp as above, so the
+     new components inherit the existing look rather than a second palette.
+     `--destructive` reuses --status-destructive: AGENTS.md reserves colour
+     for status meaning, and destructive IS a status. */
+  --card-foreground: hsl(0 0% 9%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(0 0% 9%);
+  --accent-foreground: hsl(0 0% 9%);
+  --destructive: hsl(0 84% 60%);
+  --chart-1: hsl(0 0% 87%);
+  --chart-2: hsl(0 0% 66%);
+  --chart-3: hsl(0 0% 45%);
+  --chart-4: hsl(0 0% 32%);
+  --chart-5: hsl(0 0% 20%);
+  --sidebar-foreground: hsl(0 0% 9%);
+  --sidebar-primary: hsl(0 0% 9%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(0 0% 95%);
+  --sidebar-accent-foreground: hsl(0 0% 9%);
+  --sidebar-border: hsl(0 0% 90%);
+  --sidebar-ring: hsl(0 0% 9%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -71,6 +85,26 @@
     --status-warning-bg: 38 40% 14%;
     --status-destructive: 0 72% 51%;
     --status-destructive-foreground: 0 0% 100%;
+
+    /* Dark values for the shadcn-added tokens. Without these they keep their
+       light values here, so a popover or the sidebar would stay white. */
+    --card-foreground: hsl(0 0% 96%);
+    --popover: hsl(0 0% 9.5%);
+    --popover-foreground: hsl(0 0% 96%);
+    --accent-foreground: hsl(0 0% 96%);
+    --destructive: hsl(0 72% 51%);
+    --chart-1: hsl(0 0% 32%);
+    --chart-2: hsl(0 0% 45%);
+    --chart-3: hsl(0 0% 63%);
+    --chart-4: hsl(0 0% 78%);
+    --chart-5: hsl(0 0% 90%);
+    --sidebar-foreground: hsl(0 0% 96%);
+    --sidebar-primary: hsl(0 0% 96%);
+    --sidebar-primary-foreground: hsl(0 0% 9%);
+    --sidebar-accent: hsl(0 0% 16%);
+    --sidebar-accent-foreground: hsl(0 0% 96%);
+    --sidebar-border: hsl(0 0% 18%);
+    --sidebar-ring: hsl(0 0% 90%);
   }
 }
 
@@ -97,6 +131,26 @@
   --status-warning-bg: 38 40% 14%;
   --status-destructive: 0 72% 51%;
   --status-destructive-foreground: 0 0% 100%;
+
+  /* Same dark values as the prefers-color-scheme block above — this is the
+     explicit-choice path (ThemeToggle sets data-theme="dark"). */
+  --card-foreground: hsl(0 0% 96%);
+  --popover: hsl(0 0% 9.5%);
+  --popover-foreground: hsl(0 0% 96%);
+  --accent-foreground: hsl(0 0% 96%);
+  --destructive: hsl(0 72% 51%);
+  --chart-1: hsl(0 0% 32%);
+  --chart-2: hsl(0 0% 45%);
+  --chart-3: hsl(0 0% 63%);
+  --chart-4: hsl(0 0% 78%);
+  --chart-5: hsl(0 0% 90%);
+  --sidebar-foreground: hsl(0 0% 96%);
+  --sidebar-primary: hsl(0 0% 96%);
+  --sidebar-primary-foreground: hsl(0 0% 9%);
+  --sidebar-accent: hsl(0 0% 16%);
+  --sidebar-accent-foreground: hsl(0 0% 96%);
+  --sidebar-border: hsl(0 0% 18%);
+  --sidebar-ring: hsl(0 0% 90%);
 }
 
 @theme inline {
@@ -121,7 +175,9 @@
   --color-status-warning-bg: hsl(var(--status-warning-bg));
   --color-status-destructive: hsl(var(--status-destructive));
   --color-status-destructive-foreground: hsl(var(--status-destructive-foreground));
-  --font-sans: var(--font-sans);
+  /* `shadcn init` left this as `var(--font-sans)` — a self-reference that
+     resolves to nothing, so the whole stack fell back to the browser default. */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --radius-md: var(--radius);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -196,50 +252,4 @@ body {
     hsl(var(--foreground)) 0 5px,
     hsl(var(--muted-foreground)) 5px 10px
   );
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-}
-
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-  html {
-    @apply font-sans;
-  }
 }
