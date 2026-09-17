@@ -188,7 +188,13 @@ describe("rpc_set_task_progress refusals", () => {
 
   it("a site user on a project they are not a member of is refused", async () => {
     // Fixture task under the project (c2) ravi (site) has no project_members
-    // row for.
+    // row for. Leftovers first: a run that died before its cleanup (e.g. an
+    // auth rate limit in signedInAs) left seq_no 91 behind, and every later
+    // run then failed on phases_seq_uq. Cleanup is in `finally` for the same
+    // reason.
+    await sql`delete from public.tasks where phase_id in (select id from public.phases
+              where package_id = '00000000-0000-4000-8000-0000000000e7' and seq_no = 91)`;
+    await sql`delete from public.phases where package_id = '00000000-0000-4000-8000-0000000000e7' and seq_no = 91`;
     const phase = one(
       await sql`insert into public.phases (org_id, project_id, package_id, seq_no, name)
                 values (${SEED.org}, '00000000-0000-4000-8000-0000000000c2',
@@ -196,21 +202,23 @@ describe("rpc_set_task_progress refusals", () => {
                 returning id`,
       "fixture phase"
     );
-    const task = one(
-      await sql`insert into public.tasks (org_id, project_id, package_id, phase_id, name, start_date, duration_weeks)
-                values (${SEED.org}, '00000000-0000-4000-8000-0000000000c2',
-                        '00000000-0000-4000-8000-0000000000e7', ${phase.id}, 'non-member fixture task',
-                        date '2026-09-01', 1)
-                returning id`,
-      "fixture task"
-    );
+    try {
+      const task = one(
+        await sql`insert into public.tasks (org_id, project_id, package_id, phase_id, name, start_date, duration_weeks)
+                  values (${SEED.org}, '00000000-0000-4000-8000-0000000000c2',
+                          '00000000-0000-4000-8000-0000000000e7', ${phase.id}, 'non-member fixture task',
+                          date '2026-09-01', 1)
+                  returning id`,
+        "fixture task"
+      );
 
-    const site = await signedInAs("ravi@beapex.in");
-    const { error } = await site.rpc("rpc_set_task_progress", { p_task_id: task.id, p_pct: 50 });
-    expect(error?.message).toMatch(/FORBIDDEN/);
-
-    await sql`delete from public.tasks where id = ${task.id}`;
-    await sql`delete from public.phases where id = ${phase.id}`;
+      const site = await signedInAs("ravi@beapex.in");
+      const { error } = await site.rpc("rpc_set_task_progress", { p_task_id: task.id, p_pct: 50 });
+      expect(error?.message).toMatch(/FORBIDDEN/);
+    } finally {
+      await sql`delete from public.tasks where phase_id = ${phase.id}`;
+      await sql`delete from public.phases where id = ${phase.id}`;
+    }
   });
 
   it("an out-of-range percentage is refused with a clean domain error", async () => {
@@ -232,24 +240,27 @@ describe("rpc_mark_phase_complete", () => {
 
   it("succeeds for a zero-task phase and is refused once the phase is billed or paid", async () => {
     const admin = await signedInAs("suresh@beapex.in");
+    // Same leftover/finally treatment as the seq_no 91 fixture above.
+    await sql`delete from public.phases where package_id = ${SEED.poolPackage} and seq_no = 92`;
     const phase = one(
       await sql`insert into public.phases (org_id, project_id, package_id, seq_no, name)
                 values (${SEED.org}, ${SEED.project}, ${SEED.poolPackage}, 92, 'mark-complete fixture phase')
                 returning id`,
       "fixture phase"
     );
+    try {
+      const ok = await admin.rpc("rpc_mark_phase_complete", { p_phase_id: phase.id });
+      expect(ok.error).toBeNull();
+      expect(
+        one(await sql`select billing_status from public.phases where id = ${phase.id}`, "fixture phase")
+          .billing_status
+      ).toBe("billable");
 
-    const ok = await admin.rpc("rpc_mark_phase_complete", { p_phase_id: phase.id });
-    expect(ok.error).toBeNull();
-    expect(
-      one(await sql`select billing_status from public.phases where id = ${phase.id}`, "fixture phase")
-        .billing_status
-    ).toBe("billable");
-
-    await sql`update public.phases set billing_status = 'paid' where id = ${phase.id}`;
-    const refused = await admin.rpc("rpc_mark_phase_complete", { p_phase_id: phase.id });
-    expect(refused.error?.message).toMatch(/ILLEGAL_TRANSITION/);
-
-    await sql`delete from public.phases where id = ${phase.id}`;
+      await sql`update public.phases set billing_status = 'paid' where id = ${phase.id}`;
+      const refused = await admin.rpc("rpc_mark_phase_complete", { p_phase_id: phase.id });
+      expect(refused.error?.message).toMatch(/ILLEGAL_TRANSITION/);
+    } finally {
+      await sql`delete from public.phases where id = ${phase.id}`;
+    }
   });
 });
