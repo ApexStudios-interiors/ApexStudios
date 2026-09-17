@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
@@ -15,6 +15,17 @@ import {
 } from "@/features/stock/actions";
 import { getPhaseOptions } from "@/features/schedule/actions";
 import { DialogShell, Field, inputClass, textareaClass } from "@/components/ui/DialogShell";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { DatePicker } from "@/components/shared/DatePicker";
+
+const selectTriggerClass = "w-full text-[13.5px] data-[size=default]:h-9";
 
 /**
  * build/07-stock-inventory-notifications.md §2.5 step 4: on the server
@@ -65,6 +76,7 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
 
   const {
     register,
+    control,
     handleSubmit,
     setValue,
     formState: { errors },
@@ -87,8 +99,8 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
   // a function the React Compiler cannot safely memoize (confirmed live —
   // it skips memoizing this component and says so), the same class of
   // incompatible-library warning FileUploader's own upload queue hit twice
-  // in Build 06. `register`'s own `onChange` option fires alongside its
-  // internal handling, so the field is still form-registered either way.
+  // in Build 06. The package Select's `onValueChange` sets this alongside
+  // the Controller's own `field.onChange`, so the form value stays in step.
   const [packageId, setPackageId] = useState(moduleId ?? "");
   useEffect(() => {
     // No package selected: nothing to fetch, and nothing to reset here —
@@ -103,6 +115,15 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [packageId]);
   const visiblePhases = packageId ? phases : null;
+
+  // Base UI's Select.Value shows the raw value (a uuid) unless the root has
+  // `items` to resolve the label from. Form values keep "" for "none" — the
+  // schema's own shape — and map to Base UI's null only at the Select.
+  const packageItems = packages?.map((p) => ({ value: p.id, label: p.name })) ?? [];
+  const phaseItems: { value: string | null; label: string }[] = visiblePhases?.length
+    ? [{ value: null, label: "None" }, ...visiblePhases.map((p) => ({ value: p.id, label: p.name }))]
+    : [];
+  const unitItems = units?.map((u) => ({ value: u.code, label: u.code })) ?? [];
 
   const create = useAction(createStockRequest, {
     onSuccess: ({ data }) => {
@@ -126,44 +147,79 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
       <form onSubmit={onSubmit} className="grid grid-cols-2 gap-3.5">
         <div className="col-span-2">
           <Field label="Package" htmlFor="nr-package">
-            <select
-              id="nr-package"
-              className={inputClass}
-              disabled={!packages}
-              {...register("packageId", {
-                onChange: (e: React.ChangeEvent<HTMLSelectElement>) => {
-                  setPackageId(e.target.value);
-                  setValue("phaseId", "");
-                },
-              })}
-            >
-              <option value="">{packages ? "Select a package" : "Loading…"}</option>
-              {packages?.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <Controller
+              control={control}
+              name="packageId"
+              render={({ field }) => (
+                <Select
+                  items={packageItems}
+                  disabled={!packages}
+                  value={packages ? field.value || null : null}
+                  onValueChange={(v) => {
+                    field.onChange(v ?? "");
+                    setPackageId(v ?? "");
+                    setValue("phaseId", "");
+                  }}
+                >
+                  <SelectTrigger
+                    id="nr-package"
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    className={selectTriggerClass}
+                  >
+                    <SelectValue placeholder={packages ? "Select a package" : "Loading…"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {packageItems.map((p) => (
+                        <SelectItem key={p.value} value={p.value}>
+                          {p.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              )}
+            />
           </Field>
           {errors.packageId && <p className="text-xs text-destructive mt-1">{errors.packageId.message}</p>}
         </div>
         <div className="col-span-2">
           <Field label="Phase" htmlFor="nr-phase">
-            <select
-              id="nr-phase"
-              className={inputClass}
-              disabled={!visiblePhases?.length}
-              {...register("phaseId")}
-            >
-              <option value="">
-                {visiblePhases?.length ? "None" : packageId ? "Loading…" : "Select a package first"}
-              </option>
-              {visiblePhases?.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <Controller
+              control={control}
+              name="phaseId"
+              render={({ field }) => (
+                <Select
+                  items={phaseItems}
+                  disabled={!visiblePhases?.length}
+                  value={visiblePhases?.length ? field.value || null : null}
+                  onValueChange={(v) => field.onChange(v ?? "")}
+                >
+                  <SelectTrigger
+                    id="nr-phase"
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    className={selectTriggerClass}
+                  >
+                    <SelectValue
+                      placeholder={
+                        visiblePhases?.length ? "None" : packageId ? "Loading…" : "Select a package first"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {phaseItems.map((p) => (
+                        <SelectItem key={p.value ?? "none"} value={p.value}>
+                          {p.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              )}
+            />
           </Field>
         </div>
         <div className="col-span-2">
@@ -195,27 +251,50 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
               placeholder="0"
               {...register("qty")}
             />
-            <select
-              aria-label="Unit"
-              className={inputClass}
-              style={{ flex: "0 0 90px" }}
-              disabled={!units}
-              {...register("unit")}
-            >
-              <option value="">{units ? "Unit" : "…"}</option>
-              {units?.map((u) => (
-                <option key={u.code} value={u.code}>
-                  {u.code}
-                </option>
-              ))}
-            </select>
+            <Controller
+              control={control}
+              name="unit"
+              render={({ field }) => (
+                <Select
+                  items={unitItems}
+                  disabled={!units}
+                  value={units ? field.value || null : null}
+                  onValueChange={(v) => field.onChange(v ?? "")}
+                >
+                  <SelectTrigger
+                    aria-label="Unit"
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    className={selectTriggerClass}
+                    style={{ flex: "0 0 90px" }}
+                  >
+                    <SelectValue placeholder={units ? "Unit" : "…"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {unitItems.map((u) => (
+                        <SelectItem key={u.value} value={u.value}>
+                          {u.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              )}
+            />
           </div>
           {(errors.qty || errors.unit) && (
             <p className="text-xs text-destructive mt-1">{errors.qty?.message ?? errors.unit?.message}</p>
           )}
         </Field>
         <Field label="Needed By" htmlFor="nr-needed">
-          <input id="nr-needed" type="date" className={inputClass} {...register("neededBy")} />
+          <Controller
+            control={control}
+            name="neededBy"
+            render={({ field }) => (
+              <DatePicker id="nr-needed" value={field.value ?? ""} onChange={field.onChange} />
+            )}
+          />
         </Field>
         {isAdmin && (
           <Field label="Rate (₹ per unit)" htmlFor="nr-rate">
