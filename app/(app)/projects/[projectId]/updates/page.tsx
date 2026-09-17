@@ -15,7 +15,7 @@ import Link from "next/link";
  * filter dropdown, and "+ Post Update" hidden for the client role. A plain
  * Server Component reading `searchParams` for both the filter and
  * pagination — `PackageFilterSelect` is the one client boundary, a
- * `<select>` that navigates on change; "Load more" is a plain link.
+ * select that navigates on change; "Load more" is a plain link.
  */
 export default async function UpdatesPage({
   params,

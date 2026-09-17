@@ -2,12 +2,13 @@
 
 import { useEffect, useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
 import { updateTaskSchema } from "@/features/schedule/schema";
 import { updateTask, setTaskProgress, getTaskForEdit, type TaskForEdit } from "@/features/schedule/actions";
+import { DatePickerField } from "@/features/schedule/components/DatePickerField";
 import { DialogShell, Field, inputClass, textareaClass } from "@/components/ui/DialogShell";
 
 /**
@@ -63,6 +64,7 @@ export function TaskDetailDialog({ taskId }: { projectId: string; moduleId: stri
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors },
@@ -131,7 +133,19 @@ export function TaskDetailDialog({ taskId }: { projectId: string; moduleId: stri
           {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
         </div>
         <Field label="Start Date" htmlFor="td-start">
-          <input id="td-start" type="date" className={inputClass} {...register("startDate")} />
+          <Controller
+            control={control}
+            name="startDate"
+            render={({ field }) => (
+              <DatePickerField
+                id="td-start"
+                ref={field.ref}
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+              />
+            )}
+          />
         </Field>
         <Field label="Duration (weeks)" htmlFor="td-duration">
           <input

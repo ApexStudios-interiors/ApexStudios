@@ -1,14 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
 import { createTaskSchema } from "@/features/schedule/schema";
 import { createTask, getOwnerOptions, getPhaseOptions } from "@/features/schedule/actions";
+import { DatePickerField } from "@/features/schedule/components/DatePickerField";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 /**
  * build/05-schedule-and-progress.md §3.4 and §2, in full: "Start Week"
@@ -35,8 +44,21 @@ export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: strin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [moduleId]);
 
+  // `items` lets the closed trigger show a NAME rather than the raw UUID.
+  // Owner has a `null` item because "To assign" is a real choice a user can
+  // go back to; Phase has none because its empty option was only a placeholder.
+  const phaseItems = useMemo(() => (phases ?? []).map((p) => ({ value: p.id, label: p.name })), [phases]);
+  const ownerItems = useMemo(
+    () => [
+      { value: null, label: owners ? "To assign" : "Loading…" },
+      ...(owners ?? []).map((o) => ({ value: o.id, label: o.name })),
+    ],
+    [owners]
+  );
+
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm({
@@ -79,31 +101,87 @@ export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: strin
         </div>
         <div className="col-span-2">
           <Field label="Phase" htmlFor="at-phase">
-            <select id="at-phase" className={inputClass} disabled={!phases} {...register("phaseId")}>
-              <option value="">{phases ? "Select a phase" : "Loading…"}</option>
-              {phases?.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            {/* The form keeps `""` as the empty value — createTaskSchema's
+                z.uuid() still rejects it with the same message — and Base UI
+                gets `null`, its own "no selection". */}
+            <Controller
+              control={control}
+              name="phaseId"
+              render={({ field }) => (
+                <Select
+                  items={phaseItems}
+                  disabled={!phases}
+                  value={field.value || null}
+                  onValueChange={(value: string | null) => field.onChange(value ?? "")}
+                  onOpenChange={(open) => {
+                    if (!open) field.onBlur();
+                  }}
+                >
+                  <SelectTrigger id="at-phase" ref={field.ref} className="h-9 w-full text-[13.5px]">
+                    <SelectValue placeholder={phases ? "Select a phase" : "Loading…"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {phaseItems.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              )}
+            />
           </Field>
           {errors.phaseId && <p className="text-xs text-destructive mt-1">{errors.phaseId.message}</p>}
         </div>
         <div className="col-span-2">
           <Field label="Owner" htmlFor="at-owner">
-            <select id="at-owner" className={inputClass} disabled={!owners} {...register("ownerProfileId")}>
-              <option value="">{owners ? "To assign" : "Loading…"}</option>
-              {owners?.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
+            {/* null item -> "" -> createTaskSchema's own "" -> undefined transform. */}
+            <Controller
+              control={control}
+              name="ownerProfileId"
+              render={({ field }) => (
+                <Select
+                  items={ownerItems}
+                  disabled={!owners}
+                  value={field.value || null}
+                  onValueChange={(value: string | null) => field.onChange(value ?? "")}
+                  onOpenChange={(open) => {
+                    if (!open) field.onBlur();
+                  }}
+                >
+                  <SelectTrigger id="at-owner" ref={field.ref} className="h-9 w-full text-[13.5px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {ownerItems.map((item) => (
+                        <SelectItem key={item.value ?? "unassigned"} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              )}
+            />
           </Field>
         </div>
         <Field label="Start Date" htmlFor="at-start">
-          <input id="at-start" type="date" className={inputClass} {...register("startDate")} />
+          <Controller
+            control={control}
+            name="startDate"
+            render={({ field }) => (
+              <DatePickerField
+                id="at-start"
+                ref={field.ref}
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+              />
+            )}
+          />
         </Field>
         {errors.startDate && <p className="text-xs text-destructive mt-1">{errors.startDate.message}</p>}
         <Field label="Duration (weeks)" htmlFor="at-duration">
