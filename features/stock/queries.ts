@@ -12,6 +12,14 @@ import type { StockRequestStatus } from "./service";
  * table gets nothing, which is why `v_stock_request_site` (Build 02) exists
  * at all. Package names still need the same role branching Build 04/05/06
  * each rediscovered live: `packages` is an admin-only base table too.
+ *
+ * AGENTS.md database rule 7 (soft delete only): every read of a BASE table
+ * here filters `deleted_at is null` explicitly. The site branches do not,
+ * because `v_stock_request_site` and `v_package_site` (migration 0014) carry
+ * that predicate in the view body. That asymmetry is exactly how the base
+ * tables lost it unnoticed — the site surfaces looked correct while the admin
+ * ones listed soft-deleted requests and counted them in the "N pending"
+ * subtitle.
  */
 
 export type StockRequestDTO = {
@@ -44,7 +52,8 @@ async function fetchPackageNames(isAdmin: boolean, projectId: string): Promise<M
     const { data, error } = await supabase
       .from("packages")
       .select("id, name, seq_no")
-      .eq("project_id", projectId);
+      .eq("project_id", projectId)
+      .is("deleted_at", null);
     if (error) throw new Error(error.message);
     return new Map(data.map((p) => [p.id, { name: p.name, seqNo: p.seq_no }]));
   }
@@ -66,7 +75,11 @@ async function fetchPackageNames(isAdmin: boolean, projectId: string): Promise<M
 async function fetchProfileNames(profileIds: string[]): Promise<Map<string, string>> {
   if (profileIds.length === 0) return new Map();
   const supabase = await createClient();
-  const { data, error } = await supabase.from("profiles").select("id, full_name").in("id", profileIds);
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name")
+    .in("id", profileIds)
+    .is("deleted_at", null);
   if (error) throw new Error(error.message);
   return new Map(data.map((p) => [p.id, p.full_name]));
 }
@@ -112,7 +125,8 @@ export async function countStockRequests(
     let query = supabase
       .from("stock_requests")
       .select("id", { count: "exact", head: true })
-      .eq("project_id", projectId);
+      .eq("project_id", projectId)
+      .is("deleted_at", null);
     if (opts.status) query = query.eq("status", opts.status);
     if (opts.packageId) query = query.eq("package_id", opts.packageId);
     const { count, error } = await query;
@@ -184,6 +198,7 @@ async function loadStockRequests(
           { count: req ? "exact" : undefined }
         )
         .eq("project_id", projectId)
+        .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .order("id", { ascending: false });
       if (opts.status) q = q.eq("status", opts.status);

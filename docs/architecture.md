@@ -224,6 +224,20 @@ migration in production.
 
 Production database changes only ever arrive through a merged, CI-verified migration.
 
+> **As built, 2026-09-17 (D49): they do not.** Automatic CI is paused — `.github/workflows/ci.yml`
+> runs on `workflow_dispatch` only — so no migration is verified by CI before it lands, and there
+> is no preview branch to apply it to first. A migration reaches production when someone runs
+> `pnpm db:push` by hand against the one linked project, which is the live one. The sentence above
+> is the target state; it becomes true again when the `database` job has a non-production database
+> and the `pull_request`/`push` triggers are restored.
+>
+> **The risk this creates:** the first execution of a migration is against real data. A migration
+> that fails halfway, locks a large table, or drops a column the deployed build still reads has no
+> rehearsal and no automatic rollback — the only recovery point is the nightly R2 backup, which
+> costs a restore and whatever was written since. Nothing gates a push except the author's own
+> local `pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build`, and that run
+> touches no database, so a migration is the one change class the local gate cannot check at all.
+
 ### 5.3 Configuration and secrets
 
 | Secret | Stored in | Rotation |

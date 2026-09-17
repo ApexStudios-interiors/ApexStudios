@@ -55,6 +55,35 @@ const NO_DATA_LAYER = [
   },
 ];
 
+/**
+ * The three banned globals, one constant each.
+ *
+ * no-restricted-globals is set in more than one block (a file-scoped override
+ * has to re-list every restriction it still wants — see the comment on the
+ * override blocks below), and flat config REPLACES rather than merges. Naming
+ * each restriction once is what stops an override re-typing a message slightly
+ * differently, or silently dropping one.
+ */
+/** AGENTS.md Money display / code-standards §6. */
+const NO_INTL = { name: "Intl", message: "AGENTS.md: currency formatting lives in lib/money." };
+/** AGENTS.md Do not: the theme preference is the only storage use allowed. */
+const NO_LOCAL_STORAGE = {
+  name: "localStorage",
+  message: "AGENTS.md: localStorage is for the theme preference only.",
+};
+const NO_SESSION_STORAGE = {
+  name: "sessionStorage",
+  message: "AGENTS.md: sessionStorage is not used in this application.",
+};
+
+/** The four trees both money rules cover: everything that renders. */
+const UI_TREES = [
+  "app/**/*.{ts,tsx}",
+  "components/**/*.{ts,tsx}",
+  "features/**/*.{ts,tsx}",
+  "context/**/*.{ts,tsx}",
+];
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -248,12 +277,7 @@ const eslintConfig = defineConfig([
   //    formatINRCompact() from lib/money. Indian digit grouping is not what
   //    toLocaleString gives you by default, and two formatters drift.
   {
-    files: [
-      "app/**/*.{ts,tsx}",
-      "components/**/*.{ts,tsx}",
-      "features/**/*.{ts,tsx}",
-      "context/**/*.{ts,tsx}",
-    ],
+    files: UI_TREES,
     ignores: [
       // TODO(build-07): these two format quantities, not money. They move to
       // a shared quantity formatter when the inventory and stock surfaces are
@@ -275,30 +299,61 @@ const eslintConfig = defineConfig([
             "AGENTS.md: use formatINR() / formatINRCompact() from lib/money. Never an inline toLocaleString.",
         },
       ],
-      "no-restricted-globals": [
-        "error",
-        { name: "Intl", message: "AGENTS.md: currency formatting lives in lib/money." },
-      ],
     },
   },
 
-  // ── AGENTS.md Do not: localStorage/sessionStorage are for the theme only.
+  // ── All three banned globals — `Intl` (AGENTS.md Money display) and
+  //    localStorage/sessionStorage (AGENTS.md Do not) — over the four trees, in
+  //    ONE entry with NO `ignores`.
+  //
+  //    They used to be two blocks with identical `files` patterns. ESLint flat
+  //    config REPLACES rule options rather than merging them (the same trap the
+  //    D11 comment above warns about), so for every file both blocks matched —
+  //    which was all of them — the later localStorage block won outright and
+  //    the `Intl` ban was silently never enforced. Verified before and after
+  //    with `eslint --stdin --stdin-filename`.
+  //
+  //    This block bans all three everywhere. The single file-scoped exemption
+  //    is the override below, which re-permits ONE global for TWO named files
+  //    and re-lists the other two so they stay enforced there. Anything that
+  //    sets no-restricted-globals must do the same: list every restriction it
+  //    still wants, or it turns the rest off for those files.
   {
-    files: [
-      "app/**/*.{ts,tsx}",
-      "components/**/*.{ts,tsx}",
-      "features/**/*.{ts,tsx}",
-      "context/**/*.{ts,tsx}",
-    ],
-    ignores: ["app/layout.tsx", "components/ui/ThemeToggle.tsx"],
+    files: UI_TREES,
     rules: {
-      "no-restricted-globals": [
-        "error",
-        { name: "localStorage", message: "AGENTS.md: localStorage is for the theme preference only." },
-        { name: "sessionStorage", message: "AGENTS.md: sessionStorage is not used in this application." },
-      ],
+      "no-restricted-globals": ["error", NO_INTL, NO_LOCAL_STORAGE, NO_SESSION_STORAGE],
     },
   },
+
+  // ── The theme preference is the one storage use AGENTS.md allows, and
+  //    `components/ui/ThemeToggle.tsx` is the only file that makes it in real
+  //    code (`localStorage.setItem("theme", next)`). So it gets `localStorage`
+  //    back — and NOTHING else. `Intl` and `sessionStorage` are RE-LISTED, not
+  //    inherited: a block that sets no-restricted-globals replaces the options
+  //    wholesale, so omitting them here would switch them off for this file and
+  //    recreate, in miniature, the bug the block above exists to fix.
+  //
+  //    `app/layout.tsx` was on the old exemption list and is deliberately NOT
+  //    here. Its `localStorage` lives inside the THEME_INIT_SCRIPT template
+  //    string, and no-restricted-globals matches identifiers, never string
+  //    contents — so the exemption never did anything. Removing it changes no
+  //    result today (verified by probe) and means a real `localStorage` call
+  //    added to that file in future gets caught like anywhere else.
+  {
+    files: ["components/ui/ThemeToggle.tsx"],
+    rules: {
+      "no-restricted-globals": ["error", NO_INTL, NO_SESSION_STORAGE],
+    },
+  },
+
+  // NOTE — no override for `features/stock/components/ReqTable.tsx`,
+  // `features/inventory/components/InventoryTable.tsx` or
+  // `components/ui/calendar.tsx`. They are exempt from the `toLocaleString`
+  // block above, which is `no-restricted-properties` — a DIFFERENT rule. None
+  // of the three touches a banned global, so all three stay fully covered here.
+  // If `shadcn add calendar` ever regenerates calendar.tsx using `Intl`, that
+  // should surface as a lint failure for a human to decide on, not be
+  // pre-permitted now.
 
   // Prettier last: it only turns off stylistic rules that would fight it.
   prettier,
