@@ -14,6 +14,7 @@ import {
   updateProjectSchema,
 } from "./schema";
 import { projectCodeBase } from "./service";
+import { insertProjectMember } from "./members";
 
 /**
  * build/04-projects-packages-phases.md §4.1: adminAction for all four, each
@@ -132,19 +133,26 @@ export const setProjectStatus = adminAction
     return { ok: true as const };
   });
 
+/**
+ * Grants an existing profile access to a project (CAN.manageProjectMembers).
+ * The project dashboard's Client access card uses it to give an existing
+ * client login a further project (D51) — one client company often has
+ * several. Returns `already_member` rather than an error for a repeat grant.
+ */
 export const addProjectMember = adminAction
   .inputSchema(addProjectMemberSchema)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const supabase = await createClient();
-    const { error } = await supabase
-      .from("project_members")
-      .insert({ project_id: parsedInput.projectId, profile_id: parsedInput.profileId });
-    if (error) throw new Error(error.message);
+    const status = await insertProjectMember(supabase, {
+      projectId: parsedInput.projectId,
+      profileId: parsedInput.profileId,
+      addedBy: ctx.session.userId,
+    });
 
     updateTag(`project:${parsedInput.projectId}`);
     revalidatePath("/");
     revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
-    return { ok: true as const };
+    return { status };
   });
 
 /**

@@ -28,8 +28,9 @@ export async function createAuthUser(input: {
   const { data, error } = await admin.auth.admin.createUser({
     email: input.email,
     password: input.password,
-    // Staff sign in with email + password (D48). The derived address is not a
-    // mailbox anyone confirms, so it is created already confirmed.
+    // Every role signs in with username + password (D51); the derived address
+    // is not a mailbox anyone confirms, so it is created already confirmed and
+    // no email is ever sent to it.
     email_confirm: true,
   });
   if (error) {
@@ -42,7 +43,7 @@ export async function createAuthUser(input: {
   return { ok: true, userId: data.user.id };
 }
 
-/** Compensation for a failed profile insert (build/03 §2.10: no orphan auth users). */
+/** Compensation for a failed profile or membership insert (build/03 §2.10: no orphan auth users). */
 export async function deleteAuthUser(userId: string): Promise<void> {
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.deleteUser(userId);

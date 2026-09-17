@@ -49,8 +49,12 @@ test.describe("admin: create project -> add package -> edit package", () => {
     await page.goto("/");
     await page.getByRole("button", { name: "New Project" }).click();
     await page.getByLabel("Project Name").fill(`E2E Test Project ${stamp}`);
-    await page.getByLabel("Client").selectOption({ index: 1 });
-    await page.getByLabel("Project Code").fill(`E2E-${stamp.toUpperCase()}`.slice(0, 20));
+    // Client is a combobox (Popover + Command), not a native select; the
+    // trigger stays disabled until the org's clients have loaded.
+    await page.getByLabel("Client").click();
+    await page.getByRole("option", { name: "T V Rao Housing Pvt Ltd" }).click();
+    // Project Code is generated from the name and read-only — never typed.
+    await expect(page.getByLabel("Project Code")).not.toHaveValue("");
     await page.getByLabel("Start Date").fill("2026-09-01");
     await page.getByLabel("Packages").fill("Design, Execution, Handover");
     await page.getByRole("button", { name: "Create" }).click();

@@ -38,6 +38,13 @@ export type DialogState =
   | { kind: "rejectBill"; billId: string; refNo: string }
   | { kind: "certifyBill"; billId: string; refNo: string }
   | { kind: "inviteUser" }
+  | { kind: "createClientLogin"; projectId: string; projectName: string }
+  | {
+      kind: "grantClientAccess";
+      projectId: string;
+      projectName: string;
+      clients: { id: string; fullName: string; email: string | null }[];
+    }
   | null;
 
 interface AppContextValue {

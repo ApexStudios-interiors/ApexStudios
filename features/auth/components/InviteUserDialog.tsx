@@ -16,7 +16,10 @@ import {
 import { addUser } from "@/features/users/actions";
 import { addUserSchema, type AddUserInput } from "@/features/users/schema";
 import { emailForUsername } from "@/features/users/service";
-import { CopyField } from "@/features/users/components/CopyField";
+import {
+  CreatedCredentialsDialog,
+  type CreatedCredentials,
+} from "@/features/users/components/CreatedCredentialsDialog";
 import { ROLE_LABEL } from "@/lib/rbac/roles";
 
 type AssignableRole = AddUserInput["role"];
@@ -24,19 +27,19 @@ type AssignableRole = AddUserInput["role"];
 const ROLE_ITEMS: { value: AssignableRole; label: string }[] = [
   { value: "site", label: ROLE_LABEL.site },
   { value: "admin", label: ROLE_LABEL.admin },
-  { value: "client", label: ROLE_LABEL.client },
 ];
-
-type Created = { username: string; email: string; password: string };
 
 /**
  * Add User (formerly Invite User — the file and the `inviteUser` dialog kind
  * keep their names so DialogHost and AppContext are untouched).
  *
+ * Staff only: Admin or Site Supervisor. A client login is created from its
+ * project's dashboard instead (D51, CreateClientLoginDialog), and the schema
+ * refuses `client` here too.
+ *
  * Two states in one dialog: the form, then — once, after creation — the
- * username, sign-in email and generated password, each with a Copy button.
- * The password lives only in this component's state; closing the dialog
- * discards it and nothing can show it again.
+ * username and generated password, each with a Copy button
+ * (CreatedCredentialsDialog).
  */
 export function InviteUserDialog() {
   const { closeDialog, toast } = useApp();
@@ -45,7 +48,7 @@ export function InviteUserDialog() {
   const [username, setUsername] = useState("");
   const [role, setRole] = useState<AssignableRole>("site");
   const [fieldError, setFieldError] = useState<string | null>(null);
-  const [created, setCreated] = useState<Created | null>(null);
+  const [created, setCreated] = useState<CreatedCredentials | null>(null);
 
   const add = useAction(addUser, {
     onSuccess: ({ data }) => {
@@ -61,24 +64,7 @@ export function InviteUserDialog() {
   });
 
   if (created) {
-    return (
-      <DialogShell
-        title="User added"
-        description="Share these with the user now. The password is shown only once — it cannot be viewed again after you close this dialog."
-        okLabel="Done"
-        onClose={closeDialog}
-        onOk={closeDialog}
-      >
-        <div className="grid gap-3.5">
-          <Field label="Username" hint={`Signs in as ${created.email}`} htmlFor="au-created-username">
-            <CopyField id="au-created-username" label="username" value={created.username} />
-          </Field>
-          <Field label="Password" htmlFor="au-created-password">
-            <CopyField id="au-created-password" label="password" value={created.password} />
-          </Field>
-        </div>
-      </DialogShell>
-    );
+    return <CreatedCredentialsDialog title="User added" created={created} onClose={closeDialog} />;
   }
 
   const trimmed = username.trim().toLowerCase();

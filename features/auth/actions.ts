@@ -4,51 +4,43 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { actionClient } from "@/lib/safe-action";
-import { clientEnv } from "@/lib/env.client";
-import { staffLoginSchema, magicLinkSchema } from "./schema";
+import { signInEmail } from "@/features/users/service";
+import { loginSchema } from "./schema";
 
 /**
  * The one place `actionClient` (no guard) is used, exactly as
  * build/03-auth-and-rbac.md §2.6 specifies — everything past this point
  * requires a session.
  *
+ * D51: every role — owner, admin, site supervisor and client — signs in here
+ * with username + password. There is no magic link and no other sign-in path,
+ * and nothing in the app asks Supabase to send an auth email.
+ *
  * DEFERRED (recorded, not silently skipped): §2.7's "per-IP and per-email
  * throttle in the action". Supabase's own project-level limits are live today
- * via supabase/config.toml [auth.rate_limit] (email_sent, sign_in_sign_ups,
- * token_verifications) — real protection, not a placeholder — but they are
- * project-wide, not per-address. An additional per-email cooldown needs a
- * small table and is left for a follow-up rather than rushed here.
+ * via supabase/config.toml [auth.rate_limit] (sign_in_sign_ups) — real
+ * protection, not a placeholder — but they are project-wide, not per-account.
+ * An additional per-account cooldown needs a small table and is left for a
+ * follow-up rather than rushed here.
  */
 
-export const signInWithPassword = actionClient
-  .inputSchema(staffLoginSchema)
-  .action(async ({ parsedInput }) => {
-    const supabase = await createClient();
-
-    const { error } = await supabase.auth.signInWithPassword(parsedInput);
-    if (error) {
-      // Never reveal whether the email exists — the message is identical either
-      // way, mapped at this boundary rather than left to whatever GoTrue said.
-      throw new Error("Incorrect email or password.");
-    }
-
-    // D48: password only — no two-factor step for any role.
-    return { ok: true as const };
-  });
-
-export const requestMagicLink = actionClient.inputSchema(magicLinkSchema).action(async ({ parsedInput }) => {
+export const signInWithPassword = actionClient.inputSchema(loginSchema).action(async ({ parsedInput }) => {
   const supabase = await createClient();
-  // emailRedirectTo must be an allow-listed URL in Supabase's Redirect URLs
-  // setting (build/03-auth-and-rbac.md §0.1) — a mismatch fails silently on
-  // Supabase's side with no server-side log, which is why that prerequisite
-  // exists.
-  const { error } = await supabase.auth.signInWithOtp({
-    email: parsedInput.email,
-    options: { emailRedirectTo: `${clientEnv.NEXT_PUBLIC_SITE_URL}/auth/callback` },
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email: signInEmail(parsedInput.username),
+    password: parsedInput.password,
   });
-  // Deliberately the same success response whether or not the email exists —
-  // otherwise this endpoint becomes a way to enumerate client email addresses.
-  if (error) throw new Error("Could not send the link. Try again in a moment.");
+  if (error) {
+    // Never reveal whether the account exists — the message is identical
+    // either way, decided here rather than left to whatever GoTrue said.
+    // Returned, not thrown: lib/safe-action.ts's mapDomainError replaces any
+    // unmapped thrown message with "Something went wrong. Reference: …", which
+    // is what a mistyped password used to show.
+    return { ok: false as const, message: "Incorrect username or password." };
+  }
+
+  // D48: password only — no two-factor step for any role.
   return { ok: true as const };
 });
 

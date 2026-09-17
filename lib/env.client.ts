@@ -12,10 +12,11 @@ import { z } from "zod";
 const clientSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
-  // The magic-link callback target (features/auth/actions.ts). Must be
-  // allow-listed in Supabase's Redirect URLs (build/03-auth-and-rbac.md §0.1)
-  // in every environment — a mismatch fails on Supabase's side with no
-  // server-side log to find.
+  // The deployed origin. It was the magic-link callback target until D51
+  // removed the magic link; nothing in the app reads it now (e2e/global-setup
+  // still uses it as a fallback base URL). Left required on purpose: every
+  // environment already sets it, and loosening the schema is a separate change
+  // from removing its last caller.
   NEXT_PUBLIC_SITE_URL: z.url(),
 });
 

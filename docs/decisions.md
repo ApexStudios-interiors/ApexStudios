@@ -398,6 +398,8 @@ regulatory process, not a configuration step.
 **Consequence:** `app/(auth)/client-login/page.tsx` offers email magic link only. No SMS
 provider, no DLT registration, no phone-number column treated as a sign-in credential in
 Build 03. Revisit if a client without email access becomes a real blocker.
+**Superseded 2026-09-17 by D51:** the magic link is removed; clients sign in with username +
+password like every other role.
 
 ---
 
@@ -1197,7 +1199,8 @@ submit path.
 `requireAalForRole`, but no enrollment screen was ever built (D22), so no real owner or admin could
 perform any admin action. Build the enrollment screen, or drop the requirement?
 **Decided:** 2026-09-17 by Voola — **drop it. Email + password only, for every staff role, with a
-show/hide toggle on the password field.** Clients keep the magic link.
+show/hide toggle on the password field.** Clients keep the magic link. *(Superseded 2026-09-17 by
+D51: clients sign in with username + password too.)*
 **Answer:** `requireAalForRole` and the session's `aal` field are removed (`lib/auth/session.ts`);
 the login form has no code step; `e2e/global-setup.ts` no longer enrolls a factor. Supabase's
 project-level TOTP setting is left as it is and simply unused. The enrollment screen built as PR #22
@@ -1472,6 +1475,61 @@ out or removed; its redaction-test requirement stays, now worded without a vendo
 
 ---
 
+### D51 — Every role signs in with username + password; the magic link is removed
+
+**Question:** D19 gave clients an emailed magic link (`/client-login`) while staff used a password
+(D48). The link needs working SMTP, a Redirect URL allow-list entry per environment, and the project
+allows only **2 auth emails per hour** in total (`supabase/config.toml` `[auth.rate_limit]
+email_sent = 2`). Meanwhile PR #35 made Add User issue a username and a generated password. Keep two
+sign-in methods, or one?
+**Decided:** 2026-09-17 by Voola — **one. Everyone, clients included, signs in with username +
+password. The magic link is removed entirely.** Client logins are created per project by
+owner/admin.
+**Answer:**
+
+- **One sign-in screen.** `/login` asks for Username and Password for every role. A username `x`
+  signs in as `x@beapex.in` (`signInEmail`, `features/users/service.ts`); a value that already
+  contains `@` is used as the address as typed, so the seeded client `tvrao@example.invalid` still
+  signs in.
+- **Removed:** `app/(auth)/client-login/page.tsx`, `app/(auth)/auth/callback/route.ts`,
+  `app/(auth)/auth/error/page.tsx`, the `requestMagicLink` action and `magicLinkSchema`. The callback
+  route served only the magic link (`exchangeCodeForSession` for its `?code=` shape, `verifyOtp` for
+  `?token_hash=`); there is no password recovery, invite or other Supabase redirect in the app, so
+  none of it was kept. `middleware.ts`'s public paths are now `/login` and `/api/health` only.
+- **Add User is staff only** — Admin or Site Supervisor. `client` is out of `addUserSchema`'s enum,
+  so a crafted request cannot create one there either; `owner` stays non-creatable as before.
+- **Client logins are created from the project.** The project dashboard has a **Client access** card
+  (owner/admin only): the project's client logins; **Create client login** (username + optional name
+  → auth user, `profiles` row with role `client`, `project_members` row for this project, password
+  shown once with Copy buttons exactly as in Add User); and **Add existing client**, which exposes the
+  existing `addProjectMember` action, since one client company often has several projects. Before
+  this, no screen managed project membership at all.
+- **No orphans.** Add User and Create client login share one creation path, `provisionAccount`: if
+  the profile insert *or* the membership insert fails, the auth user is deleted, and any profile or
+  membership row cascades with it (`profiles.id → auth.users ON DELETE CASCADE`,
+  `project_members.profile_id → profiles ON DELETE CASCADE`). No migration was needed.
+- `addProjectMember` now checks that the project and the profile are visible to the caller (both
+  reads are org-scoped by RLS) before inserting — `pm_insert` itself checks only `is_admin()` — and
+  reports a repeat grant as `already_member` instead of an error.
+- `e2e/global-setup.ts` signs every role in through `/login`; it no longer uses the service-role key
+  or `generateLink`.
+
+**Consequence:**
+
+- **The app sends no auth email at all.** Nothing calls `signInWithOtp`, an invite or a recovery
+  email, so SMTP and the 2-emails-per-hour limit stop being a concern for signing in.
+- **There is no self-service password reset.** Someone who loses a password needs an owner/admin,
+  and resetting one is not built yet.
+- `NEXT_PUBLIC_SITE_URL` is no longer read by the application and no longer needs to be in Supabase's
+  Redirect URLs, but it is **still required** by `lib/env.client.ts` and `scripts/check-env.mjs`. Left
+  in place deliberately: dropping a required variable from the schema is a separate change, and a
+  careless one breaks the Vercel build.
+- D19 (magic link for clients) and D48's "Clients keep the magic link" are superseded.
+- `docs/build/03-auth-and-rbac.md` and the other build files still describe the magic link. As with
+  D50, they are the dated record and are left as written.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |
@@ -1489,4 +1547,4 @@ out or removed; its redaction-test requirement stays, now worded without a vendo
 | **Cloudflare R2 is live and the upload pipeline works end to end — one security gap remains.** Supersedes the original "no R2 account" blocker; re-verified 2026-09-16 against the real account. **Working:** app bucket `HeadBucket` plus a full presigned **PUT → GET → DELETE**; **CORS configured** (preflight returns 204 with a matching `Access-Control-Allow-Origin` for both `localhost:3000` and the deployed origin), so real browser uploads are unblocked; the backup-bucket read grant now works (`backup.verify`'s own `HeadObject` returns **404 not 403** — it can read the bucket, there is simply no dump yet, which is correct until `backup.nightly` first succeeds); and a genuinely generated bill PDF is present in the app bucket, so the `bill.pdf` job has run for real. **Open — the app token is over-privileged on the backup bucket.** A probe `PutObject` *succeeded*, and so did deleting it. `.env.example` and D17 both require this credential be **read-only** there, precisely so a compromised app token cannot destroy the only recovery point; the write-scoped pair belongs solely to `.github/workflows/backup-nightly.yml`. Fix in Cloudflare: scope the app token to Object Read **& Write** on `apex-studios` but Object **Read-only** on `apex-backups`. Still unverified: a real browser PUT from a live page, thumbnail generation and its EXIF-absence check, the orphan sweep actually deleting, and the GitHub Actions backup write. | Voola | The read-only regrant — a compromised app credential can currently wipe the backups | 2026-09-16 |
 | ~~**Vercel is not on Pro** — the per-minute `jobs.drain` does not run without it.~~ **Resolved 2026-09-16 by D47**, and the original wording was wrong about the limit: Hobby allows 100 crons, capped at *one invocation per day each*. `jobs.drain` and `jobs.reap` now run from GitHub Actions; the three daily/weekly crons stayed on Vercel. Still unverified **live** — the drain has never been observed draining a real queue in production, because production is four builds behind and the Vercel env vars below are still unset. | Voola | Live verification of the drain, once production deploys | 2026-09-12 |
 | **Vercel is still not on Pro, for the reasons D47 did *not* resolve.** ADR-016 also bought Supabase PITR (RPO 24 h → 15 min) and, more pressingly, Hobby's terms **forbid commercial use** — this system issues GST tax invoices. Cron was only one of three justifications and is now handled without paying; these two are not. | Voola | Production go-live (licensing), `architecture.md` §7.2's stated RPO | 2026-09-16 |
-| **`.env.local` now holds real values; Vercel and GitHub Actions still hold none.** As of 2026-09-16 the local file has real Supabase, R2 and `CRON_SECRET`/`SESSION_SECRET` values (verified by shape and by the live R2 and `select 1` probes above) — the Build 01 placeholders are gone. What is still missing is everywhere *else*. **Vercel Production + Preview** need: `DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_BACKUP_BUCKET`, `CRON_SECRET`, `SESSION_SECRET`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_SITE_URL` (the deployed URL, **not** the local `localhost:3000`; it must also be allow-listed in Supabase's Redirect URLs). `BILLING_ENABLED` should be `false` in production — it is `true` locally for testing. Until these exist, `next build` on Vercel dies in `lib/env.ts`'s eager zod parse before it compiles a page, which is the whole reason Vercel deployments fail. **GitHub Actions repo secrets** for `.github/workflows/backup-nightly.yml` need: `SUPABASE_DB_URL`, `R2_ACCOUNT_ID`, `R2_BACKUP_BUCKET`, `R2_BACKUP_ACCESS_KEY_ID`/`R2_BACKUP_SECRET_ACCESS_KEY` (the **write**-scoped pair, distinct from the app's read-only one), `APP_URL`, and the same `CRON_SECRET` as Vercel's. As of 2026-09-16 only `CRON_SECRET`, `SUPABASE_DB_URL`, `SUPABASE_PROD_PROJECT_REF` and the two `NEXT_PUBLIC_SUPABASE_*` keys exist — so the nightly backup is currently failing at its upload step. **`APP_URL` is now needed by the two D47 cron workflows as well**, and without it `jobs-drain.yml` and `jobs-reap.yml` fail fast with a named-but-unprinted secret error on every tick. | Voola | Vercel deployments; the nightly backup ever running; the D47 cron workflows | 2026-09-16 |
+| **`.env.local` now holds real values; Vercel and GitHub Actions still hold none.** As of 2026-09-16 the local file has real Supabase, R2 and `CRON_SECRET`/`SESSION_SECRET` values (verified by shape and by the live R2 and `select 1` probes above) — the Build 01 placeholders are gone. What is still missing is everywhere *else*. **Vercel Production + Preview** need: `DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_BACKUP_BUCKET`, `CRON_SECRET`, `SESSION_SECRET`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_SITE_URL` (the deployed URL, **not** the local `localhost:3000`; since D51 it no longer needs to be in Supabase's Redirect URLs, but the env schema still requires it). `BILLING_ENABLED` should be `false` in production — it is `true` locally for testing. Until these exist, `next build` on Vercel dies in `lib/env.ts`'s eager zod parse before it compiles a page, which is the whole reason Vercel deployments fail. **GitHub Actions repo secrets** for `.github/workflows/backup-nightly.yml` need: `SUPABASE_DB_URL`, `R2_ACCOUNT_ID`, `R2_BACKUP_BUCKET`, `R2_BACKUP_ACCESS_KEY_ID`/`R2_BACKUP_SECRET_ACCESS_KEY` (the **write**-scoped pair, distinct from the app's read-only one), `APP_URL`, and the same `CRON_SECRET` as Vercel's. As of 2026-09-16 only `CRON_SECRET`, `SUPABASE_DB_URL`, `SUPABASE_PROD_PROJECT_REF` and the two `NEXT_PUBLIC_SUPABASE_*` keys exist — so the nightly backup is currently failing at its upload step. **`APP_URL` is now needed by the two D47 cron workflows as well**, and without it `jobs-drain.yml` and `jobs-reap.yml` fail fast with a named-but-unprinted secret error on every tick. | Voola | Vercel deployments; the nightly backup ever running; the D47 cron workflows | 2026-09-16 |

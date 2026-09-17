@@ -9,7 +9,7 @@ import type { Database } from "@/lib/supabase/database.types";
  * user — same as lib/supabase/server.ts, different transport.
  *
  * architecture.md §4.1: for Client Components that need realtime or the auth
- * UI's own client-side calls (magic-link request, sign-out) only. Data for
+ * UI's own client-side calls only. Data for
  * rendering comes from a Server Component via props (code-standards §3:
  * "Never fetch in a Client Component"), not by calling this from a component
  * that could instead be a Server Component reading lib/supabase/server.ts.

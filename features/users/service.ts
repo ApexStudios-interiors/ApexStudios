@@ -14,6 +14,79 @@ export function emailForUsername(username: string): string {
   return `${username}@${USER_EMAIL_DOMAIN}`;
 }
 
+/**
+ * What the sign-in form's Username field becomes (D51: every role signs in
+ * with username + password). A bare username is `<username>@beapex.in`.
+ *
+ * Something that already contains an @ is used as the address unchanged, so an
+ * account whose email is not on the Apex domain can still sign in — today that
+ * is the seeded client (tvrao@example.invalid), which predates usernames.
+ */
+export function signInEmail(input: string): string {
+  const value = input.trim().toLowerCase();
+  return value.includes("@") ? value : emailForUsername(value);
+}
+
+/**
+ * The steps of creating an account, injected so the ordering and the
+ * compensation can be tested without GoTrue or a database. The real
+ * implementations are in features/users/actions.ts.
+ */
+export type ProvisionSteps = {
+  createAuthUser: (input: {
+    email: string;
+    password: string;
+  }) => Promise<{ ok: true; userId: string } | { ok: false; reason: "email_exists" }>;
+  deleteAuthUser: (userId: string) => Promise<void>;
+  /** Inserts the profiles row. Throws on failure. */
+  insertProfile: (userId: string, email: string) => Promise<void>;
+  /** Anything else the account needs before it counts as created — e.g. a
+   *  project membership. Throws on failure. */
+  afterProfile?: (userId: string) => Promise<void>;
+  /** Called only if compensation itself fails, with the id to reconcile. */
+  onOrphan?: (userId: string, cleanupError: unknown) => void;
+};
+
+export type ProvisionResult =
+  { status: "username_taken" } | { status: "created"; userId: string; email: string; password: string };
+
+/**
+ * Auth user → profile → (optional) further step, across two systems, so not
+ * one transaction (build/03 §2.10). If ANY step after the auth user exists
+ * fails, the auth user is deleted before the error propagates. That one delete
+ * is the whole cleanup: profiles.id references auth.users(id) ON DELETE
+ * CASCADE, and project_members.profile_id references profiles(id) ON DELETE
+ * CASCADE, so a half-made profile or membership goes with it.
+ *
+ * The password is generated here and appears only in the success result. The
+ * error that propagates is the failing step's own, which never carries it.
+ */
+export async function provisionAccount(
+  steps: ProvisionSteps,
+  username: string,
+  random: RandomSource = webCrypto
+): Promise<ProvisionResult> {
+  const email = emailForUsername(username);
+  const password = generatePassword(random);
+
+  const created = await steps.createAuthUser({ email, password });
+  if (!created.ok) return { status: "username_taken" };
+
+  try {
+    await steps.insertProfile(created.userId, email);
+    if (steps.afterProfile) await steps.afterProfile(created.userId);
+  } catch (failure) {
+    try {
+      await steps.deleteAuthUser(created.userId);
+    } catch (cleanupError) {
+      steps.onOrphan?.(created.userId, cleanupError);
+    }
+    throw failure;
+  }
+
+  return { status: "created", userId: created.userId, email, password };
+}
+
 const LOWER = "abcdefghijkmnpqrstuvwxyz"; // no l, o
 const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // no I, O
 const DIGITS = "23456789"; // no 0, 1
@@ -26,7 +99,9 @@ export const GENERATED_PASSWORD_LENGTH = 20;
 /** Fills a Uint32Array with cryptographically strong random values. */
 export type RandomSource = (buffer: Uint32Array) => Uint32Array;
 
-const webCrypto: RandomSource = (buffer) => globalThis.crypto.getRandomValues(buffer);
+function webCrypto(buffer: Uint32Array): Uint32Array {
+  return globalThis.crypto.getRandomValues(buffer);
+}
 
 /** Unbiased integer in [0, n): rejection sampling, never `value % n` on its own. */
 function randomIndex(n: number, random: RandomSource): number {

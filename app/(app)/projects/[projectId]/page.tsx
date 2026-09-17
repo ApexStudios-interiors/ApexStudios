@@ -1,6 +1,12 @@
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
-import { getClientBillingStats, getProjectHeader, getSiteStockStats } from "@/features/projects/queries";
+import {
+  getClientBillingStats,
+  getProjectClientAccess,
+  getProjectHeader,
+  getSiteStockStats,
+} from "@/features/projects/queries";
+import { ClientAccessCard } from "@/features/projects/components/ClientAccessCard";
 import { getPackagesForProject, type PackagesForProject } from "@/features/packages/queries";
 import { getUpdatesForProject } from "@/features/updates/queries";
 import { getStockRequestsForProject } from "@/features/stock/queries";
@@ -44,6 +50,10 @@ export default async function ProjectDashboardPage({ params }: { params: Promise
     0,
     5
   );
+  // D51: client logins are created and granted per project, by owner/admin.
+  // Keyed on the effective role, so an admin previewing as client or site
+  // sees the page as that role would.
+  const clientAccess = isMoney ? await getProjectClientAccess(projectId) : null;
 
   return (
     <div>
@@ -106,6 +116,10 @@ export default async function ProjectDashboardPage({ params }: { params: Promise
         pendingRequests={pendingRequests}
         updates={latestUpdates.slice(0, 3)}
       />
+
+      {clientAccess && (
+        <ClientAccessCard projectId={projectId} projectName={header.name} access={clientAccess} />
+      )}
     </div>
   );
 }
