@@ -127,6 +127,16 @@ if (Number(seedRows) > 0) {
 }
 console.log("✓ Migrations applied, reference data present, no demo data");
 
+// The access token hook's function only exists once the migrations above have
+// run, so the dashboard can only select it now. Pause for all three settings.
+console.log(`
+Now, in the Supabase dashboard for THIS project (${prodRef}):
+  a. Authentication → Sign In / Providers → Email: turn OFF "Allow new users to sign up"
+  b. Authentication → Hooks → add "Customize Access Token" hook →
+     Postgres function public.custom_access_token_hook → Enable
+  c. Project Settings → JWT Keys (or Auth settings): access token expiry = 1800 seconds`);
+await ask("Press Enter when those are done... ");
+
 // ── 3. Org and real accounts ─────────────────────────────────────────────────
 step("3/6  Company and staff accounts");
 let [org] = await sql`select id, name from public.orgs order by created_at limit 1`;
@@ -227,7 +237,19 @@ if (!probeError) {
   console.log("✓ Public sign-ups are off");
 }
 
-const login = createdLogins[0];
+let login = createdLogins[0];
+if (!login) {
+  // Re-run with no new account: verify the hook with an existing staff login.
+  const email = (
+    await ask("To verify the token hook, an existing owner/admin email (Enter to skip): ")
+  ).toLowerCase();
+  if (email) {
+    const password = await ask("  Its password (hidden): ", { hidden: true });
+    const [row] = await sql`select role from public.profiles where lower(email) = ${email}`;
+    if (row) login = { email, password, role: row.role };
+    else problems.push(`${email} has no profile in production.`);
+  }
+}
 if (login) {
   const { data: session, error } = await anon.auth.signInWithPassword({
     email: login.email,
@@ -260,7 +282,7 @@ if (login) {
     await anon.auth.signOut();
   }
 } else {
-  console.log("  (No account created this run, so the token hook check was skipped.)");
+  console.log("  (Token hook check skipped — re-run and give a staff login to verify it.)");
 }
 
 // ── 5. GitHub secrets and the local production guard ─────────────────────────
