@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { retryJob } from "@/features/ops/actions";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { useApp } from "@/context/AppContext";
 
 export function RetryJobButton({ id }: { id: string }) {

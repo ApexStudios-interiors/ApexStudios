@@ -6,7 +6,7 @@ import type { ProjectSchedule } from "@/features/schedule/queries";
 import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { Gantt } from "@/features/schedule/components/Gantt";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/Icon";
 import { dmy } from "@/lib/logic";
 

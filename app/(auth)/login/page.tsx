@@ -5,7 +5,7 @@ import { useAction } from "next-safe-action/hooks";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signInWithPassword } from "@/features/auth/actions";
 import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { Field, inputClass } from "@/components/ui/DialogShell";
 import { Icon } from "@/components/ui/Icon";
 import { safeNext } from "@/lib/auth/safe-next";

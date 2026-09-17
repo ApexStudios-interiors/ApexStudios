@@ -9,7 +9,7 @@ import type { UpdateDTO } from "@/features/updates/queries";
 import type { StockRequestDTO } from "@/features/stock/queries";
 import type { ApprovalDTO } from "@/features/approvals/queries";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 
 /**
  * build/08-approvals.md §2.5 step 7 converts the last card here off

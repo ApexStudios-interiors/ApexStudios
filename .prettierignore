@@ -7,3 +7,5 @@ test-results
 e2e/__screenshots__
 docs
 supabase/.temp
+.agents
+.claude

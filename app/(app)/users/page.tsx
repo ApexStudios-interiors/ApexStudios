@@ -4,7 +4,7 @@ import { useApp } from "@/context/AppContext";
 import { initials } from "@/lib/logic";
 import type { Role } from "@/lib/types";
 import { ROLE_LABEL } from "@/lib/rbac/roles";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/Icon";
 import { Card } from "@/components/ui/Card";
 import { TableWrap } from "@/components/ui/TableWrap";

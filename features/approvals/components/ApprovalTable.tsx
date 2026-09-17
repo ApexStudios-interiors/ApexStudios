@@ -9,7 +9,7 @@ import { dmy } from "@/lib/logic";
 import { ApprovalStatusBadge, ApprovalTypeBadge } from "@/components/shared/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, th, sub } from "@/components/ui/table";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { DialogShell } from "@/components/ui/DialogShell";
 import { Empty } from "@/components/ui/Empty";
 

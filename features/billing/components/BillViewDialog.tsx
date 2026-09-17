@@ -10,7 +10,7 @@ import { getBillDetailForDialog, getBillPdfUrl } from "@/features/billing/action
 import type { BillDetail } from "@/features/billing/queries";
 import { formatINR } from "@/lib/money";
 import { dmy } from "@/lib/logic";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 
 function Row({
   label,
