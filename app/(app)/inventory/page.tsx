@@ -3,6 +3,8 @@ import { getBusinessInventory } from "@/features/inventory/queries";
 import { getPortfolio } from "@/features/projects/queries";
 import { InventoryTable } from "@/features/inventory/components/InventoryTable";
 import { InventoryProjectFilterSelect } from "@/features/inventory/components/InventoryProjectFilterSelect";
+import { InventorySearchInput } from "@/features/inventory/components/InventorySearchInput";
+import { normalizeInventorySearch } from "@/features/inventory/service";
 import { formatINRCompact } from "@/lib/money";
 import { StatBar } from "@/components/ui/StatBar";
 import { Card } from "@/components/ui/Card";
@@ -13,20 +15,28 @@ import { Card } from "@/components/ui/Card";
  * (unchanged, no code here). `getBusinessInventory` returns `EMPTY_STATS`/`[]`
  * for a Client session, same non-hidden-route pattern as the project-level
  * page.
+ *
+ * Both toolbar controls are URL state (`project`, `q`) read here and applied
+ * inside the Supabase query, so they compose with each other, survive a
+ * reload, and can be linked to. The stat row stays project-scoped: it comes
+ * from `rpc_inventory_stats`, which summarises the inventory rather than the
+ * current search — see `features/inventory/queries.ts`.
  */
 export default async function BusinessInventoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ project?: string }>;
+  searchParams: Promise<{ project?: string; q?: string }>;
 }) {
-  const { project: projectId } = await searchParams;
+  const { project: projectId, q } = await searchParams;
   const session = await requireSession();
+
+  const search = normalizeInventorySearch(q);
 
   const effectiveRole = session.impersonating?.role ?? session.role;
   const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
 
   const [{ items, stats }, portfolio] = await Promise.all([
-    getBusinessInventory(session, { projectId }),
+    getBusinessInventory(session, { projectId, search }),
     getPortfolio(session),
   ]);
 
@@ -48,12 +58,18 @@ export default async function BusinessInventoryPage({
         ]}
       />
 
-      <div className="flex gap-3 mb-4">
+      <div className="flex flex-wrap items-center gap-2 mb-4">
         <InventoryProjectFilterSelect projects={portfolio.projects} value={projectId ?? ""} />
+        <InventorySearchInput value={search ?? ""} />
       </div>
 
       <Card>
-        <InventoryTable items={items} isAdmin={isAdmin} showProject />
+        <InventoryTable
+          items={items}
+          isAdmin={isAdmin}
+          showProject
+          empty={search ? `No items match “${search}”.` : undefined}
+        />
       </Card>
     </div>
   );

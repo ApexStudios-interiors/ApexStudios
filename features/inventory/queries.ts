@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
-import { inventoryStatus, type InventoryStatus } from "./service";
+import { inventorySearchFilter, inventoryStatus, type InventoryStatus } from "./service";
 
 /**
  * build/07-stock-inventory-notifications.md §2.3. `unit_cost` is admin-only
@@ -52,7 +52,18 @@ type StatusRow = {
   stock_value?: number;
 };
 
-async function fetchRows(isAdmin: boolean, filter: { projectId?: string }): Promise<StatusRow[]> {
+/**
+ * `filter.search` narrows in PostgREST, not in the browser: the project
+ * filter and the search compose as a single `where` on one round trip, and
+ * the result stays correct the day this list grows a `limit`/`cursor` —
+ * filtering an already-fetched page would quietly search only that page.
+ * Both role-scoped views expose `name` and `category`, so neither role gets
+ * a different search surface (and neither gets a wider one).
+ */
+async function fetchRows(
+  isAdmin: boolean,
+  filter: { projectId?: string; search?: string }
+): Promise<StatusRow[]> {
   const supabase = await createClient();
   if (isAdmin) {
     let query = supabase
@@ -62,6 +73,7 @@ async function fetchRows(isAdmin: boolean, filter: { projectId?: string }): Prom
       )
       .order("name");
     if (filter.projectId) query = query.eq("project_id", filter.projectId);
+    if (filter.search) query = query.or(inventorySearchFilter(filter.search));
     const { data, error } = await query;
     if (error) throw new Error(error.message);
     return data as StatusRow[];
@@ -71,6 +83,7 @@ async function fetchRows(isAdmin: boolean, filter: { projectId?: string }): Prom
     .select("id, project_id, name, category, sku, unit, qty_on_hand, reorder_level, location")
     .order("name");
   if (filter.projectId) query = query.eq("project_id", filter.projectId);
+  if (filter.search) query = query.or(inventorySearchFilter(filter.search));
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   // The view's own column types come back nullable even though every one of
@@ -135,9 +148,16 @@ export async function getProjectInventory(
   return { items, stats };
 }
 
+/**
+ * `opts.search` narrows the ITEMS only. The stat row deliberately keeps
+ * describing the whole (optionally project-filtered) inventory: it is
+ * computed by `rpc_inventory_stats`, which takes a project and nothing else,
+ * and re-summing it in TypeScript here would fork the SQL oracle this file's
+ * header exists to avoid. Widening the RPC is a migration, not a UI change.
+ */
 export async function getBusinessInventory(
   session: Session,
-  opts: { projectId?: string } = {}
+  opts: { projectId?: string; search?: string } = {}
 ): Promise<{ items: InventoryItemDTO[]; stats: InventoryStats }> {
   const effectiveRole = session.impersonating?.role ?? session.role;
   const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
