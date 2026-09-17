@@ -1,10 +1,19 @@
 "use client";
 
+import { useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 /**
- * A client boundary on any page with a package filter — a native `<select>`
- * that navigates on change. Everything else on that page (the data, the
+ * A client boundary on any page with a package filter — a select that
+ * navigates on change. Everything else on that page (the data, the
  * pagination) is a plain Server Component reading `searchParams`.
  *
  * Reads the CURRENT search params and merges `package` into them, rather
@@ -14,6 +23,11 @@ import { useRouter, useSearchParams } from "next/navigation";
  * lost anything; the Stock page (Build 07) stacks this alongside
  * `StockStatusTabs`'s own `status` param, and changing Package used to
  * silently drop whatever status tab was selected.
+ *
+ * "All packages" is Base UI's `null` item, not the native select's `""`
+ * option: Base UI treats `null` as "no selection" and renders a null item's
+ * label in the trigger. The `value` prop callers pass stays `""` for "all",
+ * so no caller changes.
  */
 export function PackageFilterSelect({
   basePath,
@@ -26,12 +40,17 @@ export function PackageFilterSelect({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const items = useMemo(
+    () => [{ value: null, label: "All packages" }, ...packages.map((p) => ({ value: p.id, label: p.name }))],
+    [packages]
+  );
   return (
-    <select
-      value={value}
-      onChange={(e) => {
+    <Select
+      items={items}
+      value={value || null}
+      onValueChange={(next: string | null) => {
         const params = new URLSearchParams(searchParams);
-        if (e.target.value) params.set("package", e.target.value);
+        if (next) params.set("package", next);
         else params.delete("package");
         // A changed filter restarts pagination — the Daily Updates page
         // (this component's original caller) has its own `cursor` param
@@ -41,14 +60,19 @@ export function PackageFilterSelect({
         const qs = params.toString();
         router.push(qs ? `${basePath}?${qs}` : basePath);
       }}
-      className="h-9 border border-input rounded-lg bg-background px-2 text-[13px]"
     >
-      <option value="">All packages</option>
-      {packages.map((p) => (
-        <option key={p.id} value={p.id}>
-          {p.name}
-        </option>
-      ))}
-    </select>
+      <SelectTrigger aria-label="Package" className="h-9 min-w-40 text-[13px]">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          {items.map((item) => (
+            <SelectItem key={item.value ?? "all"} value={item.value}>
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
   );
 }

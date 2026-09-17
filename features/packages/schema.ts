@@ -9,8 +9,11 @@ const moneyString = z
   .regex(/^\d+(\.\d{1,2})?$/, "Enter an amount like 125000 or 125000.50");
 
 /**
- * A native `<select>`'s "unassigned" option submits `""`, never `undefined` —
- * there is no such thing as an HTML option with no value. `z.uuid().optional()`
+ * The Lead select's "unassigned" choice reaches the form as `""`, never
+ * `undefined` — originally because a native `<select>` option cannot have no
+ * value, and still today because the shadcn Select's `null` "To assign" item
+ * is mapped back to `""` at the control boundary so this schema is unchanged.
+ * `z.uuid().optional()`
  * rejects `""` outright (a string that isn't a UUID, not an absent field),
  * which failed silently at the CLIENT validation step before the dialog's own
  * submit handler ever ran, well before the value reached the server for its

@@ -5,9 +5,10 @@ import { z } from "zod";
 export const createTaskSchema = z.object({
   phaseId: z.uuid(),
   name: z.string().trim().min(1, "Name is required"),
-  // A native <select>'s "no owner" option submits "", which z.uuid().optional()
-  // rejects outright — see features/packages/schema.ts's identical fix for
-  // leadProfileId, the same root cause.
+  // The Owner select's "no owner" choice reaches the form as "" (the shadcn
+  // Select's null item is mapped back to "" at the control), which
+  // z.uuid().optional() rejects outright — see features/packages/schema.ts's
+  // identical fix for leadProfileId, the same root cause.
   ownerProfileId: z
     .union([z.uuid(), z.literal("")])
     .optional()

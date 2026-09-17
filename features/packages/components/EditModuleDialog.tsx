@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
@@ -14,6 +14,14 @@ import {
   type PackageForEdit,
 } from "@/features/packages/actions";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const STATUSES = [
   { value: "not_started", label: "Not started" },
@@ -49,8 +57,20 @@ export function EditModuleDialog({ moduleId }: { projectId: string; moduleId: st
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [moduleId]);
 
+  // "To assign" is Base UI's `null` item; the form still holds `""` for it,
+  // which updatePackageSchema turns into `undefined`. `items` lets the closed
+  // trigger show the lead's name rather than their UUID.
+  const leadItems = useMemo(
+    () => [
+      { value: null, label: "To assign" },
+      ...(staff ?? []).map((s) => ({ value: s.id, label: s.name })),
+    ],
+    [staff]
+  );
+
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors },
@@ -133,25 +153,73 @@ export function EditModuleDialog({ moduleId }: { projectId: string; moduleId: st
         </div>
         <div>
           <Field label="Lead" htmlFor="em-lead">
-            <select id="em-lead" className={inputClass} disabled={!staff} {...register("leadProfileId")}>
-              <option value="">To assign</option>
-              {staff?.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+            <Controller
+              control={control}
+              name="leadProfileId"
+              render={({ field }) => (
+                <Select
+                  items={leadItems}
+                  disabled={!staff}
+                  // Until staff loads there is no label to resolve a saved
+                  // lead's UUID against, so the (disabled) trigger shows
+                  // "To assign", as the native select did — the form value
+                  // itself is left alone.
+                  value={staff ? field.value || null : null}
+                  onValueChange={(value: string | null) => field.onChange(value ?? "")}
+                  onOpenChange={(open) => {
+                    if (!open) field.onBlur();
+                  }}
+                >
+                  <SelectTrigger id="em-lead" ref={field.ref} className="h-9 w-full text-[13.5px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {leadItems.map((item) => (
+                        <SelectItem key={item.value ?? "unassigned"} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              )}
+            />
           </Field>
         </div>
         <div>
           <Field label="Status" htmlFor="em-status">
-            <select id="em-status" className={inputClass} {...register("status")}>
-              {STATUSES.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+            <Controller
+              control={control}
+              name="status"
+              render={({ field }) => (
+                <Select
+                  items={STATUSES}
+                  value={field.value ?? null}
+                  onValueChange={(value) => {
+                    // No null item, so Base UI never reports a cleared value
+                    // here; the guard only narrows the type.
+                    if (value) field.onChange(value);
+                  }}
+                  onOpenChange={(open) => {
+                    if (!open) field.onBlur();
+                  }}
+                >
+                  <SelectTrigger id="em-status" ref={field.ref} className="h-9 w-full text-[13.5px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {STATUSES.map((s) => (
+                        <SelectItem key={s.value} value={s.value}>
+                          {s.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              )}
+            />
           </Field>
         </div>
         {update.result.serverError && (

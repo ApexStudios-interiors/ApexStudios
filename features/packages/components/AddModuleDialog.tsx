@@ -1,14 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
 import { createPackageSchema } from "@/features/packages/schema";
 import { createPackage, getStaffOptions } from "@/features/packages/actions";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 /** build/04-projects-packages-phases.md §4.5: react-hook-form + the same zod
  *  schema `createPackage` parses. `leadProfileId` is a real profile UUID —
@@ -26,8 +34,20 @@ export function AddModuleDialog({ projectId }: { projectId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // "To assign" is Base UI's `null` item (its "no selection"); the form still
+  // holds `""` for it, which createPackageSchema turns into `undefined`.
+  // `items` lets the closed trigger show the lead's name, not their UUID.
+  const leadItems = useMemo(
+    () => [
+      { value: null, label: staff ? "To assign" : "Loading…" },
+      ...(staff ?? []).map((s) => ({ value: s.id, label: s.name })),
+    ],
+    [staff]
+  );
+
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm({
@@ -84,14 +104,35 @@ export function AddModuleDialog({ projectId }: { projectId: string }) {
         </div>
         <div className="col-span-2">
           <Field label="Lead" htmlFor="am-lead">
-            <select id="am-lead" className={inputClass} disabled={!staff} {...register("leadProfileId")}>
-              <option value="">{staff ? "To assign" : "Loading…"}</option>
-              {staff?.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+            <Controller
+              control={control}
+              name="leadProfileId"
+              render={({ field }) => (
+                <Select
+                  items={leadItems}
+                  disabled={!staff}
+                  // null until staff loads: no items means no label to show.
+                  value={staff ? field.value || null : null}
+                  onValueChange={(value: string | null) => field.onChange(value ?? "")}
+                  onOpenChange={(open) => {
+                    if (!open) field.onBlur();
+                  }}
+                >
+                  <SelectTrigger id="am-lead" ref={field.ref} className="h-9 w-full text-[13.5px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {leadItems.map((item) => (
+                        <SelectItem key={item.value ?? "unassigned"} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              )}
+            />
           </Field>
         </div>
         {create.result.serverError && (
