@@ -8,7 +8,5 @@ allowBuilds:
   unrs-resolver: true
   # downloads its platform binary; required by drizzle-kit and vitest
   esbuild: true
-  # downloads the sentry-cli binary used for source-map upload at build
-  "@sentry/cli": true
   # native libvips bindings; used only inside lib/jobs/handlers for thumbnails
   sharp: true

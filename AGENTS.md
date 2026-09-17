@@ -106,7 +106,8 @@ Before opening a PR: `pnpm typecheck && pnpm lint && pnpm test && pnpm test:rls 
 - **Drizzle** for schema definition, migrations, generated types and `service_role` job handlers
 - **Cloudflare R2** — one private bucket, presigned URLs only
 - **Vercel Cron** + a `jobs` table in Postgres — background work. No third-party job runner.
-- **Sentry** (errors). Email notification is **out of scope for v1**.
+- **No third-party error-tracking service (D49).** Errors go to the Vercel logs; a failed job
+  is a `jobs` row on the Admin ops page. Email notification is **out of scope for v1**.
 - `zod`, `react-hook-form`, `next-safe-action`, TanStack Table, Recharts
 - `@react-pdf/renderer` (bill PDFs), `exceljs` (Admin exports)
 - **pnpm**, Node >= 20, lockfile committed, CI installs `--frozen-lockfile` (D12)

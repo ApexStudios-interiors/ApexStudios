@@ -3,13 +3,16 @@
  *
  * `docs/architecture.md` §6.4 classifies internal_amount, unit_cost, rate,
  * margin_amount and the bill internal block as Restricted: "Never in logs,
- * Sentry breadcrumbs, or analytics." §9.1 adds that scopes carry user.id and
- * role and nothing more.
+ * breadcrumbs, or analytics." §9.1 adds that an error payload carries user.id
+ * and role and nothing more.
  *
  * This is a data-classification control, not a nicety, which is why it is a
- * plain function with its own tests rather than an inline closure in the Sentry
- * config. If you need a money value to debug, reproduce locally against seed
- * data (§6.4).
+ * plain function with its own tests rather than an inline closure at one call
+ * site. It has **no caller today** — D49 removed the error-reporting service
+ * that used it — and is kept, with its tests, as the filter any future error
+ * sink or structured-log payload must pass through (build/10 §2.4 requires the
+ * test to exist). If you need a money value to debug, reproduce locally
+ * against seed data (§6.4).
  *
  * The pattern deliberately over-matches. A redacted "corporate_id" costs
  * nothing; a leaked margin is the one failure this product cannot absorb.
@@ -18,7 +21,7 @@ export const RESTRICTED_KEY = /amount|rate|cost|margin|allocated|internal|price/
 
 export const REDACTED = "[redacted]";
 
-/** Depth cap: Sentry payloads are already normalised, and cycles must not hang. */
+/** Depth cap: event payloads are already normalised, and cycles must not hang. */
 const MAX_DEPTH = 8;
 
 export function redactValue(value: unknown, depth = 0): unknown {
@@ -34,7 +37,7 @@ export function redactValue(value: unknown, depth = 0): unknown {
   return value;
 }
 
-/** Shape-tolerant: Sentry's Event and Breadcrumb types vary across versions. */
+/** Shape-tolerant: event and breadcrumb payload shapes vary between sinks. */
 type Redactable = {
   extra?: Record<string, unknown>;
   contexts?: Record<string, unknown>;

@@ -1367,6 +1367,51 @@ ran across the complete diff. Fixed:
 
 ---
 
+### D49 — Sentry removed entirely
+
+**Question:** Sentry was wired in Build 01 §3.13 but has never reported an event: no organisation,
+DSN or auth token was ever created (`progress-tracker.md`'s own blocker list, raised 2026-09-09), so
+`enabled` evaluated to `false` in every environment and `withSentryConfig` uploaded nothing. Create
+the organisation, or drop it?
+**Decided:** 2026-09-17 by Voola — **drop it. Out of scope for v1.** No third-party error-tracking
+service.
+**Answer:** `@sentry/nextjs` is gone from `package.json` and the lockfile; `sentry.server.config.ts`,
+`sentry.edge.config.ts`, `instrumentation-client.ts` and `instrumentation.ts` are deleted;
+`next.config.ts` exports the plain config instead of `withSentryConfig`; `SENTRY_DSN` is out of
+`lib/env.ts`, `scripts/check-env.mjs` and `.env.example`; and the four `Sentry.capture*` call sites
+(`lib/safe-action.ts`, `lib/jobs/runner.ts`, `lib/jobs/handlers/inventory.reconcile.ts`,
+`app/(app)/error.tsx`) are removed. Recorded as ADR-018 in `architecture.md` §15.
+
+**Where an error goes now — nothing silently swallows one.** A failed job still writes its message
+to `jobs.last_error` through `rpc_finish_job`, which is what the Admin ops page reads and what
+`inventory.reconcile`'s deliberate throw relies on; that path is untouched. An unmapped Server
+Action error is now `console.error`-ed with the same `request_id` the user is shown, which is new —
+`mapDomainError` previously handed the error to Sentry and to nothing else, so removing the call
+without replacing it would have made the reference id the user quotes unfindable. `app/(app)/error.tsx`
+adds no logging of its own: React already logs a client error to the console, and a server error is
+logged by Next.js with the `digest` the page displays.
+
+**Consequence — recorded, not hidden.** There is no error aggregation, no error-rate alert (that row
+is removed from `architecture.md` §9.2 rather than left as a promise nothing keeps), no release
+tagging and no source-map upload, so a production stack trace reads against the deployed bundle.
+This is a real loss of a signal — it is affordable only because the signal was never actually
+switched on.
+
+**Kept deliberately:** `lib/observability/redact.ts` and its 11 tests. It has no caller now — the
+Sentry `beforeSend` hooks were its only ones — but `architecture.md` §6.4's "never a monetary value
+in logs or analytics" is a data-classification control that outlives any one sink, and
+`build/10-hardening-and-launch.md` §2.4 still requires the redaction test to exist. Deleting it
+would mean rewriting it the day an error sink of any kind is added.
+
+**Not touched:** `docs/build/01…09` are the dated record of how the system was built and still
+describe wiring Sentry. They are history, not instructions, and are left as written — as is
+`01-hld.md` §17's Phase 0 plan, which also still says "Next.js 15" and "shadcn". The one exception
+is `build/10-hardening-and-launch.md`: it is a to-do list nobody has worked through yet, so its
+Sentry setup and go-live checklist items would have been read as instructions. Those are struck
+out or removed; its redaction-test requirement stays, now worded without a vendor.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |

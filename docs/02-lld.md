@@ -1444,7 +1444,7 @@ Domain errors are typed and mapped to user-facing copy at the action boundary:
 | `VALIDATION` | 422 | Field-level messages from zod |
 
 Postgres `errcode` values from the RPCs map onto these. Unmapped exceptions become a generic
-message plus a Sentry event with the correlation id shown to the user.
+message with the correlation id shown to the user, and a server log line carrying the same id.
 
 ---
 

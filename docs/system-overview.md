@@ -29,7 +29,6 @@ flowchart TB
     DB[("Supabase Postgres<br/>data + auth + RLS")]
     R2[("Cloudflare R2<br/>private bucket")]
     Jobs["Vercel Cron<br/>+ jobs table in Postgres"]
-    Err["Sentry<br/>errors"]
 
     Admin --> App
     Site --> App
@@ -37,7 +36,6 @@ flowchart TB
 
     App --> DB
     App --> R2
-    App --> Err
     Jobs --> App
     Jobs --> DB
     Jobs --> R2
@@ -445,10 +443,8 @@ flowchart TD
     F --> VC[Vercel] --> TOTAL
     F --> R2X[R2] --> P1["🟡 Uploads/downloads fail<br/>rest of app fine"]
     F --> CR["Vercel Cron"] --> P2["🟡 PDFs + thumbnails delayed<br/>work stays queued in Postgres<br/><b>nothing lost</b>"]
-    F --> SEN[Sentry] --> P4["🟢 Blind to errors<br/>app unaffected"]
 
     style TOTAL fill:#fecaca
-    style P4 fill:#bbf7d0
 ```
 
 Only Postgres and Vercel are single points of failure. Job state lives in the `jobs` table,

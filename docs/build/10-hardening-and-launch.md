@@ -27,7 +27,8 @@
       phone that will be next to someone at 2 a.m.
 - [ ] **A named owner and a recurring calendar entry for the quarterly restore drill**
       (`architecture.md` §7.2). Without a name and a date it does not happen.
-- [ ] **Sentry**: production environment, release tracking, alert rules, and a spend cap.
+- ~~**Sentry**: production environment, release tracking, alert rules, and a spend cap.~~
+      **Dropped by D49** — there is no error-tracking service. Nothing to set up.
 
 ### 0.2 Compliance and legal
 
@@ -112,7 +113,7 @@ Targets: P95 dashboard < 1.5 s, P95 mutation < 500 ms (`01-hld.md` §13).
 - **Rate limiting** on auth endpoints, the magic-link request, `requestUploadUrl` and
   `searchAll` (`architecture.md` T14). Vercel WAF plus a per-action throttle.
 - `pnpm audit --audit-level=high` clean; Dependabot current.
-- **A redaction test**: assert that no log line, Sentry event or breadcrumb contains a value
+- **A redaction test**: assert that no log line, error payload or breadcrumb contains a value
   matching a money field or a personal name (`architecture.md` §6.4). Write it as a test that
   drives real actions and inspects the captured transport, not as a review checklist.
 - Run the `/security-review` skill over the full diff from `proto-v1` to `main`.
@@ -258,7 +259,6 @@ Run in order on the go-live date:
 - [ ] Cron entries live; `jobs.drain` observed running each minute in the Vercel log
 - [ ] **A real backup object exists in `apex-backups`**, verified by listing the bucket
 - [ ] Uptime monitor green; alerts tested down every channel
-- [ ] Sentry receiving events from production with the release tagged
 - [ ] Smoke test as all three roles on the production domain, on a phone and a desktop
 - [ ] Invitations sent; every user has signed in successfully at least once
 - [ ] Rollback plan confirmed: Vercel instant rollback for code, **and the explicit
@@ -268,7 +268,8 @@ Run in order on the go-live date:
 ### 4.3 The first week
 
 - Daily: check the ops page, the failed-jobs list and the backup status.
-- Watch Sentry for anything unmapped reaching a user.
+- Watch the Vercel logs for anything unmapped reaching a user (grep the `[action] unmapped
+  error` lines — D49 removed the error-tracking service that used to aggregate these).
 - Confirm the first real stock request, the first real approval and the first real bill each go
   end to end, with someone watching.
 - **Do not ship features in week one.** Fix what the real users hit.

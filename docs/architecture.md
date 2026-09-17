@@ -51,16 +51,16 @@ These are the tie-breakers. When a decision is genuinely balanced, resolve it in
    Apex staff  ────────►│                              │
    (Admin / Owner)      │                              │
                         │                              │
-   Site supervisors ───►│      APEX PROJECTS           │◄──── Sentry (errors)
+   Site supervisors ───►│      APEX PROJECTS           │
    (mobile, on site)    │      operations platform     │
                         │                              │
    Clients ────────────►│                              │
-   (property owners)    └───┬──────────┬───────────┬───┘
-                            │          │           │
-                     ┌──────▼───┐ ┌────▼─────┐ ┌───▼──────┐
-                     │ Supabase │ │Cloudflare│ │  Sentry  │
-                     │ Postgres │ │    R2    │ │  errors  │
-                     │  + Auth  │ │ (private)│ └──────────┘
+   (property owners)    └───┬──────────┬───────────────┘
+                            │          │
+                     ┌──────▼───┐ ┌────▼─────┐
+                     │ Supabase │ │Cloudflare│
+                     │ Postgres │ │    R2    │
+                     │  + Auth  │ │ (private)│
                      └──────────┘ └──────────┘
                             ▲
                      ┌──────┴──────────┐
@@ -155,7 +155,7 @@ app/                          Route segments. Params, layout, composition. Thin.
   ├──► lib/rbac        role matrix, nav config, guards
   ├──► lib/money       INR formatting, rounding
   ├──► lib/jobs        enqueue, claim, handlers
-  └──► lib/observability  request id, Sentry scope, structured log
+  └──► lib/observability  request id, money/PII redaction, structured log
 ```
 
 **Dependency direction is strictly downward.** Nothing depends on `app/`. This is what makes
@@ -224,7 +224,7 @@ Production database changes only ever arrive through a merged, CI-verified migra
 | `SUPABASE_SERVICE_ROLE_KEY` | Vercel env (Production, encrypted) | On staff departure; annually |
 | `SUPABASE_ANON_KEY` | Vercel env, client-exposed (safe by design — RLS protects) | With project |
 | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | Vercel env, server-only | Annually |
-| `CRON_SECRET` (Bearer token guarding `/api/cron/*`), `SENTRY_DSN` | Vercel env | Annually |
+| `CRON_SECRET` (Bearer token guarding `/api/cron/*`) | Vercel env | Annually |
 | `DATABASE_URL` (direct, for migrations) | GitHub Actions secret | Annually |
 
 Rules: no secret in the repo, `.env.local` gitignored, `.env.example` lists every key with
@@ -346,14 +346,14 @@ internal tool with ~50 known users. Revisit if the platform is ever resold (HLD 
 
 | Class | Examples | Handling |
 |---|---|---|
-| **Restricted** | `internal_amount`, `unit_cost`, `rate`, `margin_amount`, bill internal block | Admin/Owner only. Never in a non-Admin response body. Never in logs, Sentry breadcrumbs, or analytics. |
+| **Restricted** | `internal_amount`, `unit_cost`, `rate`, `margin_amount`, bill internal block | Admin/Owner only. Never in a non-Admin response body. Never in logs, breadcrumbs, or analytics. |
 | **Confidential** | Contract values, bills, client contact details, site photos | Project members only. Presigned access. Not indexed by anything. |
 | **Internal** | Task names, schedules, inventory quantities, daily updates | Project members. |
 | **Public** | Nothing. | The application has no public surface beyond the login page. |
 
 **Logging rule:** structured logs carry `user_id`, `role`, `project_id`, `request_id` and
-never a monetary value or a personal name. Sentry scopes carry the same. If you need a money
-value to debug, reproduce locally against seed data.
+never a monetary value or a personal name. Any error payload leaving the process carries the
+same. If you need a money value to debug, reproduce locally against seed data.
 
 ### 6.5 Application security baseline
 
@@ -493,13 +493,12 @@ This is not a payment gateway; do not design as though it is.
 | Vercel Cron | Missed invocation | Reconcile, backup verify, weekly maintenance delayed | Work stays `pending` in the `jobs` table; the next tick drains it. **Nothing is lost** — state is in Postgres, not in the scheduler. | Automatic on next run |
 | GitHub Actions | Missed or delayed schedule | PDFs and thumbnails delayed past the 5-min target (§5.4) | Same: the queue is in Postgres. A delayed run is latency, not loss. | Automatic on next run; `workflow_dispatch` to force one |
 | GitHub Actions | Scheduled workflows auto-disabled after 60 days idle | Drain and reap stop **silently** | Not self-healing. `backup.verify` still runs on Vercel and alerts, so a total stall surfaces within a day. | Re-enable in the Actions tab |
-| Sentry | Down | Blind to errors | App unaffected; logs still in Vercel | Wait |
 
 The pattern to notice: **only Postgres and Vercel are single points of failure.** Everything
 else degrades a feature rather than the product. That is deliberate — notifications are
 computed live from a database view rather than pushed into a queue — so there is no
 notification pipeline that can be stale, and none to operate. Alerting to operators (§9.2)
-uses Vercel/Sentry's own channels, not application email.
+uses Vercel's own channels, not application email.
 
 ### 8.3 Concurrency and idempotency
 
@@ -535,8 +534,12 @@ because a function timed out mid-run.
 **Logs** — structured JSON to Vercel. Every line carries `request_id`, `user_id`, `role`,
 `route`, `duration_ms`. Never a money value, never a personal name (§6.4).
 
-**Errors** — Sentry. Scope carries `user.id` and `role`, nothing more. Source maps uploaded
-at build. Releases tagged with the git SHA so a regression is traceable to a deploy.
+**Errors** — the Vercel logs, and nowhere else (D49). An unmapped Server Action error is
+logged with the `request_id` the user is shown; a failed job is a `jobs` row with its
+`last_error`, listed on the Admin ops page. There is no error-tracking service, so there is no
+aggregation, no release tagging and no source-map upload: a production stack trace reads
+against the deployed bundle. `lib/observability/redact.ts` is kept, with its tests, as the
+money/PII filter any future error sink must pass through.
 
 **Business telemetry** — surfaced *in the product*, not in a separate dashboard, because for
 this system operational health and product value are the same thing:
@@ -556,9 +559,8 @@ open. Putting these on the Admin dashboard means they get looked at.
 |---|---|---|---|
 | Site down | `/api/health` failing 3× consecutively | Email + phone | P1 |
 | Nightly backup failed | The GitHub Actions workflow fails, or `backup.verify` finds no object written by 02:30 IST | Email | **P1** |
-| Error rate spike | > 10 errors / 5 min in Sentry | Email | P2 |
 | Inventory drift detected | Reconcile job finds cache ≠ ledger | Email | P2 |
-| Job failed permanently | Any `jobs` row reaches `status='failed'` | Admin ops page + Sentry | P2 |
+| Job failed permanently | Any `jobs` row reaches `status='failed'` | Admin ops page | P2 |
 | DB usage > 80% of tier | Supabase metric | Email | P3 |
 | R2 storage > 8 GB | Approaching free tier | Email | P3 |
 | Slow query > 2 s | `pg_stat_statements` weekly digest | Email | P3 |
@@ -638,7 +640,6 @@ in operational attention than they would ever save.
 | Supabase | Free (no PITR, pauses at 7d idle) | **Pro ~$25/mo** | ~$25–50/mo |
 | Cloudflare R2 | 10 GB free | Free → ~₹50/mo | ~₹800/mo (60 GB) |
 | Vercel Cron | Included in plan | Included | Included |
-| Sentry | Developer free | Free | Free |
 | **Total** | ₹0 | **~₹4,000/mo** | **~₹8,000/mo** |
 
 Roughly ₹4,000 a month buys an SLA, point-in-time recovery, and commercial licensing. Against
@@ -749,6 +750,7 @@ No business logic is rewritten. This is the entire reason for the layering rule 
 | **014** | Notifications computed live from a view; no notification table, no read state | The notification *is* the work item. It disappears when the work is done. Also decouples the bell from email availability. | Accepted |
 | **015** | Bills gain `cancelled` and a client-rejection path back to `draft` | A disputed bill in the prototype's state machine had nowhere to go. | Accepted |
 | **016** | Upgrade to Vercel Pro and Supabase Pro at go-live | PITR, SLA, and commercial licensing for ~₹4,000/mo. Free tier is a development posture, not a production one. | Accepted 2026-09-09 (`decisions.md` ADR-016) — **not yet purchased.** Production is on Hobby, so the per-minute cron this decision was partly justified by is served from GitHub Actions (§5.4). The commercial-use and PITR arguments are untouched and still outstanding. |
+| **018** | No third-party error-tracking service; errors stay in the Vercel logs and the `jobs` table | Sentry was wired but inert — no organisation, DSN or auth token ever existed, so it never reported a single event, while costing a dependency, a build-time source-map upload step, three config files and an env key. Out of scope for v1. The cost is real and recorded in §9.1: no aggregation, no error-rate alert (§9.2 lost that row), no release tagging. Re-adding it is a dependency plus three files; `lib/observability/redact.ts` and its tests are kept for exactly that. | Accepted 2026-09-17 (`decisions.md` D49) |
 
 ---
 

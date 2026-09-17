@@ -1,5 +1,4 @@
 import "server-only";
-import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { JOB_REGISTRY } from "./registry";
@@ -27,8 +26,10 @@ async function runOne(supabase: SupabaseClient, job: JobRow): Promise<boolean> {
     await finish(supabase, job.id, true);
     return true;
   } catch (e) {
+    // The failure record is `jobs.last_error`, written by `rpc_finish_job`
+    // below and surfaced on the Admin ops page — that row is the alert
+    // (docs/architecture.md §9.2), so the message must always reach it.
     const message = e instanceof Error ? e.message : String(e);
-    Sentry.captureException(e, { tags: { job: job.name }, extra: { jobId: job.id } });
     await finish(supabase, job.id, false, message);
     return false;
   }

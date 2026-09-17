@@ -1,6 +1,5 @@
 import "server-only";
 import { createSafeActionClient } from "next-safe-action";
-import * as Sentry from "@sentry/nextjs";
 import {
   ForbiddenError,
   UnauthenticatedError,
@@ -46,9 +45,9 @@ export function mapDomainError(e: Error): string {
   if (pgCode) return ERROR_MESSAGES[pgCode];
 
   // Unmapped: never let the raw message through. It may name a table, a
-  // column, or a value. Sentry gets the real error; the user gets a
-  // request_id a support conversation can find in the logs by.
-  Sentry.captureException(e, { extra: { requestId } });
+  // column, or a value. The server log gets the real error, tagged with the
+  // same request_id the user is shown, so a support conversation can find it.
+  console.error(`[action] unmapped error ${requestId}`, e);
   return `Something went wrong. Reference: ${requestId}`;
 }
 
