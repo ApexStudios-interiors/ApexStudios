@@ -190,7 +190,9 @@ test.describe("site: can request an approval and add photos, but cannot decide",
     await page.goto(`/projects/${PROJECT}/approvals`);
     await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: "Request Approval" }).click();
-    await page.getByLabel("Package").selectOption({ index: 1 });
+    // Package is a Base UI Select; pick its first package option.
+    await page.getByLabel("Package").click();
+    await page.getByRole("option").first().click();
     await page.getByLabel("Item").fill(item);
     await page.locator('input[type="file"]').setInputFiles(TEST_PHOTO_PATH);
     // Same fake-R2 constraint as updates-journey.spec.ts: the PUT itself

@@ -82,11 +82,14 @@ test.describe("full stock lifecycle across three roles", () => {
     // build §5: "Do not send `rate` to a non-admin, and do not accept it
     // from one" — the field must not even be in the DOM for site.
     await expect(sitePage.getByLabel(/Rate/)).toHaveCount(0);
-    // index 0 is the "Select a package"/"Loading…" placeholder.
-    await sitePage.getByLabel("Package").selectOption({ index: 1 });
+    // Package and Unit are Base UI Selects (combobox + listbox); the trigger
+    // stays disabled until options load, and the placeholder is not an option.
+    await sitePage.getByLabel("Package").click();
+    await sitePage.getByRole("option").first().click();
     await sitePage.getByLabel("Material").fill(materialName);
     await sitePage.getByLabel("Quantity").fill("7");
-    await sitePage.getByLabel("Unit").selectOption({ index: 1 });
+    await sitePage.getByLabel("Unit").click();
+    await sitePage.getByRole("option").first().click();
     await sitePage.getByRole("button", { name: "Submit" }).click();
     await expect(sitePage.getByText("New Stock Request")).not.toBeVisible({ timeout: 10_000 });
     await siteCtx.close();
