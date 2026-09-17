@@ -20,6 +20,7 @@ import postgres from "postgres";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+import { assertNotProduction } from "./lib/db-target.mjs";
 
 config({ path: ".env.local", quiet: true });
 
@@ -28,7 +29,6 @@ const {
   NEXT_PUBLIC_SUPABASE_URL: URL,
   NEXT_PUBLIC_SUPABASE_ANON_KEY: ANON,
   SUPABASE_SERVICE_ROLE_KEY: SERVICE,
-  SUPABASE_PROD_PROJECT_REF: PROD,
 } = process.env;
 
 for (const [k, v] of Object.entries({ DATABASE_URL, URL, ANON, SERVICE })) {
@@ -37,10 +37,7 @@ for (const [k, v] of Object.entries({ DATABASE_URL, URL, ANON, SERVICE })) {
     process.exit(1);
   }
 }
-if (PROD && (DATABASE_URL.includes(PROD) || URL.includes(PROD))) {
-  console.error("✗ Refusing to run the spike against production.");
-  process.exit(1);
-}
+assertNotProduction([DATABASE_URL, URL], "the D15 spike");
 
 const sql = postgres(DATABASE_URL, { max: 1 });
 const admin = createClient(URL, SERVICE, { auth: { persistSession: false } });

@@ -208,6 +208,13 @@ issues six queries pays six round trips; at 200 ms cross-region that is 1.2 s of
 | **Preview** | Vercel preview per PR | Supabase **branch** (ephemeral, per PR) | R2 `apex-preview` | Seed only |
 | **Production** | Vercel production | Supabase `apex-prod` | R2 `apex-prod` + `apex-backups` | Real |
 
+> **As built, 2026-09-17 (D49): there is exactly ONE Supabase project and it is production.**
+> The three rows above are the design, not the current state — no preview branch and no separate
+> `apex-dev` project exist, so local development, `pnpm db:*` and (until it was paused) CI all
+> pointed at the live database. The protection is now in the scripts: `scripts/lib/db-target.mjs`
+> refuses any seed, reset, bootstrap, pgTAP or integration run whose target resolves to
+> `SUPABASE_PROD_PROJECT_REF`, and refuses non-interactively when that variable is unset.
+
 The earlier Apex spec excluded a staging tier. This still holds — there is no long-lived
 staging environment to maintain. But **Supabase preview branches give us the safety without
 the maintenance**: each PR gets a real Postgres with migrations applied and seed data, torn
@@ -597,6 +604,15 @@ push / PR
 
 The RLS stage is blocking and cannot be skipped or marked continue-on-error. It is the test
 suite that protects the product's core promise.
+
+> **Paused, 2026-09-17 (D49).** None of this runs automatically. `.github/workflows/ci.yml` keeps
+> every job above but is now `workflow_dispatch` only, because the `db → RLS → integration` stages
+> had no database of their own and were running `db push`, the **seed** and the integration suite
+> against the single live project on every pull request. Re-enabling means restoring the
+> `pull_request` and `push` triggers, and not before those stages have a non-production database.
+> Until then `pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build`, run
+> locally, is the gate. The scheduled production workflows (`backup-nightly.yml`, `jobs-drain.yml`,
+> `jobs-reap.yml`) are unaffected and still run.
 
 ### 10.2 Release and rollback
 

@@ -17,6 +17,7 @@ import { config } from "dotenv";
 import postgres from "postgres";
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import path from "node:path";
+import { assertNotProduction } from "./lib/db-target.mjs";
 
 config({ path: ".env.local", quiet: true, override: false });
 
@@ -39,11 +40,9 @@ if (!dbUrl || dbUrl.includes("placeholder")) {
   console.error("✗ No target database. Set SUPABASE_DB_URL or DATABASE_URL.");
   process.exit(1);
 }
-const prodRef = process.env.SUPABASE_PROD_PROJECT_REF?.trim();
-if (prodRef && !prodRef.includes("placeholder") && dbUrl.includes(prodRef)) {
-  console.error("✗ Refusing to run the pgTAP suite against production.");
-  process.exit(1);
-}
+// The suite creates and rolls back fixture rows and runs as a privileged
+// connection; it never runs against the one live project (docs/decisions.md D49).
+assertNotProduction([dbUrl], "the pgTAP suite");
 
 const sql = postgres(dbUrl, { max: 1, prepare: false, onnotice: () => {} });
 

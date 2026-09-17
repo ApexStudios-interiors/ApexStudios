@@ -1208,6 +1208,43 @@ control: an owner/admin account is now protected by its password alone, and thos
 internal cost and margin. Strong, unique passwords for owner/admin, and changing the seeded
 `apex-dev-only` password on every production account (`docs/open-issues.md` #4), matter more as a
 result. Supabase's own sign-in rate limits (`supabase/config.toml` `[auth.rate_limit]`) still apply.
+
+---
+
+### D49 — One Supabase project, which is production; automatic CI paused
+
+**Question:** There is exactly one Supabase project. Vercel Production, `.env.local` and CI all point
+at it, and CI's `migrations · seed · RLS · drift` job ran `supabase db push`, the **seed**, the pgTAP
+suite and the integration tests against it on **every pull request** — writing demo and test rows
+into the live database. Split it into a second (`apex-prod`) project, or something else?
+**Answered:** 2026-09-17 by Voola
+**Answer:** **One Supabase project, and it is production.** No second project is to be created. The
+CI/CD pipeline is not needed yet and standing it up safely would take longer than it is worth right
+now, so **automatic CI is paused** rather than repaired: `.github/workflows/ci.yml` keeps every job
+it had but is triggered by `workflow_dispatch` only. The separate-project work proposed as PR #25 is
+superseded and is not merged.
+**Consequence:**
+
+- Nothing runs `db push`, the seed or the integration suite on a pull request any more, which is what
+  removes the immediate danger. Nothing else about the workflow changed — restoring the
+  `pull_request` and `push` triggers is the whole of re-enabling it, and must not happen until the
+  `database` job has a database that is not the live project.
+- **The durable protection is in the scripts, not in CI.** `scripts/lib/db-target.mjs` holds one
+  production-ref guard, used by `db:reset`, `db:seed`, `db:bootstrap`, the `spike:d15` script, the
+  pgTAP runner (`pnpm test:rls`) and the integration suite's setup. Each refuses when its target
+  resolves to `SUPABASE_PROD_PROJECT_REF` — and, new here, refuses on a non-interactive run when that
+  variable is absent, because an unset guard used to mean no guard at all. The integration suite also
+  checks `NEXT_PUBLIC_SUPABASE_URL`, since its supabase-js sessions write through the API, not the
+  database URL.
+- With CI off, `pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build` run
+  locally is the only gate before a push. `tests/db-target.test.ts` is what keeps the guard honest.
+- Unaffected, deliberately: `backup-nightly.yml`, `jobs-drain.yml` and `jobs-reap.yml`. Those are
+  production operations, not CI, and keep their schedules.
+- D10 (a Supabase preview branch per PR) is not withdrawn but is not in effect: preview branching
+  needs a paid plan and a `SUPABASE_ACCESS_TOKEN` that this repository does not have. Until one
+  exists, "CI has its own database" remains unfunded, which is precisely why CI is paused instead of
+  re-pointed.
+
 ---
 
 ### Findings from Build 09 (Billing)

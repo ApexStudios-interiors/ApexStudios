@@ -9,13 +9,15 @@
  *
  * Idempotent: every statement in seed.sql is `on conflict do nothing` or a
  * guarded `update ... where`, so running this twice is a no-op the second time.
- * Refuses production, matching every other db:* script.
+ * Refuses production through the shared guard in `scripts/lib/db-target.mjs`,
+ * the same one every other db:* script and the test runners use.
  *
  * Usage: pnpm db:seed
  */
 import { config } from "dotenv";
 import postgres from "postgres";
 import { readFileSync } from "node:fs";
+import { assertNotProduction } from "./lib/db-target.mjs";
 
 config({ path: ".env.local", quiet: true });
 
@@ -24,11 +26,10 @@ if (!url || url.includes("placeholder")) {
   console.error("✗ DATABASE_URL is missing or still a placeholder.");
   process.exit(1);
 }
-const prod = process.env.SUPABASE_PROD_PROJECT_REF?.trim();
-if (prod && !prod.includes("placeholder") && url.includes(prod)) {
-  console.error("✗ Refusing to seed production.");
-  process.exit(1);
-}
+// The seed writes the whole demo dataset. There is one Supabase project and it
+// is production (docs/decisions.md D49), so this guard is what stands between a
+// mistyped URL and demo rows in the live database.
+assertNotProduction([url], "the seed");
 
 const sql = postgres(url, { max: 1, prepare: false, onnotice: () => {} });
 
