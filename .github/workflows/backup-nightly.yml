@@ -34,11 +34,28 @@ jobs:
       # depend on the distro's package set.
       - name: Install PostgreSQL client and AWS CLI
         run: |
-          sudo apt-get update && sudo apt-get install -y postgresql-client unzip
+          # pg_dump refuses to dump a server newer than itself. Ubuntu's
+          # `postgresql-client` is pinned to 16 and the runner image ships a
+          # PGDG 16 client, but the database is PostgreSQL 17 — so add the
+          # PGDG repo and install the 17 client explicitly.
+          sudo apt-get update && sudo apt-get install -y postgresql-common unzip
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
           curl -sf "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
           unzip -q awscliv2.zip
           sudo ./aws/install --update
           rm -rf awscliv2.zip aws
+
+      # Proves which pg_dump the dump will run, and fails before touching the
+      # database if it is not 17. Full path, never bare `pg_dump`:
+      # /usr/bin/pg_dump is Debian's version wrapper and can still select the
+      # preinstalled 16 client.
+      - name: Verify pg_dump version
+        run: |
+          set -euo pipefail
+          /usr/lib/postgresql/17/bin/pg_dump --version
+          /usr/lib/postgresql/17/bin/pg_dump --version | grep -qE ' 17\.' \
+            || { echo "::error::expected pg_dump 17"; exit 1; }
 
       - name: Dump and compress
         id: dump
@@ -48,34 +65,77 @@ jobs:
           set -euo pipefail
           KEY="pg_dump/$(date -u +%F).sql.gz"
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
-          pg_dump "$SUPABASE_DB_URL" --no-owner --no-privileges | gzip > backup.sql.gz
+          /usr/lib/postgresql/17/bin/pg_dump "$SUPABASE_DB_URL" --no-owner --no-privileges | gzip > backup.sql.gz
 
       # A token scoped ONLY to apex-backups (build §0.1) — distinct from the
       # app's own R2 credentials, which must never be able to reach this
-      # bucket at all.
+      # bucket at all. It must be an Object Read & WRITE token: the Object
+      # Read-only token (the one Vercel's backup.verify uses) authenticates
+      # fine and then fails here with AccessDenied on PutObject.
       - name: Upload to R2
+        id: upload
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
+          # AWS CLI v2 now sends extra default checksums that R2 does not
+          # fully support; Cloudflare's aws-cli guide says to only send them
+          # when the operation requires it.
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_BACKUP_BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          KEY: ${{ steps.dump.outputs.key }}
         run: |
           set -euo pipefail
-          aws s3 cp backup.sql.gz \
-            "s3://${{ secrets.R2_BACKUP_BUCKET }}/${{ steps.dump.outputs.key }}" \
-            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+          : "${AWS_ACCESS_KEY_ID:?the R2_BACKUP_ACCESS_KEY_ID repository secret is not set}"
+          : "${AWS_SECRET_ACCESS_KEY:?the R2_BACKUP_SECRET_ACCESS_KEY repository secret is not set}"
+          : "${R2_BACKUP_BUCKET:?the R2_BACKUP_BUCKET repository secret is not set}"
+          : "${R2_ACCOUNT_ID:?the R2_ACCOUNT_ID repository secret is not set}"
+          # R2 S3 credentials have a fixed shape. Catch the common paste
+          # mistakes (the "Token value" instead of the Secret Access Key, a
+          # trailing space/newline) here, with a message, instead of as an
+          # opaque SignatureDoesNotMatch from R2.
+          [[ "$AWS_ACCESS_KEY_ID" =~ ^[0-9a-f]{32}$ ]] \
+            || { echo "::error::R2_BACKUP_ACCESS_KEY_ID is not a 32-character R2 Access Key ID (check for spaces/newlines)"; exit 1; }
+          [[ "$AWS_SECRET_ACCESS_KEY" =~ ^[0-9a-f]{64}$ ]] \
+            || { echo "::error::R2_BACKUP_SECRET_ACCESS_KEY is not a 64-character R2 Secret Access Key. The Cloudflare 'Token value' is NOT this; check for spaces/newlines"; exit 1; }
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          aws s3 cp backup.sql.gz "s3://${R2_BACKUP_BUCKET}/${KEY}" --endpoint-url "$ENDPOINT" \
+            || { echo "::error::R2 upload failed. AccessDenied = token is read-only or not scoped to this bucket (needs Object Read & Write on apex-backups). SignatureDoesNotMatch = the Secret Access Key is not the one paired with this Access Key ID."; exit 1; }
+          # Prove the object is really there, not just that cp exited 0.
+          aws s3api head-object --bucket "$R2_BACKUP_BUCKET" --key "$KEY" --endpoint-url "$ENDPOINT"
 
+      # --fail-with-body alone is not enough: a 3xx is not an HTTP error to
+      # curl, so a redirect (e.g. middleware bouncing to /login) used to pass
+      # silently. Require exactly 200.
       - name: Report success
         if: success()
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          KEY: ${{ steps.dump.outputs.key }}
         run: |
-          curl -sf -X POST "${{ secrets.APP_URL }}/api/backup/report" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+          set -euo pipefail
+          CODE=$(curl -sS -o body.txt -w '%{http_code}' --max-time 30 -X POST "$APP_URL/api/backup/report" \
+            -H "Authorization: Bearer $CRON_SECRET" \
             -H "Content-Type: application/json" \
-            -d '{"ok": true, "key": "${{ steps.dump.outputs.key }}"}'
+            -d "{\"ok\": true, \"key\": \"$KEY\"}")
+          cat body.txt; echo
+          [ "$CODE" = "200" ] || { echo "::error::/api/backup/report returned HTTP $CODE"; exit 1; }
 
+      # Only when the backup itself did not land — a failed success-report
+      # must not record a successful upload as a failed backup.
       - name: Report failure
-        if: failure()
+        if: failure() && steps.upload.outcome != 'success'
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl -sf -X POST "${{ secrets.APP_URL }}/api/backup/report" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+          set -euo pipefail
+          CODE=$(curl -sS -o body.txt -w '%{http_code}' --max-time 30 -X POST "$APP_URL/api/backup/report" \
+            -H "Authorization: Bearer $CRON_SECRET" \
             -H "Content-Type: application/json" \
-            -d '{"ok": false, "error": "backup-nightly workflow failed — see the Actions run log"}'
+            -d '{"ok": false, "error": "backup-nightly workflow failed — see the Actions run log"}')
+          cat body.txt; echo
+          [ "$CODE" = "200" ] || { echo "::error::/api/backup/report returned HTTP $CODE"; exit 1; }
