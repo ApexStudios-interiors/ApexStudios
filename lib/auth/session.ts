@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { decodePreviewCookie, PREVIEW_COOKIE_NAME } from "@/lib/auth/impersonation";
 import type { Role } from "@/lib/rbac/roles";
+import { requiresMfa } from "@/lib/auth/mfa";
 
 export type Session = {
   userId: string;
@@ -129,7 +130,7 @@ export async function requireSession(): Promise<Session> {
  * actually completed this session" are both known at once.
  */
 function requireAalForRole(session: Session): void {
-  if ((session.role === "owner" || session.role === "admin") && session.aal !== "aal2") {
+  if (requiresMfa(session.role) && session.aal !== "aal2") {
     throw new ForbiddenError("MFA required for this role");
   }
 }

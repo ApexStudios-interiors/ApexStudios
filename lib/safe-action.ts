@@ -18,6 +18,7 @@ import type { Role } from "@/lib/rbac/roles";
 const ERROR_MESSAGES = {
   UNAUTHENTICATED: "Your session expired. Please sign in again.",
   FORBIDDEN: "You don't have permission to do that.",
+  MFA_REQUIRED: "Two-factor authentication is required. Reload the page to set it up.",
   NOT_FOUND: "That record no longer exists.",
   ILLEGAL_TRANSITION: "This request has already moved on. Refresh to see the current status.",
   ALREADY_BILLED: "One or more items are already on another bill.",
@@ -40,7 +41,10 @@ export function mapDomainError(e: Error): string {
   const requestId = crypto.randomUUID();
 
   if (e instanceof UnauthenticatedError) return ERROR_MESSAGES.UNAUTHENTICATED;
-  if (e instanceof ForbiddenError) return ERROR_MESSAGES.FORBIDDEN;
+  if (e instanceof ForbiddenError) {
+    // requireAalForRole (lib/auth/session.ts) — say what to do, not just "no".
+    return e.message.includes("MFA required") ? ERROR_MESSAGES.MFA_REQUIRED : ERROR_MESSAGES.FORBIDDEN;
+  }
 
   const pgCode = codeFromPostgresMessage(e.message);
   if (pgCode) return ERROR_MESSAGES[pgCode];

@@ -7,6 +7,7 @@ import { signInWithPassword, verifyTotp } from "@/features/auth/actions";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Field, inputClass } from "@/components/ui/DialogShell";
+import { safeNext } from "@/lib/auth/mfa";
 
 /**
  * Staff email + password, with a TOTP challenge step when enrolled
@@ -27,7 +28,8 @@ export default function LoginPage() {
 
 function LoginForm() {
   const router = useRouter();
-  const next = useSearchParams().get("next") ?? "/";
+  // safeNext: ?next= is attacker-controlled; only same-origin paths are followed.
+  const next = safeNext(useSearchParams().get("next"));
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,6 +40,9 @@ function LoginForm() {
     onSuccess: ({ data }) => {
       if (data?.needsMfa) {
         setMfa({ factorId: data.factorId, challengeId: data.challengeId });
+      } else if (data?.needsEnrollment) {
+        // D22: owner/admin with no authenticator yet — set one up first.
+        router.push(`/mfa?next=${encodeURIComponent(next)}`);
       } else {
         router.push(next);
         router.refresh();

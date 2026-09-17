@@ -7,6 +7,7 @@ import { Toast } from "@/components/ui/Toast";
 import { DialogHost } from "@/components/shared/DialogHost";
 import { PreviewBanner } from "@/components/auth/PreviewBanner";
 import { getSession } from "@/lib/auth/session";
+import { requiresMfa } from "@/lib/auth/mfa";
 import { getNotifications } from "@/features/notifications/queries";
 
 /**
@@ -24,6 +25,11 @@ import { getNotifications } from "@/features/notifications/queries";
 export default async function AppShellLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
   if (!session) redirect("/login");
+  // D22: requireRole refuses every owner/admin action below aal2. Without this
+  // the shell would render and each click would fail with "no permission";
+  // /mfa either sets TOTP up or asks for the code. Checks the REAL role, same
+  // as requireRole — previewing another role (D20) does not skip it.
+  if (requiresMfa(session.role) && session.aal !== "aal2") redirect("/mfa");
 
   const effectiveRole = session.impersonating?.role ?? session.role;
   const notifications = await getNotifications(session);

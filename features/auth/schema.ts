@@ -14,3 +14,11 @@ export const totpVerifySchema = z.object({
   challengeId: z.string().min(1),
   code: z.string().length(6, "Enter the 6-digit code"),
 });
+
+/** D22: confirming a newly enrolled factor, or answering a challenge for an
+ *  existing one outside the login form — challengeAndVerify needs no separate
+ *  challenge id. */
+export const totpCodeSchema = z.object({
+  factorId: z.string().min(1),
+  code: z.string().regex(/^\d{6}$/, "Enter the 6-digit code"),
+});

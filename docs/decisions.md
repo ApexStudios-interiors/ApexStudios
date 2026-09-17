@@ -496,6 +496,15 @@ unbuilt**; a real admin account cannot pass MFA today outside this dev workaroun
 rather than in "Still open" below because build/03-auth-and-rbac.md's own scope, not Build 04's,
 is where it belongs — flagging it is this build's job, building it is not.
 
+**Resolved 2026-09-17 — TOTP enrollment built.** `/mfa` (`app/(auth)/mfa/page.tsx`) sets up a TOTP
+factor (QR code + text key, confirmed by one code, which also upgrades the session to aal2) or, when
+one already exists, asks for a code. An owner/admin reaches it from the login form when they have no
+factor, and from the app shell (`app/(app)/layout.tsx`) whenever their session is below aal2, so an
+admin never sees a shell whose every action refuses them. The routing rules live in
+`lib/auth/mfa.ts`, shared with `requireAalForRole`. Lost device: `node scripts/reset-mfa.mjs <email>`
+removes the account's factors (service role, typed confirmation) so they enroll again. The
+`e2e/global-setup.ts` workaround is still used by Playwright, unchanged.
+
 ---
 
 ### D23 — Build 05 prerequisites (week convention, drag-to-reschedule, task progress authority, start dates)
