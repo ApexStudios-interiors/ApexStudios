@@ -253,7 +253,7 @@ question anyone was asked — both are findings.
 
 | Item | Blocks |
 |---|---|
-| TOTP enrollment UI (D22) | A real admin/owner account cannot use any admin-gated action today |
+| ~~TOTP enrollment UI (D22)~~ Resolved by D48: two-factor removed | A real admin/owner account cannot use any admin-gated action today |
 | Schedule, Updates, Stock, Billing package tabs — still `AppContext` | Builds 05–09, in that order per the build sequence |
 | `markPhaseComplete` | Deferred to Build 05, where the "phase has no tasks" precondition can be tested |
 | A vendor-name lead (e.g. "Laxmi Multi Services" in the prototype) has no real representation — `lead_profile_id` only points at staff profiles | Cosmetic; not blocking |
@@ -297,7 +297,7 @@ D23 (this build's four prerequisite confirmations), D24 (the ancestry-trigger fi
 
 | Item | Blocks |
 |---|---|
-| TOTP enrollment UI (D22) | A real admin/owner account cannot use any admin-gated action today |
+| ~~TOTP enrollment UI (D22)~~ Resolved by D48: two-factor removed | A real admin/owner account cannot use any admin-gated action today |
 | Updates, Stock, Billing package tabs — still `AppContext` | Builds 06–09, in that order per the build sequence |
 | `rpc_mark_phase_complete`'s Server Action and UI (the Billing tab's "Mark Complete" button) | Build 09 |
 | The build file's own Playwright spec item "...and the phase shows as Billable in the Billing tab" is not verifiable yet — that tab is still mock data. T-17 (the RPC's actual billing_status flip) is covered directly against the database in `tests/integration/schedule.test.ts` instead. | Build 09 |
@@ -363,7 +363,7 @@ confirmation.
 | ~~`CRON_SECRET` and the R2 env vars are local placeholders~~ — **resolved locally 2026-09-16**; still absent in Vercel and GitHub Actions, which is why Vercel builds fail. See `docs/decisions.md`'s "Still open". | Vercel deployments; the nightly backup |
 | `inventory.reconcile` is a documented no-op stub | Build 07 fills it in |
 | `bill.pdf` isn't in `lib/jobs/registry.ts` yet (no code enqueues it) | Build 09 adds it, and its own name to `rpc_enqueue_job`'s allowlist |
-| TOTP enrollment UI (D22) | A real admin/owner account cannot use any admin-gated action today |
+| ~~TOTP enrollment UI (D22)~~ Resolved by D48: two-factor removed | A real admin/owner account cannot use any admin-gated action today |
 
 ## Build 07 — Stock Requests, Inventory Ledger, Notifications & Search
 

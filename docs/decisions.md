@@ -496,6 +496,8 @@ unbuilt**; a real admin account cannot pass MFA today outside this dev workaroun
 rather than in "Still open" below because build/03-auth-and-rbac.md's own scope, not Build 04's,
 is where it belongs — flagging it is this build's job, building it is not.
 
+**Superseded 2026-09-17 by D48:** the AAL2 requirement was removed rather than an enrollment UI built.
+
 ---
 
 ### D23 — Build 05 prerequisites (week convention, drag-to-reschedule, task progress authority, start dates)
@@ -1189,6 +1191,25 @@ submit path.
 
 ---
 
+### D48 — No two-factor authentication for any role
+
+**Question:** `architecture.md` T12 made TOTP mandatory for `owner`/`admin`, enforced by
+`requireAalForRole`, but no enrollment screen was ever built (D22), so no real owner or admin could
+perform any admin action. Build the enrollment screen, or drop the requirement?
+**Decided:** 2026-09-17 by Voola — **drop it. Email + password only, for every staff role, with a
+show/hide toggle on the password field.** Clients keep the magic link.
+**Answer:** `requireAalForRole` and the session's `aal` field are removed (`lib/auth/session.ts`);
+the login form has no code step; `e2e/global-setup.ts` no longer enrolls a factor. Supabase's
+project-level TOTP setting is left as it is and simply unused. The enrollment screen built as PR #22
+was closed unmerged.
+
+**Consequence — recorded, not hidden.** T12 (credential stuffing on staff logins) loses its second
+control: an owner/admin account is now protected by its password alone, and those accounts see
+internal cost and margin. Strong, unique passwords for owner/admin, and changing the seeded
+`apex-dev-only` password on every production account (`docs/open-issues.md` #4), matter more as a
+result. Supabase's own sign-in rate limits (`supabase/config.toml` `[auth.rate_limit]`) still apply.
+---
+
 ### Findings from Build 09 (Billing)
 
 **A real, live-caught correctness bug, the most serious one this build found:** `rpc_create_bill`'s
@@ -1359,7 +1380,7 @@ ran across the complete diff. Fixed:
 | **CA sign-off on a generated RA bill PDF** — Build 09's own exit criterion ("a CA has reviewed a generated RA bill PDF and signed off in writing") is outside what this work can obtain on its own. | Voola → CA | Build 09 go-live, alongside D4/D45/D46 and the five §8.4 tax questions | 2026-09-11 |
 | CGST/SGST split vs. one blended `gst_amount` (D45) | Voola → CA | First real bill if Apex bills inter-state | 2026-09-11 |
 | Retention release schedule — none implemented (D46) | Voola | Future scope, not Build 09 | 2026-09-11 |
-| No TOTP enrollment UI exists (D22) — an owner/admin account cannot pass `requireAalForRole`'s AAL2 check anywhere outside the dev-only workaround in `e2e/global-setup.ts`. Every `adminAction`-guarded Server Action is unreachable by a real admin user until this is built. | — | Any real admin using a real account | 2026-09-10 |
+| ~~No TOTP enrollment UI exists (D22) — an owner/admin account cannot pass `requireAalForRole`'s AAL2 check anywhere outside the dev-only workaround in `e2e/global-setup.ts`. Every `adminAction`-guarded Server Action is unreachable by a real admin user until this is built.~~ **Resolved 2026-09-17 by D48** (two-factor requirement removed). | — | Any real admin using a real account | 2026-09-10 |
 | **Cloudflare R2 is live and the upload pipeline works end to end — one security gap remains.** Supersedes the original "no R2 account" blocker; re-verified 2026-09-16 against the real account. **Working:** app bucket `HeadBucket` plus a full presigned **PUT → GET → DELETE**; **CORS configured** (preflight returns 204 with a matching `Access-Control-Allow-Origin` for both `localhost:3000` and the deployed origin), so real browser uploads are unblocked; the backup-bucket read grant now works (`backup.verify`'s own `HeadObject` returns **404 not 403** — it can read the bucket, there is simply no dump yet, which is correct until `backup.nightly` first succeeds); and a genuinely generated bill PDF is present in the app bucket, so the `bill.pdf` job has run for real. **Open — the app token is over-privileged on the backup bucket.** A probe `PutObject` *succeeded*, and so did deleting it. `.env.example` and D17 both require this credential be **read-only** there, precisely so a compromised app token cannot destroy the only recovery point; the write-scoped pair belongs solely to `.github/workflows/backup-nightly.yml`. Fix in Cloudflare: scope the app token to Object Read **& Write** on `apex-studios` but Object **Read-only** on `apex-backups`. Still unverified: a real browser PUT from a live page, thumbnail generation and its EXIF-absence check, the orphan sweep actually deleting, and the GitHub Actions backup write. | Voola | The read-only regrant — a compromised app credential can currently wipe the backups | 2026-09-16 |
 | ~~**Vercel is not on Pro** — the per-minute `jobs.drain` does not run without it.~~ **Resolved 2026-09-16 by D47**, and the original wording was wrong about the limit: Hobby allows 100 crons, capped at *one invocation per day each*. `jobs.drain` and `jobs.reap` now run from GitHub Actions; the three daily/weekly crons stayed on Vercel. Still unverified **live** — the drain has never been observed draining a real queue in production, because production is four builds behind and the Vercel env vars below are still unset. | Voola | Live verification of the drain, once production deploys | 2026-09-12 |
 | **Vercel is still not on Pro, for the reasons D47 did *not* resolve.** ADR-016 also bought Supabase PITR (RPO 24 h → 15 min) and, more pressingly, Hobby's terms **forbid commercial use** — this system issues GST tax invoices. Cron was only one of three justifications and is now handled without paying; these two are not. | Voola | Production go-live (licensing), `architecture.md` §7.2's stated RPO | 2026-09-16 |

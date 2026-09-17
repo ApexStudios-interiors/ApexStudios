@@ -316,7 +316,7 @@ a ₹40L package and a ₹2L package should not move the needle equally.
 
 | Actor | Method | Rationale |
 |---|---|---|
-| Admin, Site Supervisor | Supabase Auth, email + password, mandatory TOTP for Admin | Staff, repeat daily use, need speed |
+| Admin, Site Supervisor | Supabase Auth, email + password (no two-factor, D48) | Staff, repeat daily use, need speed |
 | Client | Magic link to email **or** phone OTP | External, infrequent, must not manage a password for a system they use monthly |
 
 - Invitation-only. There is no public sign-up. `POST /signup` is disabled at the Supabase
