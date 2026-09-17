@@ -92,9 +92,17 @@ jobs:
           : "${AWS_SECRET_ACCESS_KEY:?the R2_BACKUP_SECRET_ACCESS_KEY repository secret is not set}"
           : "${R2_BACKUP_BUCKET:?the R2_BACKUP_BUCKET repository secret is not set}"
           : "${R2_ACCOUNT_ID:?the R2_ACCOUNT_ID repository secret is not set}"
+          # R2 S3 credentials have a fixed shape. Catch the common paste
+          # mistakes (the "Token value" instead of the Secret Access Key, a
+          # trailing space/newline) here, with a message, instead of as an
+          # opaque SignatureDoesNotMatch from R2.
+          [[ "$AWS_ACCESS_KEY_ID" =~ ^[0-9a-f]{32}$ ]] \
+            || { echo "::error::R2_BACKUP_ACCESS_KEY_ID is not a 32-character R2 Access Key ID (check for spaces/newlines)"; exit 1; }
+          [[ "$AWS_SECRET_ACCESS_KEY" =~ ^[0-9a-f]{64}$ ]] \
+            || { echo "::error::R2_BACKUP_SECRET_ACCESS_KEY is not a 64-character R2 Secret Access Key. The Cloudflare 'Token value' is NOT this; check for spaces/newlines"; exit 1; }
           ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
           aws s3 cp backup.sql.gz "s3://${R2_BACKUP_BUCKET}/${KEY}" --endpoint-url "$ENDPOINT" \
-            || { echo "::error::R2 upload failed. AccessDenied means the token is read-only or not scoped to this bucket; it needs Object Read & Write on apex-backups."; exit 1; }
+            || { echo "::error::R2 upload failed. AccessDenied = token is read-only or not scoped to this bucket (needs Object Read & Write on apex-backups). SignatureDoesNotMatch = the Secret Access Key is not the one paired with this Access Key ID."; exit 1; }
           # Prove the object is really there, not just that cp exited 0.
           aws s3api head-object --bucket "$R2_BACKUP_BUCKET" --key "$KEY" --endpoint-url "$ENDPOINT"
 
