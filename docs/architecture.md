@@ -541,7 +541,7 @@ because a function timed out mid-run.
 **Logs** — structured JSON to Vercel. Every line carries `request_id`, `user_id`, `role`,
 `route`, `duration_ms`. Never a money value, never a personal name (§6.4).
 
-**Errors** — the Vercel logs, and nowhere else (D49). An unmapped Server Action error is
+**Errors** — the Vercel logs, and nowhere else (D50). An unmapped Server Action error is
 logged with the `request_id` the user is shown; a failed job is a `jobs` row with its
 `last_error`, listed on the Admin ops page. There is no error-tracking service, so there is no
 aggregation, no release tagging and no source-map upload: a production stack trace reads
@@ -766,7 +766,7 @@ No business logic is rewritten. This is the entire reason for the layering rule 
 | **014** | Notifications computed live from a view; no notification table, no read state | The notification *is* the work item. It disappears when the work is done. Also decouples the bell from email availability. | Accepted |
 | **015** | Bills gain `cancelled` and a client-rejection path back to `draft` | A disputed bill in the prototype's state machine had nowhere to go. | Accepted |
 | **016** | Upgrade to Vercel Pro and Supabase Pro at go-live | PITR, SLA, and commercial licensing for ~₹4,000/mo. Free tier is a development posture, not a production one. | Accepted 2026-09-09 (`decisions.md` ADR-016) — **not yet purchased.** Production is on Hobby, so the per-minute cron this decision was partly justified by is served from GitHub Actions (§5.4). The commercial-use and PITR arguments are untouched and still outstanding. |
-| **018** | No third-party error-tracking service; errors stay in the Vercel logs and the `jobs` table | Sentry was wired but inert — no organisation, DSN or auth token ever existed, so it never reported a single event, while costing a dependency, a build-time source-map upload step, three config files and an env key. Out of scope for v1. The cost is real and recorded in §9.1: no aggregation, no error-rate alert (§9.2 lost that row), no release tagging. Re-adding it is a dependency plus three files; `lib/observability/redact.ts` and its tests are kept for exactly that. | Accepted 2026-09-17 (`decisions.md` D49) |
+| **018** | No third-party error-tracking service; errors stay in the Vercel logs and the `jobs` table | Sentry was wired but inert — no organisation, DSN or auth token ever existed, so it never reported a single event, while costing a dependency, a build-time source-map upload step, three config files and an env key. Out of scope for v1. The cost is real and recorded in §9.1: no aggregation, no error-rate alert (§9.2 lost that row), no release tagging. Re-adding it is a dependency plus three files; `lib/observability/redact.ts` and its tests are kept for exactly that. | Accepted 2026-09-17 (`decisions.md` D50) |
 
 ---
 

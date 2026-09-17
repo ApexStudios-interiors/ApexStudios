@@ -786,7 +786,7 @@ Production additions:
 
 ## 14. Observability
 
-- **No error-tracking service** (D49). Errors are logged server-side with the `request_id` the
+- **No error-tracking service** (D50). Errors are logged server-side with the `request_id` the
   user is shown; a failed job carries its own `last_error` on the Admin ops page. A log line
   never carries PII beyond the user id.
 - **Structured audit log** in Postgres: every mutation writes `{actor, entity, action,

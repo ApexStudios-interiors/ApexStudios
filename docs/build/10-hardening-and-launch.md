@@ -28,7 +28,7 @@
 - [ ] **A named owner and a recurring calendar entry for the quarterly restore drill**
       (`architecture.md` §7.2). Without a name and a date it does not happen.
 - ~~**Sentry**: production environment, release tracking, alert rules, and a spend cap.~~
-      **Dropped by D49** — there is no error-tracking service. Nothing to set up.
+      **Dropped by D50** — there is no error-tracking service. Nothing to set up.
 
 ### 0.2 Compliance and legal
 
@@ -269,7 +269,7 @@ Run in order on the go-live date:
 
 - Daily: check the ops page, the failed-jobs list and the backup status.
 - Watch the Vercel logs for anything unmapped reaching a user (grep the `[action] unmapped
-  error` lines — D49 removed the error-tracking service that used to aggregate these).
+  error` lines — D50 removed the error-tracking service that used to aggregate these).
 - Confirm the first real stock request, the first real approval and the first real bill each go
   end to end, with someone watching.
 - **Do not ship features in week one.** Fix what the real users hit.

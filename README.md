@@ -63,7 +63,7 @@ Everything is in [`docs/`](docs/). Start with [`AGENTS.md`](AGENTS.md) — the h
 
 Next.js 16 App Router · React 19 · TypeScript strict · Tailwind v4 with hand-rolled primitives ·
 Supabase Postgres with RLS · Drizzle for schema and migrations · Cloudflare R2 · Vercel Cron with
-a `jobs` table. No third-party error tracking (D49).
+a `jobs` table. No third-party error tracking (D50).
 
 There is no separate backend service. Server Actions and Route Handlers are the backend.
 

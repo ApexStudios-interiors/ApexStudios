@@ -48,3 +48,7 @@ next-env.d.ts
 
 # Playwright real-session storage states (build/03-auth-and-rbac.md) — cookies, never committed.
 e2e/.auth/
+
+# Claude Code local state — per-machine settings and agent worktrees, never shared.
+.claude/settings.local.json
+.claude/worktrees/

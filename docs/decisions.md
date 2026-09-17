@@ -1427,7 +1427,7 @@ was deliberately not done.
 
 ---
 
-### D49 — Sentry removed entirely
+### D50 — Sentry removed entirely
 
 **Question:** Sentry was wired in Build 01 §3.13 but has never reported an event: no organisation,
 DSN or auth token was ever created (`progress-tracker.md`'s own blocker list, raised 2026-09-09), so

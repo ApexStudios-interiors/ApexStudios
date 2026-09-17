@@ -209,7 +209,7 @@ Domain errors are typed and mapped at the action boundary (`02-lld.md` §10):
 - **A raw Postgres error never reaches the browser.** They carry table names, column names and
   sometimes values.
 - Unmapped exceptions become a generic message, logged server-side with the `request_id` shown
-  to the user so support can find the log line. There is no error-tracking service (D49).
+  to the user so support can find the log line. There is no error-tracking service (D50).
 - **Structured logs carry `request_id`, `user_id`, `role`, `route`, `duration_ms` — and never a
   monetary value or a personal name** (`architecture.md` §6.4). Any error payload leaving the
   process carries the same. There is a redaction filter and it has a test.

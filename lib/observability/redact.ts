@@ -8,7 +8,7 @@
  *
  * This is a data-classification control, not a nicety, which is why it is a
  * plain function with its own tests rather than an inline closure at one call
- * site. It has **no caller today** — D49 removed the error-reporting service
+ * site. It has **no caller today** — D50 removed the error-reporting service
  * that used it — and is kept, with its tests, as the filter any future error
  * sink or structured-log payload must pass through (build/10 §2.4 requires the
  * test to exist). If you need a money value to debug, reproduce locally
