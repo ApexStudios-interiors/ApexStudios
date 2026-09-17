@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
-import { cn } from "@/lib/utils";
 
-// Geist replaced Inter with the shadcn adoption (D51). `--font-inter` is
-// referenced nowhere in globals.css, so the old face is not loaded at all
-// rather than downloaded and unused on every page.
-const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
+// Inter, as the UI has always used. `shadcn init` swapped in Geist, which was
+// never asked for — the components were wanted, the restyle was not.
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-inter",
+});
 
 export const metadata: Metadata = {
   title: "Apex Projects",
@@ -28,7 +30,7 @@ const THEME_INIT_SCRIPT = `
  */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)} suppressHydrationWarning>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
