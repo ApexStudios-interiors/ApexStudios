@@ -102,6 +102,9 @@ treat it as optional.
 
 ### D8 — Is there an `owner` above the four admins?
 
+> **Superseded in part by D54 (2026-09-18):** `setUserRole` and `deactivateUser` are no
+> longer owner-only — an admin may act on a site or client user. Everything else in D8 stands.
+
 **Question:** Who is the Admin of Apex — is there a Super Admin above the four named staff who
 alone manages users and billing constants?
 **Answered:** 2026-09-09 by Voola
@@ -1637,6 +1640,42 @@ D12's shadcn clause and AGENTS.md's hand-rolled-primitives rule.
   files are the dated record and are left as written.
 
 ---
+
+### D54 — Role changes and deactivation: admin may act on site and client users
+
+**Question:** D8 (and `lib/rbac/permissions.ts`) reserved `setUserRole` and `deactivateUser` to
+the owner. When those two controls were finally built (2026-09-18), should they stay owner-only?
+**Answered:** 2026-09-18 by Voola — **no; leave it as built.** An admin may change the role of, or
+deactivate, a **site or client** user. An admin may never act on the owner, on another admin, or
+on themselves. The owner may act on anyone but themselves.
+**Consequence:** supersedes D8 on these two actions only. The owner stops being a bottleneck for
+routine staff changes, while the escalation paths stay shut: an admin cannot demote the owner,
+cannot neutralise a peer, and cannot promote themselves. `permissions.ts` maps an action to caller
+roles and cannot express a rule about the TARGET, so it is now advisory for these two entries —
+the binding checks are `userAdminRefusal` (features/users/service.ts), re-asserted by
+`rpc_set_user_role` / `rpc_set_user_active`, and underneath both `trg_profiles_privilege_guard`.
+
+**Why the trigger, not just an RPC — the finding that prompted it.** Before migration
+`20260918090001`, `profiles` carried `profiles_update_self using (id = auth.uid())` and
+`profiles_update_admin using (org_id = auth_org() and is_admin())`. Neither can restrict a
+COLUMN, and the RPC that migration 0003 deferred `role` to was never built. Verified against the
+live database on 2026-09-18, inside a rolled-back transaction: a **client** session could run
+`update profiles set role='owner' where id = <self>` and it SUCCEEDED, as could a site user and an
+admin; an admin could also deactivate the owner. Any signed-in user could therefore grant
+themselves owner — and with it every project's `internal_amount`, `unit_cost` and margin — by one
+PostgREST call, without touching the app. An RPC could not close this, because nothing obliges a
+caller to use one. The `before update` trigger does, and it also enforces that the org can never
+lose its last active owner (demotion, deactivation and soft delete alike), taking a row lock so two
+concurrent demotions cannot each see the other as the spare.
+
+**Residual gap:** no RLS policy consults `is_active`, and PostgREST validates only a token's
+signature and expiry. An access token already issued therefore keeps working directly against
+PostgREST with its old role for at most `jwt_expiry` (1800s). Inside the app there is no window:
+`app/(app)/layout.tsx` refuses an inactive profile and middleware fails once the session row is
+deleted. Deactivation additionally bans the GoTrue account, so no new token can be minted.
+
+---
+
 
 ## Still open
 
