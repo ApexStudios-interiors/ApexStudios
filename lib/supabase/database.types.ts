@@ -1573,6 +1573,12 @@ export type Database = {
         };
         Returns: unknown;
       };
+      rpc_next_project_code: {
+        Args: {
+          p_base: string;
+        };
+        Returns: string;
+      };
       rpc_record_payment: {
         Args: {
           p_bill_id: string;

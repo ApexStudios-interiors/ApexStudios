@@ -18,7 +18,7 @@ const RLS_BYPASS = [
   {
     group: ["@/lib/supabase/admin", "**/lib/supabase/admin"],
     message:
-      "architecture.md §4.1: the service_role client bypasses RLS. It belongs in lib/jobs/handlers/**, lib/jobs/runner.ts and app/api/backup/report/route.ts only — the paths this rule's own `ignores` list actually exempts.",
+      "architecture.md §4.1: the service_role client bypasses RLS. It belongs in lib/jobs/handlers/**, lib/jobs/runner.ts, app/api/backup/report/route.ts and lib/auth/admin.ts only — the paths this rule's own `ignores` list actually exempts.",
   },
 ];
 
@@ -111,6 +111,12 @@ const eslintConfig = defineConfig([
       // first thing), never by a user session, to record an outcome in
       // `jobs` — a table with no user-writable path at all.
       "app/api/backup/report/route.ts",
+      // GoTrue's admin API (create/delete a sign-in) has no RLS-scoped
+      // equivalent — auth.users is not a PostgREST table. This file is the one
+      // lib/supabase/admin.ts and build/03-auth-and-rbac.md §2.10 name for it,
+      // and it touches no application table: the profiles row is written by
+      // features/users/actions.ts through the user's own RLS-scoped client.
+      "lib/auth/admin.ts",
       "drizzle.config.ts",
       // The health probe issues `select 1` and reads no application data, so
       // there is nothing for RLS to protect. It is listed here rather than
