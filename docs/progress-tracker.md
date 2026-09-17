@@ -19,7 +19,7 @@ merged on top, which would have been a no-op. Baseline tag `proto-v1` at commit 
 |---|---|---|
 | 3.1 Docs consolidated into `docs/` | ✅ | `ARCHITECTURE.md` → `architecture.md` casing fixed (breaks on Linux CI); `AGENTS.md` refs inside `docs/` now `../AGENTS.md`; `UI-GUIDE.md` → `docs/ui-guide.md`; mockup → `docs/reference/`. A mirror copy is kept at `../context-all/` at Voola's request. |
 | 3.2 Decision register | ✅ | `docs/decisions.md`, sixteen entries, all answered 2026-09-09. Two carry an open CA confirmation. |
-| 3.3 `AGENTS.md` reconciled | ✅ | Next 16, React 19, hand-rolled primitives, root layout, D11 rule, documentation map. `architecture.md` §4 and §16, `01-hld.md` §18 amended in the same commit. |
+| 3.3 `AGENTS.md` reconciled | ✅ | Next 16, React 19, root layout, D11 rule, documentation map. `architecture.md` §4 and §16, `01-hld.md` §18 amended in the same commit. The UI-library line this step wrote said **hand-rolled primitives**; that was superseded on 2026-09-17 by **D53, which adopted shadcn/ui** (Base UI, `base-nova`), and `AGENTS.md` now says so. |
 | 3.4 Migrate to pnpm | ✅ | pnpm 12.3.4 pinned via `packageManager`; `pnpm-lock.yaml` in, `package-lock.json` out; `.npmrc` `engine-strict`; `engines.node >= 20`. Install scripts allowlisted in `pnpm-workspace.yaml` with a reason each. |
 | 3.5 Directory scaffold | ✅ | Root layout per D13. `.gitkeep` in empty folders, no stub `service.ts`. |
 | 3.6 Dependency set | ✅ | All groups installed. **`next-safe-action` 8.7.3 works on Next 16** — verified by a real browser round-trip, not a typecheck. **`sharp` 0.35.4 loads and renders locally** (libvips 8.18.6). |
