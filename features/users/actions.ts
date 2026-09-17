@@ -4,12 +4,33 @@ import "server-only";
 import { revalidatePath, updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminAction } from "@/lib/safe-action";
-import { createAuthUser, deleteAuthUser, setAuthPassword } from "@/lib/auth/admin";
+import {
+  createAuthUser,
+  deleteAuthUser,
+  revokeUserSessions,
+  setAuthPassword,
+  setAuthUserBanned,
+} from "@/lib/auth/admin";
 import { ForbiddenError } from "@/lib/auth/session";
 import type { Role } from "@/lib/rbac/roles";
 import { insertProjectMember } from "@/features/projects/members";
-import { addUserSchema, createClientLoginSchema, resetPasswordSchema } from "./schema";
-import { provisionAccount, resetAccountPassword, type ProvisionSteps } from "./service";
+import { countActiveOwners } from "./queries";
+import {
+  addUserSchema,
+  createClientLoginSchema,
+  resetPasswordSchema,
+  setUserActiveSchema,
+  setUserRoleSchema,
+} from "./schema";
+import {
+  changeUserActive,
+  changeUserRole,
+  provisionAccount,
+  resetAccountPassword,
+  type ProvisionSteps,
+  type UserAdminRefusal,
+  type UserAdminSteps,
+} from "./service";
 
 /**
  * build/03-auth-and-rbac.md §2.10's inviteUser, reshaped by the owner
@@ -200,4 +221,100 @@ export const resetUserPassword = adminAction
       email: result.email,
       password: result.password,
     };
+  });
+
+/**
+ * Change a user's role, and deactivate / reactivate a user — the two controls
+ * the Users page rendered disabled until now.
+ *
+ * Checked, as the reset is, three times on the server:
+ *
+ *  1. adminAction — the caller's REAL role (the D20 preview cookie is never
+ *     consulted) is owner or admin.
+ *  2. roleChangeRefusal / activeChangeRefusal (./service.ts) against the
+ *     target as read through the caller's own RLS-scoped client, so a user in
+ *     another org is simply not found.
+ *  3. The database, in the same statement that performs the change:
+ *     rpc_set_user_role / rpc_set_user_active update the row, and the
+ *     trg_profiles_privilege_guard trigger on `profiles` re-checks the rule
+ *     and the last-active-owner invariant while holding the relevant rows.
+ *     That trigger also covers a direct PostgREST PATCH, which no RPC could.
+ *
+ * THEN the user's sessions end. A JWT carries app_role until it expires and
+ * RLS trusts that claim, so a demotion whose sessions survive it is not yet in
+ * force; a deactivation additionally bans the GoTrue account, because
+ * `is_active` is an application column GoTrue would otherwise let the user
+ * sign straight back in past. See lib/auth/admin.ts for what each one does and
+ * for the ~30-minute PostgREST window neither of them can close.
+ */
+function userAdminSteps(supabase: Awaited<ReturnType<typeof createClient>>): UserAdminSteps {
+  return {
+    loadTarget: async (userId) => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, role, is_active, deleted_at")
+        .eq("id", userId)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data
+        ? { id: data.id, role: data.role, isActive: data.is_active, deletedAt: data.deleted_at }
+        : null;
+    },
+    countActiveOwners,
+    applyRole: async (userId, role) => {
+      const { error } = await supabase.rpc("rpc_set_user_role", { p_target_id: userId, p_role: role });
+      // The RPC and its trigger raise "FORBIDDEN: …" / "NOT_FOUND: …" /
+      // "ILLEGAL_TRANSITION: …", which mapDomainError turns into user copy.
+      if (error) throw new Error(error.message);
+    },
+    applyActive: async (userId, isActive) => {
+      const { error } = await supabase.rpc("rpc_set_user_active", {
+        p_target_id: userId,
+        p_active: isActive,
+      });
+      if (error) throw new Error(error.message);
+    },
+    revokeSessions: async (userId) => {
+      await revokeUserSessions(userId);
+    },
+    setBanned: setAuthUserBanned,
+  };
+}
+
+/** A refusal the server made; the same reasons the page uses to disable a control. */
+function refuse(action: string, reason: UserAdminRefusal): never {
+  if (reason === "not_found") throw new Error("NOT_FOUND: user");
+  if (reason === "no_change") throw new Error("ILLEGAL_TRANSITION: nothing to change");
+  throw new ForbiddenError(`${action}: ${reason}`);
+}
+
+export const setUserRole = adminAction.inputSchema(setUserRoleSchema).action(async ({ parsedInput, ctx }) => {
+  const supabase = await createClient();
+  const result = await changeUserRole(
+    userAdminSteps(supabase),
+    // The REAL role. ctx.session.impersonating is deliberately not consulted.
+    { userId: ctx.session.userId, role: ctx.session.role },
+    parsedInput.userId,
+    parsedInput.role
+  );
+  if (result.status === "refused") refuse("setUserRole", result.reason);
+
+  revalidatePath("/users");
+  return { status: "changed" as const, role: result.to };
+});
+
+export const setUserActive = adminAction
+  .inputSchema(setUserActiveSchema)
+  .action(async ({ parsedInput, ctx }) => {
+    const supabase = await createClient();
+    const result = await changeUserActive(
+      userAdminSteps(supabase),
+      { userId: ctx.session.userId, role: ctx.session.role },
+      parsedInput.userId,
+      parsedInput.isActive
+    );
+    if (result.status === "refused") refuse("setUserActive", result.reason);
+
+    revalidatePath("/users");
+    return { status: "changed" as const, isActive: result.isActive };
   });

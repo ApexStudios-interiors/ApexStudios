@@ -197,6 +197,228 @@ export async function resetAccountPassword(
   };
 }
 
+// ── Change role, deactivate / reactivate ─────────────────────────────────────
+
+/** The caller and the target, by the same shapes the reset rule uses. */
+export type UserAdminActor = ResetActor;
+export type UserAdminTarget = Omit<ResetTarget, "email">;
+
+export type UserAdminRefusal =
+  /** Not visible to the caller (another org, never existed) or soft-deleted. */
+  | "not_found"
+  | "self"
+  /** The caller is not owner/admin, or is an admin and the target is owner/admin. */
+  | "forbidden_role"
+  /** The role asked for is not one this caller may assign — today, always `owner`. */
+  | "unassignable_role"
+  /** The target is already in that role or that state. */
+  | "no_change"
+  /** The change would leave the org with no active owner. */
+  | "last_owner";
+
+/**
+ * Who may act on whom. Deliberately the same rule as passwordResetRefusal
+ * (D52) — an admin who may take over a site account's password is not made
+ * safer by being unable to change its role, and one who may not touch the
+ * owner's password must not be able to demote or deactivate them either:
+ *
+ *   owner → any other user
+ *   admin → site and client only. Never the owner and never another admin:
+ *           an admin who could demote the owner, or deactivate them, could
+ *           lock the organisation out of its own highest privilege.
+ *   nobody → themselves. A self-demotion cannot be undone by the person who
+ *           made it, and deactivating yourself is the one move that can strand
+ *           an org with nobody able to put it back.
+ *
+ * It differs from passwordResetRefusal in exactly one place, and the
+ * difference is the feature: a DEACTIVATED target is not refused here, because
+ * reactivating one is the whole point of the control being reversible.
+ *
+ * A null target is one the caller's RLS-scoped read did not return, which is
+ * exactly what a user in another org looks like.
+ */
+export function userAdminRefusal(
+  actor: UserAdminActor,
+  target: UserAdminTarget | null
+): UserAdminRefusal | null {
+  if (actor.role !== "owner" && actor.role !== "admin") return "forbidden_role";
+  if (!target || target.deletedAt !== null) return "not_found";
+  if (target.id === actor.userId) return "self";
+  if (actor.role === "admin" && target.role !== "site" && target.role !== "client") return "forbidden_role";
+  return null;
+}
+
+/**
+ * The roles this caller may put this target into. `owner` is never among them
+ * (D8: there is one owner, and addUserSchema keeps it out of Add User for the
+ * same reason) — promoting a successor is a deliberate out-of-band act, done
+ * in SQL, not a dropdown. An admin may still promote a site user to admin:
+ * Add User already lets them create one outright, so refusing it here would
+ * close a door that is open next to it.
+ */
+export const ASSIGNABLE_ROLES = ["admin", "site", "client"] as const;
+export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
+
+export function isAssignableRole(role: Role): role is AssignableRole {
+  return (ASSIGNABLE_ROLES as readonly Role[]).includes(role);
+}
+
+/**
+ * The org must never be left with no active owner. The count is the caller's
+ * own RLS-scoped read, so this is a courtesy check for the UI and an early
+ * refusal for the action — the authoritative one is in the database, inside
+ * the same statement that performs the change (migration 20260918090001).
+ */
+export type OwnerCount = { activeOwners: number };
+
+/** Only worth a query when the target is the kind of row that could be the last owner. */
+function needsOwnerCount(target: UserAdminTarget | null): boolean {
+  return target?.role === "owner" && target.isActive;
+}
+
+/**
+ * The target is the org's only active owner today, and the change being asked
+ * for would stop them being one — by taking the role away, or by deactivating
+ * the account that holds it. Both callers below have already established that
+ * the change does exactly that (no caller may assign `owner`, and only a
+ * deactivation reaches this from the other one).
+ */
+function wouldStrandOrg(target: UserAdminTarget, ctx: OwnerCount): boolean {
+  return target.role === "owner" && target.isActive && ctx.activeOwners <= 1;
+}
+
+export function roleChangeRefusal(
+  actor: UserAdminActor,
+  target: UserAdminTarget | null,
+  nextRole: Role,
+  ctx: OwnerCount
+): UserAdminRefusal | null {
+  const refusal = userAdminRefusal(actor, target);
+  if (refusal || !target) return refusal ?? "not_found";
+  if (!isAssignableRole(nextRole)) return "unassignable_role";
+  if (target.role === nextRole) return "no_change";
+  if (wouldStrandOrg(target, ctx)) return "last_owner";
+  return null;
+}
+
+/**
+ * Why the Users page's Role select is disabled on a row, before any role has
+ * been picked: the reason that applies to every role the caller could pick.
+ * The action and the database still check the specific pick.
+ */
+export function roleControlRefusal(
+  actor: UserAdminActor,
+  target: UserAdminTarget | null,
+  ctx: OwnerCount
+): UserAdminRefusal | null {
+  for (const role of ASSIGNABLE_ROLES) {
+    const refusal = roleChangeRefusal(actor, target, role, ctx);
+    if (refusal === null) return null; // at least one role is a legal pick
+    if (refusal !== "no_change") return refusal; // the same reason for all of them
+  }
+  return "no_change";
+}
+
+export function activeChangeRefusal(
+  actor: UserAdminActor,
+  target: UserAdminTarget | null,
+  nextActive: boolean,
+  ctx: OwnerCount
+): UserAdminRefusal | null {
+  const refusal = userAdminRefusal(actor, target);
+  if (refusal || !target) return refusal ?? "not_found";
+  if (target.isActive === nextActive) return "no_change";
+  if (!nextActive && wouldStrandOrg(target, ctx)) return "last_owner";
+  return null;
+}
+
+/** Whether to offer either control on a Users row at all, before a value is picked. */
+export function canAdministerUser(actor: UserAdminActor, target: UserAdminTarget): boolean {
+  return userAdminRefusal(actor, target) === null;
+}
+
+/**
+ * The steps of each operation, injected like ResetSteps; the real ones are in
+ * features/users/actions.ts.
+ */
+export type UserAdminSteps = {
+  /** The target through the caller's RLS-scoped client; null if not visible. */
+  loadTarget: (userId: string) => Promise<UserAdminTarget | null>;
+  /** Active owners in the caller's org, through the same client. */
+  countActiveOwners: () => Promise<number>;
+  /** rpc_set_user_role / rpc_set_user_active: authorise (again), change, audit. */
+  applyRole: (userId: string, role: AssignableRole) => Promise<void>;
+  applyActive: (userId: string, isActive: boolean) => Promise<void>;
+  /**
+   * Ends every session the user holds. For a role change this is the whole
+   * mechanism: the JWT carries app_role until it expires, and RLS trusts that
+   * claim, so a demotion that leaves the session alone is not yet in force.
+   */
+  revokeSessions: (userId: string) => Promise<void>;
+  /**
+   * GoTrue ban / unban. Deactivation needs it: is_active lives in `profiles`,
+   * which GoTrue knows nothing about, so without a ban a deactivated user can
+   * simply sign in again and keep a valid token.
+   */
+  setBanned: (userId: string, banned: boolean) => Promise<void>;
+};
+
+export type UserAdminResult<T> = { status: "refused"; reason: UserAdminRefusal } | ({ status: "done" } & T);
+
+/**
+ * Check → change (the database checks again, and takes the last-owner lock) →
+ * end the user's sessions. The order matters both ways round: nothing is
+ * revoked for a change that did not happen, and no changed session outlives
+ * the change by more than the request.
+ */
+export async function changeUserRole(
+  steps: UserAdminSteps,
+  actor: UserAdminActor,
+  targetId: string,
+  nextRole: Role
+): Promise<UserAdminResult<{ userId: string; from: Role; to: AssignableRole }>> {
+  const target = await steps.loadTarget(targetId);
+  // wouldStrandOrg reads this only when the target is an active owner, so the
+  // query is skipped — not faked — for every other row.
+  const activeOwners = needsOwnerCount(target) ? await steps.countActiveOwners() : 0;
+  const refusal = roleChangeRefusal(actor, target, nextRole, { activeOwners });
+  if (refusal || !target || !isAssignableRole(nextRole)) {
+    return { status: "refused", reason: refusal ?? "unassignable_role" };
+  }
+
+  await steps.applyRole(target.id, nextRole);
+  await steps.revokeSessions(target.id);
+
+  return { status: "done", userId: target.id, from: target.role, to: nextRole };
+}
+
+/**
+ * Deactivation is not a delete (AGENTS.md database rule 7, and the audit trail
+ * references the profile): the row stays, `is_active` goes false, and the same
+ * control puts it back.
+ *
+ * Reactivating lifts the ban first, so a user is never left able to sign in
+ * with no working account or unable to sign in to a working one, whichever
+ * step fails.
+ */
+export async function changeUserActive(
+  steps: UserAdminSteps,
+  actor: UserAdminActor,
+  targetId: string,
+  nextActive: boolean
+): Promise<UserAdminResult<{ userId: string; isActive: boolean }>> {
+  const target = await steps.loadTarget(targetId);
+  const activeOwners = needsOwnerCount(target) ? await steps.countActiveOwners() : 0;
+  const refusal = activeChangeRefusal(actor, target, nextActive, { activeOwners });
+  if (refusal || !target) return { status: "refused", reason: refusal ?? "not_found" };
+
+  await steps.applyActive(target.id, nextActive);
+  await steps.setBanned(target.id, !nextActive);
+  if (!nextActive) await steps.revokeSessions(target.id);
+
+  return { status: "done", userId: target.id, isActive: nextActive };
+}
+
 const LOWER = "abcdefghijkmnpqrstuvwxyz"; // no l, o
 const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // no I, O
 const DIGITS = "23456789"; // no 0, 1

@@ -1603,10 +1603,30 @@ export type Database = {
         };
         Returns: unknown;
       };
+      rpc_revoke_user_sessions: {
+        Args: {
+          p_user_id: string;
+        };
+        Returns: number;
+      };
       rpc_set_task_progress: {
         Args: {
           p_task_id: string;
           p_pct: number;
+        };
+        Returns: unknown;
+      };
+      rpc_set_user_active: {
+        Args: {
+          p_target_id: string;
+          p_active: boolean;
+        };
+        Returns: unknown;
+      };
+      rpc_set_user_role: {
+        Args: {
+          p_target_id: string;
+          p_role: Database["public"]["Enums"]["app_role"];
         };
         Returns: unknown;
       };

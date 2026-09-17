@@ -45,3 +45,26 @@ export async function listUsers(req: PageRequest): Promise<Page<UserRow>> {
   }));
   return { ...page, rows };
 }
+
+/**
+ * Active owners in the caller's org — what the Users page needs to know
+ * whether demoting or deactivating an owner would leave nobody in charge.
+ * `profiles_select` scopes it to the caller's own org and live rows, and
+ * `count: "exact"` with `head: true` fetches no row bodies at all.
+ *
+ * This is the courtesy copy of the rule. The authoritative one runs inside the
+ * database, in the same statement as the change, and takes a row lock — see
+ * migration 20260918090001. A count read here and acted on a moment later
+ * could not be safe on its own.
+ */
+export async function countActiveOwners(): Promise<number> {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from("profiles")
+    .select("id", { count: "exact", head: true })
+    .eq("role", "owner")
+    .eq("is_active", true)
+    .is("deleted_at", null);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
