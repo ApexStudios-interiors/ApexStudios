@@ -9,6 +9,7 @@ import { useSession } from "@/components/auth/SessionProvider";
 import { signOut } from "@/features/auth/actions";
 import { startPreview } from "@/features/auth/impersonation-actions";
 import { Icon, type IconName } from "@/components/ui/Icon";
+import type { NavProject } from "@/components/layout/nav-project";
 import { initials } from "@/lib/logic";
 import { ALLOWED_SECTIONS, type Section, sectionFromPath } from "@/lib/rbac/nav";
 import { ROLE_LABEL } from "@/lib/rbac/roles";
@@ -33,16 +34,18 @@ const PREVIEW_OPTIONS: { value: "client" | "site"; label: string }[] = [
 
 export function Sidebar({
   /** The real, role-scoped project list, read from the database by the app
-   *  shell. Previously this menu mapped over AppContext's `lib/data.ts`
-   *  fixture, so a project created through the app never appeared here. */
+   *  shell — including each project's packages and pending counts. Previously
+   *  this menu mapped over AppContext's `lib/data.ts` fixture, so a project
+   *  created through the app never appeared here, no real project ever listed
+   *  a package, and every badge read 0. */
   projects,
 }: {
-  projects: { id: string; name: string }[];
+  projects: NavProject[];
 }) {
   // `role` here is the EFFECTIVE role (impersonated role while previewing) —
   // exactly what nav filtering should use. `session` is the REAL identity:
   // real name, real role, whether a preview is active. Never mix the two up.
-  const { data, role } = useApp();
+  const { role } = useApp();
   const session = useSession();
   const pathname = usePathname();
   const params = useParams<{ projectId?: string; moduleId?: string }>();
@@ -58,17 +61,7 @@ export function Sidebar({
   useClickOutside(userMenuRef, () => setUserMenuOpen(false), userMenuOpen);
 
   const isHome = pathname === "/";
-  // `legacyProject` is the AppContext fixture row — still the only source of
-  // the package list and the pending-count badges until those surfaces are
-  // migrated. `project` is what the nav renders from: the REAL project when
-  // the database has it, so a newly created project gets a working sidebar
-  // instead of none at all. Its `modules` are absent in that case, which the
-  // package list below handles.
-  const legacyProject = params?.projectId
-    ? (data.projects.find((p) => p.id === params.projectId) ?? null)
-    : null;
-  const realProject = params?.projectId ? (projects.find((p) => p.id === params.projectId) ?? null) : null;
-  const project = realProject ?? legacyProject;
+  const project = params?.projectId ? (projects.find((p) => p.id === params.projectId) ?? null) : null;
   const allowed = ALLOWED_SECTIONS[role];
 
   const canPreview = session.role === "owner" || session.role === "admin";
@@ -153,15 +146,12 @@ export function Sidebar({
           <nav className="shrink-0 flex flex-col gap-px">
             {(() => {
               const activeKey = sectionFromPath(pathname, project.id);
-              const pend = data.requests.filter(
-                (r) => r.proj === project.id && r.status === "Pending"
-              ).length;
-              const apPend = data.approvals.filter(
-                (a) => a.proj === project.id && a.status === "Pending"
-              ).length;
-              const billPend = data.bills.filter(
-                (b) => b.proj === project.id && b.status === "Submitted"
-              ).length;
+              // Same three rules as the prototype, with real numbers behind
+              // them: stock pending for everyone but a client, approvals
+              // pending and bills submitted for a client only.
+              const pend = project.pendingRequests;
+              const apPend = project.pendingApprovals;
+              const billPend = project.submittedBills;
 
               return NAV_ITEMS.filter((it) => allowed.includes(it.key)).map((it) => {
                 const on = activeKey === it.key;
@@ -214,7 +204,7 @@ export function Sidebar({
                     </Link>
                     {it.key === "packages" &&
                       modsOpen &&
-                      (legacyProject?.modules ?? []).map((m, i) => (
+                      project.packages.map((m, i) => (
                         <Link
                           key={m.id}
                           href={`/projects/${project.id}/packages/${m.id}`}

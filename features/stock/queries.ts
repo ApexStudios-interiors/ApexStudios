@@ -144,6 +144,51 @@ export async function countStockRequests(
   return count ?? 0;
 }
 
+/**
+ * Pending requests per project, for the Sidebar's Stock Requests badge —
+ * which the prototype counted off `lib/data.ts`, so it read 0 for every real
+ * project. Keyed by project because the app shell that renders the Sidebar is
+ * a layout: Next.js does not re-render a layout on navigation, so a figure
+ * scoped to "the project open right now" would be whichever project the tab
+ * was first opened on and would never change again.
+ *
+ * Same role split as the rows (`stock_requests` for admin, the money-free
+ * `v_stock_request_site` for site); a client has no Stock route at all
+ * (01-hld.md §7.1) and no badge, so it never runs. One query projecting one
+ * column over pending rows only — `head: true` cannot be used because
+ * PostgREST returns a single total, not a count per project.
+ */
+export async function countPendingRequestsByProject(
+  session: Session,
+  projectIds: string[]
+): Promise<Record<string, number>> {
+  const effectiveRole = session.impersonating?.role ?? session.role;
+  if (effectiveRole === "client" || projectIds.length === 0) return {};
+  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+
+  const supabase = await createClient();
+  const { data, error } = isAdmin
+    ? await supabase
+        .from("stock_requests")
+        .select("project_id")
+        .in("project_id", projectIds)
+        .eq("status", "pending")
+        .is("deleted_at", null)
+    : await supabase
+        .from("v_stock_request_site")
+        .select("project_id")
+        .in("project_id", projectIds)
+        .eq("status", "pending");
+  if (error) throw new Error(error.message);
+
+  const counts: Record<string, number> = {};
+  for (const row of data) {
+    if (!row.project_id) continue;
+    counts[row.project_id] = (counts[row.project_id] ?? 0) + 1;
+  }
+  return counts;
+}
+
 /** Without `req`, every matching row (the project dashboard's own list);
  *  with it, one page of them. */
 async function loadStockRequests(

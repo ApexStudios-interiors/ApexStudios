@@ -197,6 +197,65 @@ async function getPackagesForProjectSite(projectId: string): Promise<PackagesFor
   return { role: "site", packages: rows };
 }
 
+// ── Package names for the Sidebar / Header nav (§8.2) ───────────────────────
+
+/** Just enough of a package to name it in the nav. No money column of any
+ *  kind, for any role. */
+export type PackageNavItem = { id: string; name: string };
+
+/**
+ * The package sub-list under the Sidebar's Packages item, and the package
+ * name in the Header's breadcrumb — both of which read `lib/data.ts`'s mock
+ * `modules` array until now, so both were empty for every real project.
+ *
+ * Keyed by project, and fetched for the whole portfolio in one query, because
+ * the app shell that renders the Sidebar is a layout: Next.js does not
+ * re-render a layout on navigation, so a list scoped to "the project open
+ * right now" would be whichever project the tab was first opened on. The
+ * per-project `getPackagesForProject` above is the wrong tool here — it also
+ * reads rollups and lead names, three queries per project, for two columns
+ * this nav needs.
+ *
+ * Same role split as every other package read: the base table for admin, the
+ * column-omitting views otherwise.
+ */
+export async function getPackageNavLists(
+  session: Session,
+  projectIds: string[]
+): Promise<Record<string, PackageNavItem[]>> {
+  if (projectIds.length === 0) return {};
+  const effectiveRole = effectiveRoleOf(session);
+  const supabase = await createClient();
+
+  const { data, error } =
+    effectiveRole === "owner" || effectiveRole === "admin"
+      ? await supabase
+          .from("packages")
+          .select("id, project_id, name")
+          .in("project_id", projectIds)
+          .is("deleted_at", null)
+          .order("seq_no", { ascending: true })
+      : effectiveRole === "client"
+        ? await supabase
+            .from("v_package_client")
+            .select("id, project_id, name")
+            .in("project_id", projectIds)
+            .order("seq_no", { ascending: true })
+        : await supabase
+            .from("v_package_site")
+            .select("id, project_id, name")
+            .in("project_id", projectIds)
+            .order("seq_no", { ascending: true });
+  if (error) throw new Error(error.message);
+
+  const byProject: Record<string, PackageNavItem[]> = {};
+  for (const row of data) {
+    if (!row.id || !row.project_id) continue;
+    (byProject[row.project_id] ??= []).push({ id: row.id, name: row.name ?? "" });
+  }
+  return byProject;
+}
+
 // ── One package's detail header + stat row (§6.5) ───────────────────────────
 
 export type PackageDetailDTO = {
