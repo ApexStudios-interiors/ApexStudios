@@ -6,6 +6,7 @@ import { r2Client } from "@/lib/r2/client";
 import { buildAttachmentKey } from "@/lib/r2/keys";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { BillDocument, type BillPdfData } from "@/features/billing/components/BillDocument";
+import { billPdfFileName } from "@/features/billing/pdf";
 
 /**
  * build/09-billing.md §4.6. Enqueued on draft -> submitted
@@ -32,22 +33,36 @@ export async function generateBillPdf(payload: unknown): Promise<void> {
   const { data: bill, error: billErr } = await supabase
     .from("bills")
     .select(
-      "id, org_id, project_id, bill_no, bill_date, period_from, period_to, work_value, material_value, gross_amount, mas_recovery_amount, taxable_amount, gst_amount, gst_rate_pct, invoice_total, retention_amount, retention_pct, tds_amount, tds_pct, advance_recovery, net_payable, submitted_by, created_by"
+      "id, org_id, project_id, bill_no, revision, bill_date, period_from, period_to, work_value, material_value, gross_amount, mas_recovery_amount, taxable_amount, gst_amount, gst_rate_pct, invoice_total, retention_amount, retention_pct, tds_amount, tds_pct, advance_recovery, net_payable, submitted_by, created_by"
     )
     .eq("id", billId)
     .maybeSingle();
   if (billErr) throw new Error(billErr.message);
   if (!bill) throw new Error(`NOT_FOUND: bill ${billId} does not exist`);
 
+  // The file name carries the bill's own revision (features/billing/pdf.ts),
+  // and is read from the bill row rather than the job payload so a job
+  // claimed after a further rejection renders the revision that actually
+  // exists now. Nothing here recomputes a figure: the columns selected above
+  // were snapshotted by `rpc_create_bill` and are immutable from `submitted`
+  // onward (AGENTS.md billing rules) — a regenerated PDF restates nothing,
+  // it re-renders the same stored numbers onto a document whose live parts
+  // (Apex's and the client's own GSTIN/address/bank block) may since have
+  // been corrected.
+  const fileName = billPdfFileName(bill.bill_no, bill.revision);
+
   // Idempotent (AGENTS.md background job rule 1): a job retried after a
   // partial failure (e.g. the render succeeded but the R2 upload didn't)
-  // should not leave two PDF attachments behind.
+  // should not leave two PDF attachments behind. Scoped to THIS revision's
+  // own file name — the previous revision's document stays on the bill as
+  // the record of what the client was shown before, and `getBillPdfUrl`
+  // serves the newest.
   const { data: existing, error: existingErr } = await supabase
     .from("attachments")
     .select("id")
     .eq("entity_type", "bill")
     .eq("entity_id", billId)
-    .eq("file_name", `${bill.bill_no}.pdf`)
+    .eq("file_name", fileName)
     .is("deleted_at", null)
     .maybeSingle();
   if (existingErr) throw new Error(existingErr.message);
@@ -124,7 +139,6 @@ export async function generateBillPdf(payload: unknown): Promise<void> {
 
   const pdfBuffer = await renderToBuffer(BillDocument({ data: pdfData }));
 
-  const fileName = `${bill.bill_no}.pdf`;
   const key = buildAttachmentKey({
     orgId: bill.org_id,
     projectId: bill.project_id,

@@ -127,6 +127,14 @@ test.describe("admin: Billable Now selection, Create Bill, Submit, PDF job enque
       // only button whose text varies.
       await page.getByRole("button", { name: "Cancel" }).click();
 
+      // Billable Now is refetched after a successful create. Without that
+      // the just-billed rows stayed listed and tickable until the next full
+      // page load (router.refresh() re-renders the server components, not
+      // this client-side fetch), and re-submitting them produced an
+      // ALREADY_BILLED the admin did not cause.
+      await expect(phaseRow).toHaveCount(0, { timeout: 10_000 });
+      await expect(materialRow).toHaveCount(0, { timeout: 10_000 });
+
       // Scoped to this bill's own bill_no, not a generic "Draft"/"Submitted"
       // text search: the seed data already has other Draft and Submitted
       // bills in this table, so an unscoped locator would resolve to one of
@@ -264,10 +272,22 @@ test.describe("admin: record a part payment, then the balance -> status becomes 
       const row = page.locator("tr", { hasText: `RA-` }).filter({ hasText: suffix });
       await expect(row.getByText("Certified", { exact: true })).toBeVisible();
 
+      // A refused attempt first, then a corrected retry in the same open
+      // dialog: the dialog regenerates its idempotency key after every
+      // attempt (like BillingAdmin's own create-bill flow), so the retry
+      // must record the CORRECTED amount rather than being swallowed as a
+      // duplicate of the attempt before it — and must not record twice
+      // either, which the payment_count assertion at the end covers.
+      await row.getByRole("button", { name: "Record Payment" }).click();
+      await page.getByLabel("Amount").fill("99999");
+      await page.getByRole("button", { name: "Record Payment", exact: true }).last().click();
+      await expect(page.getByText("This payment would exceed the amount owed on this bill.")).toBeVisible({
+        timeout: 10_000,
+      });
+
       // First instalment: half of net_payable. Below net_payable, so the
       // bill stays Certified — rpc_record_payment's own sufficiency check
       // only fires once the running total actually covers it.
-      await row.getByRole("button", { name: "Record Payment" }).click();
       await page.getByLabel("Amount").fill("11300");
       await page.getByRole("button", { name: "Record Payment", exact: true }).last().click();
       await expect(row.getByText("Certified", { exact: true })).toBeVisible({ timeout: 10_000 });
