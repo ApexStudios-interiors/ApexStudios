@@ -64,7 +64,8 @@ if (!/^[0-9a-f]{64}$/.test(secret)) {
 if (keyId === process.env.R2_BACKUP_ACCESS_KEY_ID) {
   fail("That is the read-only token from .env.local. Use apex-backups-write.");
 }
-if (keyId === process.env.R2_ACCESS_KEY_ID) fail("That is the app token (apex-app-production). Use apex-backups-write.");
+if (keyId === process.env.R2_ACCESS_KEY_ID)
+  fail("That is the app token (apex-app-production). Use apex-backups-write.");
 
 const client = new S3Client({
   region: "auto",
@@ -94,7 +95,9 @@ try {
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: testKey }));
   console.log("✓ Removed the test object");
 } catch (e) {
-  console.warn(`! Could not remove the test object (${e.name}) — harmless, delete it in the dashboard if you like`);
+  console.warn(
+    `! Could not remove the test object (${e.name}) — harmless, delete it in the dashboard if you like`
+  );
 }
 
 for (const [name, value] of [
