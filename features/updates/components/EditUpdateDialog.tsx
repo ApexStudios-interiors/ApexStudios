@@ -37,7 +37,7 @@ export function EditUpdateDialog({ updateId, body: initialBody }: { updateId: st
     <DialogShell
       title="Edit Update"
       okLabel={pending ? "Saving…" : "Save"}
-      okDisabled={pending}
+      okPending={pending}
       onClose={closeDialog}
       onOk={onSave}
     >

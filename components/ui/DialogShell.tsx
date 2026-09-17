@@ -2,6 +2,7 @@
 
 import { type ReactNode, useEffect } from "react";
 import { Button } from "./button";
+import { Spinner } from "./spinner";
 
 export function DialogShell({
   title,
@@ -10,6 +11,7 @@ export function DialogShell({
   okLabel,
   onOk,
   okDisabled,
+  okPending,
   onClose,
 }: {
   title: string;
@@ -17,15 +19,28 @@ export function DialogShell({
   children: ReactNode;
   okLabel: string;
   onOk: () => void;
+  /** Cannot submit yet (nothing chosen, still loading). */
   okDisabled?: boolean;
+  /** The submit is in flight: the OK button shows a spinner and is disabled,
+   *  so a slow network is visible and cannot double-submit. Pass the caller's
+   *  existing pending flag (`action.isPending`, a `pending` state). */
+  okPending?: boolean;
   onClose: () => void;
 }) {
   useEffect(() => {
+    // Escape closes an open Select/Popover/Calendar first, and the dialog only
+    // when no popup is open. Base UI (useDismiss) handles a popup's Escape in
+    // two places: the popup's own onKeyDown, which stops propagation at the
+    // portal, so the event never reaches `window`; and — when focus has left
+    // the popup — a `document` keydown listener that calls `preventDefault()`
+    // as it closes the popup. A `document` listener here would run BEFORE that
+    // one (it is registered first) and close the whole dialog; on `window` it
+    // runs after, and sees the event already `defaultPrevented`.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !e.defaultPrevented) onClose();
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
   return (
@@ -45,7 +60,8 @@ export function DialogShell({
           <Button variant="default" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={onOk} disabled={okDisabled}>
+          <Button variant="primary" onClick={onOk} disabled={okDisabled || okPending}>
+            {okPending && <Spinner data-icon="inline-start" />}
             {okLabel}
           </Button>
         </div>

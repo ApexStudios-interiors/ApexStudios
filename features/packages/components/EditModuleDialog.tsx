@@ -123,7 +123,7 @@ export function EditModuleDialog({ moduleId }: { projectId: string; moduleId: st
     <DialogShell
       title="Edit Package"
       okLabel={update.isPending ? "Saving…" : "Save"}
-      okDisabled={update.isPending}
+      okPending={update.isPending}
       onClose={closeDialog}
       onOk={onSubmit}
     >

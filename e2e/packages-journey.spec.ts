@@ -55,7 +55,18 @@ test.describe("admin: create project -> add package -> edit package", () => {
     await page.getByRole("option", { name: "T V Rao Housing Pvt Ltd" }).click();
     // Project Code is generated from the name and read-only — never typed.
     await expect(page.getByLabel("Project Code")).not.toHaveValue("");
-    await page.getByLabel("Start Date").fill("2026-09-01");
+    // Start Date is a Popover + Calendar date picker, not a native date input.
+    // It opens on the current month; step back to September 2026, waiting for
+    // each month to render before checking again.
+    await page.getByLabel("Start Date").click();
+    const calendarGrid = page.getByRole("grid", { name: /^\w+ \d{4}$/ });
+    for (let step = 0; (await calendarGrid.getAttribute("aria-label")) !== "September 2026"; step++) {
+      expect(step, "calendar never reached September 2026").toBeLessThan(60);
+      const shown = (await calendarGrid.getAttribute("aria-label")) ?? "";
+      await page.getByRole("button", { name: "Go to the Previous Month" }).click();
+      await expect(calendarGrid).not.toHaveAttribute("aria-label", shown);
+    }
+    await calendarGrid.getByRole("button", { name: "September 1st, 2026" }).click();
     await page.getByLabel("Packages").fill("Design, Execution, Handover");
     await page.getByRole("button", { name: "Create" }).click();
 

@@ -140,7 +140,7 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
     <DialogShell
       title="New Stock Request"
       okLabel={create.isPending ? "Submitting…" : "Submit"}
-      okDisabled={create.isPending}
+      okPending={create.isPending}
       onClose={closeDialog}
       onOk={onSubmit}
     >

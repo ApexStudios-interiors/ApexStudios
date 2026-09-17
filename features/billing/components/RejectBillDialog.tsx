@@ -44,7 +44,7 @@ export function RejectBillDialog({ billId, refNo }: { billId: string; refNo: str
       title="Reject Bill"
       description={refNo}
       okLabel={reject.isPending ? "Rejecting…" : "Reject"}
-      okDisabled={reject.isPending}
+      okPending={reject.isPending}
       onClose={closeDialog}
       onOk={onSubmit}
     >

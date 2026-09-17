@@ -8,7 +8,7 @@ import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
 import { updateTaskSchema } from "@/features/schedule/schema";
 import { updateTask, setTaskProgress, getTaskForEdit, type TaskForEdit } from "@/features/schedule/actions";
-import { DatePickerField } from "@/features/schedule/components/DatePickerField";
+import { DatePicker } from "@/components/shared/DatePicker";
 import { DialogShell, Field, inputClass, textareaClass } from "@/components/ui/DialogShell";
 
 /**
@@ -107,7 +107,7 @@ export function TaskDetailDialog({ taskId }: { projectId: string; moduleId: stri
     <DialogShell
       title={current.name}
       okLabel={update.isPending ? "Saving…" : "Save"}
-      okDisabled={update.isPending}
+      okPending={update.isPending}
       onClose={closeDialog}
       onOk={onSubmit}
     >
@@ -137,12 +137,13 @@ export function TaskDetailDialog({ taskId }: { projectId: string; moduleId: stri
             control={control}
             name="startDate"
             render={({ field }) => (
-              <DatePickerField
+              <DatePicker
                 id="td-start"
                 ref={field.ref}
                 value={field.value}
                 onChange={field.onChange}
                 onBlur={field.onBlur}
+                required
               />
             )}
           />

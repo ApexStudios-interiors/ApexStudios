@@ -9,6 +9,7 @@ import { useApp } from "@/context/AppContext";
 import { createProjectSchema } from "@/features/projects/schema";
 import { createProject, getClientOptions, previewProjectCode } from "@/features/projects/actions";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
+import { DatePicker } from "@/components/shared/DatePicker";
 import { ClientCombobox, type ClientOption } from "./ClientCombobox";
 
 /**
@@ -96,7 +97,7 @@ export function AddProjectDialog() {
     <DialogShell
       title="New Project"
       okLabel={create.isPending ? "Creating…" : "Create"}
-      okDisabled={create.isPending}
+      okPending={create.isPending}
       onClose={closeDialog}
       onOk={onSubmit}
     >
@@ -147,7 +148,20 @@ export function AddProjectDialog() {
           <input id="ap-location" className={inputClass} {...register("location")} />
         </Field>
         <Field label="Start Date" htmlFor="ap-start">
-          <input id="ap-start" type="date" className={inputClass} {...register("startDate")} />
+          <Controller
+            control={control}
+            name="startDate"
+            render={({ field }) => (
+              <DatePicker
+                id="ap-start"
+                ref={field.ref}
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                required
+              />
+            )}
+          />
         </Field>
         <div className="col-span-2">
           <Field label="Packages" hint="Comma separated" htmlFor="ap-packages">

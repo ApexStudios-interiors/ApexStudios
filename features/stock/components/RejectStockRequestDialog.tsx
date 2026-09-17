@@ -48,7 +48,7 @@ export function RejectStockRequestDialog({ requestId }: { requestId: string }) {
     <DialogShell
       title="Reject Stock Request"
       okLabel={reject.isPending ? "Rejecting…" : "Reject"}
-      okDisabled={reject.isPending}
+      okPending={reject.isPending}
       onClose={closeDialog}
       onOk={onSubmit}
     >

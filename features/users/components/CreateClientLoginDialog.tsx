@@ -62,7 +62,7 @@ export function CreateClientLoginDialog({
       title="Create client login"
       description={`The new login can see ${projectName}. Give it access to more projects from each project's Client access card.`}
       okLabel={create.isPending ? "Creating…" : "Create login"}
-      okDisabled={create.isPending}
+      okPending={create.isPending}
       onClose={closeDialog}
       onOk={submit}
     >

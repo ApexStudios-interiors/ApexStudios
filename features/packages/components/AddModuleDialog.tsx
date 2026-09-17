@@ -75,7 +75,7 @@ export function AddModuleDialog({ projectId }: { projectId: string }) {
     <DialogShell
       title="Add Package"
       okLabel={create.isPending ? "Adding…" : "Add"}
-      okDisabled={create.isPending}
+      okPending={create.isPending}
       onClose={closeDialog}
       onOk={onSubmit}
     >
