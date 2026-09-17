@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { SearchIcon } from "lucide-react";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * The Inventory toolbar's item search. Same architecture as
@@ -22,6 +23,9 @@ export function InventorySearchInput({ value }: { value: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  // Pending while the searched page is fetched: the search icon becomes a
+  // Spinner until the results arrive.
+  const [isPending, startTransition] = useTransition();
 
   const [term, setTerm] = useState(value);
   /** The last term this component put in the URL. It is what separates the
@@ -47,20 +51,20 @@ export function InventorySearchInput({ value }: { value: string }) {
       // filter does — a cursor from the unsearched list means nothing in the
       // searched one.
       params.delete("cursor");
+      // Same for the table's own `page` param (lib/pagination.ts).
+      params.delete("page");
       const qs = params.toString();
       // `replace`, not `push`: each 300ms pause would otherwise leave its own
       // history entry, so Back would walk the user letter by letter back out
       // of a word they typed once.
-      router.replace(qs ? `${pathname}?${qs}` : pathname);
+      startTransition(() => router.replace(qs ? `${pathname}?${qs}` : pathname));
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [term, router, pathname, searchParams]);
 
   return (
     <InputGroup className="w-64">
-      <InputGroupAddon>
-        <SearchIcon />
-      </InputGroupAddon>
+      <InputGroupAddon>{isPending ? <Spinner /> : <SearchIcon />}</InputGroupAddon>
       <InputGroupInput
         type="search"
         value={term}

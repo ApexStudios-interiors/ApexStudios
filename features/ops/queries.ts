@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchPage, type Page, type PageRequest } from "@/lib/pagination";
 
 /**
  * build/06-files-jobs-daily-updates.md §3.7: a minimal admin surface now,
@@ -16,16 +17,24 @@ export type FailedJob = {
   finishedAt: string | null;
 };
 
-export async function getFailedJobs(): Promise<FailedJob[]> {
+/** One page at a time (`count: "exact"` + `.range()`, lib/pagination.ts),
+ *  which replaces the flat `.limit(100)` this used to cap the list at: the
+ *  101st failure is now reachable instead of invisible. `id` breaks ties
+ *  between jobs that finished in the same millisecond. */
+export async function getFailedJobs(req: PageRequest): Promise<Page<FailedJob>> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("jobs")
-    .select("id, name, payload, attempts, max_attempts, last_error, finished_at")
-    .eq("status", "failed")
-    .order("finished_at", { ascending: false })
-    .limit(100);
-  if (error) throw new Error(error.message);
-  return data.map((r) => ({
+  const page = await fetchPage(
+    (from, to) =>
+      supabase
+        .from("jobs")
+        .select("id, name, payload, attempts, max_attempts, last_error, finished_at", { count: "exact" })
+        .eq("status", "failed")
+        .order("finished_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to),
+    req
+  );
+  const rows = page.rows.map((r) => ({
     id: r.id,
     name: r.name,
     payload: r.payload,
@@ -34,4 +43,5 @@ export async function getFailedJobs(): Promise<FailedJob[]> {
     lastError: r.last_error,
     finishedAt: r.finished_at,
   }));
+  return { ...page, rows };
 }

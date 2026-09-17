@@ -1,12 +1,14 @@
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getProjectHeader } from "@/features/projects/queries";
-import { getApprovalsForProject } from "@/features/approvals/queries";
+import { getApprovalsPage } from "@/features/approvals/queries";
+import { parsePageRequest } from "@/lib/pagination";
 import { can } from "@/lib/rbac/permissions";
 import type { ApprovalStatus } from "@/features/approvals/service";
 import { ApprovalTable } from "@/features/approvals/components/ApprovalTable";
 import { ApprovalStatusTabs } from "@/features/approvals/components/ApprovalStatusTabs";
 import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
+import { TablePagination } from "@/components/shared/TablePagination";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 
@@ -24,10 +26,10 @@ export default async function ApprovalsPage({
   searchParams,
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; page?: string; pageSize?: string }>;
 }) {
   const { projectId } = await params;
-  const { status: rawStatus } = await searchParams;
+  const { status: rawStatus, ...paging } = await searchParams;
   const session = await requireSession();
   const effectiveRole = session.impersonating?.role ?? session.role;
 
@@ -47,7 +49,7 @@ export default async function ApprovalsPage({
         ? (rawStatus as ApprovalStatus)
         : "pending";
 
-  const list = await getApprovalsForProject(session, projectId, status ? { status } : {});
+  const list = await getApprovalsPage(session, projectId, status ? { status } : {}, parsePageRequest(paging));
   const client = effectiveRole === "client";
   const basePath = `/projects/${projectId}/approvals`;
 
@@ -75,7 +77,8 @@ export default async function ApprovalsPage({
       <ApprovalStatusTabs basePath={basePath} status={status ?? ""} />
 
       <Card>
-        <ApprovalTable projectId={projectId} list={list} role={effectiveRole} />
+        <ApprovalTable projectId={projectId} list={list.rows} role={effectiveRole} />
+        <TablePagination page={list.page} pageSize={list.pageSize} total={list.total} />
       </Card>
     </div>
   );

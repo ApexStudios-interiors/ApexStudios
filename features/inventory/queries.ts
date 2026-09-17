@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
+import { fetchPage, type Page, type PageRequest } from "@/lib/pagination";
 import { inventorySearchFilter, inventoryStatus, type InventoryStatus } from "./service";
 
 /**
@@ -59,37 +60,49 @@ type StatusRow = {
  * filtering an already-fetched page would quietly search only that page.
  * Both role-scoped views expose `name` and `category`, so neither role gets
  * a different search surface (and neither gets a wider one).
+ *
+ * Paginated in the same query (lib/pagination.ts): `count: "exact"` plus
+ * `.range()`, so only the current page is fetched. `id` breaks ties between
+ * equal names, so no row can land on two pages or on none.
  */
 async function fetchRows(
   isAdmin: boolean,
-  filter: { projectId?: string; search?: string }
-): Promise<StatusRow[]> {
+  filter: { projectId?: string; search?: string },
+  req: PageRequest
+): Promise<Page<StatusRow>> {
   const supabase = await createClient();
   if (isAdmin) {
+    const page = await fetchPage((from, to) => {
+      let query = supabase
+        .from("v_inventory_status")
+        .select(
+          "id, project_id, name, category, sku, unit, qty_on_hand, reorder_level, unit_cost, stock_value, location",
+          { count: "exact" }
+        )
+        .order("name")
+        .order("id");
+      if (filter.projectId) query = query.eq("project_id", filter.projectId);
+      if (filter.search) query = query.or(inventorySearchFilter(filter.search));
+      return query.range(from, to);
+    }, req);
+    return { ...page, rows: page.rows as StatusRow[] };
+  }
+  const page = await fetchPage((from, to) => {
     let query = supabase
-      .from("v_inventory_status")
-      .select(
-        "id, project_id, name, category, sku, unit, qty_on_hand, reorder_level, unit_cost, stock_value, location"
-      )
-      .order("name");
+      .from("v_inventory_site")
+      .select("id, project_id, name, category, sku, unit, qty_on_hand, reorder_level, location", {
+        count: "exact",
+      })
+      .order("name")
+      .order("id");
     if (filter.projectId) query = query.eq("project_id", filter.projectId);
     if (filter.search) query = query.or(inventorySearchFilter(filter.search));
-    const { data, error } = await query;
-    if (error) throw new Error(error.message);
-    return data as StatusRow[];
-  }
-  let query = supabase
-    .from("v_inventory_site")
-    .select("id, project_id, name, category, sku, unit, qty_on_hand, reorder_level, location")
-    .order("name");
-  if (filter.projectId) query = query.eq("project_id", filter.projectId);
-  if (filter.search) query = query.or(inventorySearchFilter(filter.search));
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
+    return query.range(from, to);
+  }, req);
   // The view's own column types come back nullable even though every one of
   // these is populated on every real row (same cast Build 05's schedule
   // queries make for v_package_site/v_phase_site).
-  return data as StatusRow[];
+  return { ...page, rows: page.rows as StatusRow[] };
 }
 
 async function fetchProjectNames(projectIds: string[]): Promise<Map<string, string>> {
@@ -119,9 +132,15 @@ function toDTO(r: StatusRow, isAdmin: boolean, projectNames: Map<string, string>
   };
 }
 
-async function fetchStats(isAdmin: boolean, projectId?: string): Promise<InventoryStats> {
+/** `search` is the same normalised term the table's own query filters by;
+ *  `rpc_inventory_stats` applies `inventorySearchFilter`'s exact matching
+ *  rules in SQL, so the tiles describe the rows the table lists. */
+async function fetchStats(isAdmin: boolean, projectId?: string, search?: string): Promise<InventoryStats> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("rpc_inventory_stats", { p_project_id: projectId });
+  const { data, error } = await supabase.rpc("rpc_inventory_stats", {
+    p_project_id: projectId,
+    p_search: search,
+  });
   if (error) throw new Error(error.message);
   const row = data[0];
   return {
@@ -134,40 +153,47 @@ async function fetchStats(isAdmin: boolean, projectId?: string): Promise<Invento
   };
 }
 
+function emptyPage(req: PageRequest): Page<InventoryItemDTO> {
+  return { rows: [], total: 0, page: 1, pageSize: req.pageSize };
+}
+
 export async function getProjectInventory(
   session: Session,
-  projectId: string
-): Promise<{ items: InventoryItemDTO[]; stats: InventoryStats }> {
+  projectId: string,
+  req: PageRequest
+): Promise<{ items: Page<InventoryItemDTO>; stats: InventoryStats }> {
   const effectiveRole = session.impersonating?.role ?? session.role;
   const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
-  if (effectiveRole === "client") return { items: [], stats: EMPTY_STATS };
+  if (effectiveRole === "client") return { items: emptyPage(req), stats: EMPTY_STATS };
 
-  const rows = await fetchRows(isAdmin, { projectId });
-  const items = rows.map((r) => toDTO(r, isAdmin, new Map()));
+  const page = await fetchRows(isAdmin, { projectId }, req);
+  const items = { ...page, rows: page.rows.map((r) => toDTO(r, isAdmin, new Map())) };
   const stats = await fetchStats(isAdmin, projectId);
   return { items, stats };
 }
 
 /**
- * `opts.search` narrows the ITEMS only. The stat row deliberately keeps
- * describing the whole (optionally project-filtered) inventory: it is
- * computed by `rpc_inventory_stats`, which takes a project and nothing else,
- * and re-summing it in TypeScript here would fork the SQL oracle this file's
- * header exists to avoid. Widening the RPC is a migration, not a UI change.
+ * `opts.search` narrows the items AND the stat row, by the same rules: the
+ * table through `inventorySearchFilter` in PostgREST, the stats through
+ * `rpc_inventory_stats`'s `p_search`, which reproduces that filter in SQL
+ * (migration 20260917120001). The totals are still computed in SQL — never
+ * re-summed here from a page of rows, which would fork the SQL oracle this
+ * file's header exists to avoid.
  */
 export async function getBusinessInventory(
   session: Session,
-  opts: { projectId?: string; search?: string } = {}
-): Promise<{ items: InventoryItemDTO[]; stats: InventoryStats }> {
+  opts: { projectId?: string; search?: string },
+  req: PageRequest
+): Promise<{ items: Page<InventoryItemDTO>; stats: InventoryStats }> {
   const effectiveRole = session.impersonating?.role ?? session.role;
   const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
-  if (effectiveRole === "client") return { items: [], stats: EMPTY_STATS };
+  if (effectiveRole === "client") return { items: emptyPage(req), stats: EMPTY_STATS };
 
-  const rows = await fetchRows(isAdmin, opts);
+  const page = await fetchRows(isAdmin, opts, req);
   const projectNames = await fetchProjectNames(
-    rows.map((r) => r.project_id).filter((id): id is string => id != null)
+    page.rows.map((r) => r.project_id).filter((id): id is string => id != null)
   );
-  const items = rows.map((r) => toDTO(r, isAdmin, projectNames));
-  const stats = await fetchStats(isAdmin, opts.projectId);
+  const items = { ...page, rows: page.rows.map((r) => toDTO(r, isAdmin, projectNames)) };
+  const stats = await fetchStats(isAdmin, opts.projectId, opts.search);
   return { items, stats };
 }

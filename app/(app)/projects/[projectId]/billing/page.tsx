@@ -5,10 +5,11 @@ import { env } from "@/lib/env";
 import { getProjectHeader } from "@/features/projects/queries";
 import {
   getAdminBillingStats,
-  getBillsForAdmin,
-  getBillsForClient,
+  getBillsPageForAdmin,
+  getBillsPageForClient,
   getClientBillsStats,
 } from "@/features/billing/queries";
+import { parsePageRequest } from "@/lib/pagination";
 import { BillingAdmin } from "@/features/billing/components/BillingAdmin";
 import { BillingClient } from "@/features/billing/components/BillingClient";
 
@@ -23,10 +24,17 @@ import { BillingClient } from "@/features/billing/components/BillingClient";
  * doesn't exist yet" framing the rest of this app gives an unbuilt page,
  * not a "coming soon" that invites a curious client to keep checking.
  */
-export default async function BillingPage({ params }: { params: Promise<{ projectId: string }> }) {
+export default async function BillingPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ page?: string; pageSize?: string }>;
+}) {
   if (!env.BILLING_ENABLED) notFound();
 
   const { projectId } = await params;
+  const pageRequest = parsePageRequest(await searchParams);
   const session = await requireSession();
   const effectiveRole = session.impersonating?.role ?? session.role;
   if (effectiveRole === "site") forbidden();
@@ -35,7 +43,10 @@ export default async function BillingPage({ params }: { params: Promise<{ projec
   if (!header) notFound();
 
   if (effectiveRole === "client") {
-    const [bills, stats] = await Promise.all([getBillsForClient(projectId), getClientBillsStats(projectId)]);
+    const [bills, stats] = await Promise.all([
+      getBillsPageForClient(projectId, pageRequest),
+      getClientBillsStats(projectId),
+    ]);
     return <BillingClient bills={bills} stats={stats} />;
   }
 
@@ -49,7 +60,10 @@ export default async function BillingPage({ params }: { params: Promise<{ projec
     .single();
   if (error) throw new Error(error.message);
 
-  const [bills, stats] = await Promise.all([getBillsForAdmin(projectId), getAdminBillingStats(projectId)]);
+  const [bills, stats] = await Promise.all([
+    getBillsPageForAdmin(projectId, pageRequest),
+    getAdminBillingStats(projectId),
+  ]);
 
   return (
     <BillingAdmin

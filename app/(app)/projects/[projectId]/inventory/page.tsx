@@ -4,17 +4,25 @@ import { getProjectHeader } from "@/features/projects/queries";
 import { getProjectInventory } from "@/features/inventory/queries";
 import { InventoryTable } from "@/features/inventory/components/InventoryTable";
 import { formatINRCompact } from "@/lib/money";
+import { parsePageRequest } from "@/lib/pagination";
 import { StatBar } from "@/components/ui/StatBar";
 import { Card } from "@/components/ui/Card";
+import { TablePagination } from "@/components/shared/TablePagination";
 
 /**
  * build/07-stock-inventory-notifications.md §2.5 step 3. `getProjectInventory`
- * already returns `EMPTY_STATS`/`[]` for a Client session (no route hidden
- * here — the sidebar link is absent, same soft-hide as every other role-gated
- * page in this app; `rpc_inventory_stats` and the role-scoped views are the
- * real boundary, not this page).
+ * already returns `EMPTY_STATS`/an empty page for a Client session (no route
+ * hidden here — the sidebar link is absent, same soft-hide as every other
+ * role-gated page in this app; `rpc_inventory_stats` and the role-scoped
+ * views are the real boundary, not this page).
  */
-export default async function InventoryPage({ params }: { params: Promise<{ projectId: string }> }) {
+export default async function InventoryPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ page?: string; pageSize?: string }>;
+}) {
   const { projectId } = await params;
   const session = await requireSession();
 
@@ -24,7 +32,11 @@ export default async function InventoryPage({ params }: { params: Promise<{ proj
   const effectiveRole = session.impersonating?.role ?? session.role;
   const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
 
-  const { items, stats } = await getProjectInventory(session, projectId);
+  const { items, stats } = await getProjectInventory(
+    session,
+    projectId,
+    parsePageRequest(await searchParams)
+  );
 
   return (
     <div>
@@ -45,7 +57,8 @@ export default async function InventoryPage({ params }: { params: Promise<{ proj
       />
 
       <Card>
-        <InventoryTable items={items} isAdmin={isAdmin} />
+        <InventoryTable items={items.rows} isAdmin={isAdmin} />
+        <TablePagination page={items.page} pageSize={items.pageSize} total={items.total} />
       </Card>
     </div>
   );

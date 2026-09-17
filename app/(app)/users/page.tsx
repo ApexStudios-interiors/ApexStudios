@@ -4,7 +4,9 @@ import { UserRoleSelect } from "@/features/users/components/UserRoleSelect";
 import { ResetPasswordButton } from "@/features/users/components/ResetPasswordButton";
 import { passwordResetRefusal } from "@/features/users/service";
 import { initials } from "@/lib/logic";
+import { parsePageRequest } from "@/lib/pagination";
 import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
+import { TablePagination } from "@/components/shared/TablePagination";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/Icon";
 import { Card } from "@/components/ui/Card";
@@ -26,18 +28,22 @@ import { td, th } from "@/components/ui/table";
  * and disabled, with the reason as its title, where it does not. The server
  * action and the database check the same rule again.
  */
-export default async function UsersPage() {
+export default async function UsersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string; pageSize?: string }>;
+}) {
   const session = await requireRole(["owner", "admin"]);
   // The REAL role, as resetUserPassword uses: a preview never changes who may reset whom.
   const actor = { userId: session.userId, role: session.role };
-  const users = await listUsers();
+  const users = await listUsers(parsePageRequest(await searchParams));
 
   return (
     <div>
       <div className="flex items-start gap-4 flex-wrap mb-5">
         <div>
           <h1 className="text-[26px] font-bold tracking-tight">Users</h1>
-          <p className="mt-1 text-muted-foreground text-[13.5px]">{users.length} users</p>
+          <p className="mt-1 text-muted-foreground text-[13.5px]">{users.total} users</p>
         </div>
         <div className="ml-auto flex gap-2">
           <OpenDialogButton dialog={{ kind: "inviteUser" }} variant="primary">
@@ -57,7 +63,7 @@ export default async function UsersPage() {
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
+            {users.rows.map((u) => (
               <tr key={u.id}>
                 <td className={td}>
                   <div className="flex items-center gap-2.5">
@@ -88,6 +94,7 @@ export default async function UsersPage() {
             ))}
           </tbody>
         </TableWrap>
+        <TablePagination page={users.page} pageSize={users.pageSize} total={users.total} />
       </Card>
     </div>
   );

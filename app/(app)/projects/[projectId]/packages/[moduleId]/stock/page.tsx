@@ -1,8 +1,10 @@
 import { forbidden } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
-import { getStockRequestsForProject } from "@/features/stock/queries";
+import { getStockRequestsPage } from "@/features/stock/queries";
 import { ReqTable } from "@/features/stock/components/ReqTable";
+import { parsePageRequest } from "@/lib/pagination";
 import { Card } from "@/components/ui/Card";
+import { TablePagination } from "@/components/shared/TablePagination";
 
 /**
  * build/07-stock-inventory-notifications.md §2.5 step 2: the same table,
@@ -12,8 +14,10 @@ import { Card } from "@/components/ui/Card";
  */
 export default async function PackageStockTab({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string; moduleId: string }>;
+  searchParams: Promise<{ page?: string; pageSize?: string }>;
 }) {
   const { projectId, moduleId } = await params;
   const session = await requireSession();
@@ -22,11 +26,17 @@ export default async function PackageStockTab({
   if (effectiveRole === "client") forbidden();
   const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
 
-  const requests = await getStockRequestsForProject(session, projectId, { packageId: moduleId });
+  const requests = await getStockRequestsPage(
+    session,
+    projectId,
+    { packageId: moduleId },
+    parsePageRequest(await searchParams)
+  );
 
   return (
     <Card>
-      <ReqTable requests={requests} role={effectiveRole} isAdmin={isAdmin} />
+      <ReqTable requests={requests.rows} role={effectiveRole} isAdmin={isAdmin} />
+      <TablePagination page={requests.page} pageSize={requests.pageSize} total={requests.total} />
     </Card>
   );
 }

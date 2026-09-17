@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession, type Session } from "@/lib/auth/session";
+import { fetchPage, type Page, type PageRequest } from "@/lib/pagination";
 import { presignGet } from "@/lib/r2/presign";
 import { canAddPhotos, canDecide, canSupersede } from "./service";
 import type { ApprovalType } from "./schema";
@@ -156,28 +157,69 @@ type ApprovalRow = {
   created_at: string;
 };
 
+type ApprovalFilter = { status?: "pending" | "approved" | "rejected" };
+
+/** The list query, ready to page: `id` breaks ties between equal
+ *  `created_at`s so no row lands on two pages or on none. */
+function approvalsQuery(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  projectId: string,
+  opts: ApprovalFilter,
+  counted: boolean
+) {
+  let query = supabase
+    .from("approvals")
+    .select(
+      "id, ref_no, package_id, phase_id, type, item, note, needed_by, status, requested_by, decided_by, decided_at, decision_reason, supersedes_id, created_at",
+      { count: counted ? "exact" : undefined }
+    )
+    .eq("project_id", projectId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
+  if (opts.status) query = query.eq("status", opts.status);
+  return query;
+}
+
 export async function getApprovalsForProject(
   session: Session,
   projectId: string,
-  opts: { status?: "pending" | "approved" | "rejected" } = {}
+  opts: ApprovalFilter = {}
+): Promise<ApprovalDTO[]> {
+  const supabase = await createClient();
+  const { data: rows, error } = await approvalsQuery(supabase, projectId, opts, false);
+  if (error) throw new Error(error.message);
+  return toApprovalDTOs(session, projectId, rows as ApprovalRow[]);
+}
+
+/**
+ * The Approvals table: one page of the same rows, filtered and paginated in
+ * the query itself (`count: "exact"` + `.range()`, lib/pagination.ts) — the
+ * attachments, package/phase names and supersede links are then resolved for
+ * that page only, which is also what keeps those follow-up queries small.
+ */
+export async function getApprovalsPage(
+  session: Session,
+  projectId: string,
+  opts: ApprovalFilter,
+  req: PageRequest
+): Promise<Page<ApprovalDTO>> {
+  const supabase = await createClient();
+  const page = await fetchPage(
+    (from, to) => approvalsQuery(supabase, projectId, opts, true).range(from, to),
+    req
+  );
+  return { ...page, rows: await toApprovalDTOs(session, projectId, page.rows as ApprovalRow[]) };
+}
+
+async function toApprovalDTOs(
+  session: Session,
+  projectId: string,
+  typedRows: ApprovalRow[]
 ): Promise<ApprovalDTO[]> {
   const supabase = await createClient();
   const effectiveRole = session.impersonating?.role ?? session.role;
   const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
-
-  let query = supabase
-    .from("approvals")
-    .select(
-      "id, ref_no, package_id, phase_id, type, item, note, needed_by, status, requested_by, decided_by, decided_at, decision_reason, supersedes_id, created_at"
-    )
-    .eq("project_id", projectId)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
-  if (opts.status) query = query.eq("status", opts.status);
-
-  const { data: rows, error } = await query;
-  if (error) throw new Error(error.message);
-  const typedRows = rows as ApprovalRow[];
 
   const ids = typedRows.map((r) => r.id);
   const supersedesIds = typedRows.map((r) => r.supersedes_id);

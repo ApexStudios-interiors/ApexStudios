@@ -4,6 +4,8 @@ import { useApp } from "@/context/AppContext";
 import type { BillDTO } from "@/features/billing/queries";
 import { formatINR, formatINRCompact } from "@/lib/money";
 import { dmy } from "@/lib/logic";
+import type { Page } from "@/lib/pagination";
+import { TablePagination } from "@/components/shared/TablePagination";
 import { StatBar } from "@/components/ui/StatBar";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
@@ -12,11 +14,20 @@ import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, sub } from "@/components/ui/table";
 import { Empty } from "@/components/ui/Empty";
 
-type Stats = { billsRaised: number; awaitingApproval: number; approvedUnpaid: number; paid: number };
+type Stats = {
+  billsRaised: number;
+  awaitingApproval: number;
+  approvedUnpaid: number;
+  paid: number;
+  counts: { raised: number; awaitingApproval: number; approvedUnpaid: number; paid: number };
+};
 
-export function BillingClient({ bills, stats }: { bills: BillDTO[]; stats: Stats }) {
+/** `bills` is one page of the client's own bills; the query already excludes
+ *  drafts (features/billing/queries.ts), which is where that filter has to
+ *  live now so the page, the count and the rows agree. The stat row's "N
+ *  bills" come from `stats`, over every bill, not from this page. */
+export function BillingClient({ bills, stats }: { bills: Page<BillDTO>; stats: Stats }) {
   const { openDialog } = useApp();
-  const visible = bills.filter((b) => b.status !== "draft");
 
   return (
     <div>
@@ -32,22 +43,22 @@ export function BillingClient({ bills, stats }: { bills: BillDTO[]; stats: Stats
           {
             label: "Bills Raised",
             value: formatINRCompact(stats.billsRaised),
-            sub: `${visible.length} bills`,
+            sub: `${stats.counts.raised} bills`,
           },
           {
             label: "Awaiting Approval",
             value: formatINRCompact(stats.awaitingApproval),
-            sub: `${bills.filter((b) => b.status === "submitted").length} bills`,
+            sub: `${stats.counts.awaitingApproval} bills`,
           },
           {
             label: "Approved, Unpaid",
             value: formatINRCompact(stats.approvedUnpaid),
-            sub: `${bills.filter((b) => b.status === "certified").length} bills`,
+            sub: `${stats.counts.approvedUnpaid} bills`,
           },
           {
             label: "Paid",
             value: formatINRCompact(stats.paid),
-            sub: `${bills.filter((b) => b.status === "paid").length} bills`,
+            sub: `${stats.counts.paid} bills`,
           },
         ]}
       />
@@ -67,8 +78,8 @@ export function BillingClient({ bills, stats }: { bills: BillDTO[]; stats: Stats
             </tr>
           </thead>
           <tbody>
-            {visible.length ? (
-              visible.map((b) => (
+            {bills.rows.length ? (
+              bills.rows.map((b) => (
                 <tr key={b.id}>
                   <td className={td}>
                     {b.refNo}
@@ -130,6 +141,7 @@ export function BillingClient({ bills, stats }: { bills: BillDTO[]; stats: Stats
             )}
           </tbody>
         </TableWrap>
+        <TablePagination page={bills.page} pageSize={bills.pageSize} total={bills.total} />
       </Card>
     </div>
   );
