@@ -76,7 +76,10 @@ export const config = {
      * - /api/cron/* — authenticates with Authorization: Bearer CRON_SECRET,
      *   not a session; running the session-refresh dance against a cron
      *   request is pointless and the redirect-to-login would break it outright
+     * - /api/backup/report — same Bearer CRON_SECRET auth, called by the
+     *   backup.nightly GitHub workflow; without this it was redirected to
+     *   /login and the backup outcome was never recorded
      */
-    "/((?!_next/static|_next/image|favicon\\.ico|api/cron).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico|api/cron|api/backup/report).*)",
   ],
 };

@@ -69,30 +69,65 @@ jobs:
 
       # A token scoped ONLY to apex-backups (build §0.1) — distinct from the
       # app's own R2 credentials, which must never be able to reach this
-      # bucket at all.
+      # bucket at all. It must be an Object Read & WRITE token: the Object
+      # Read-only token (the one Vercel's backup.verify uses) authenticates
+      # fine and then fails here with AccessDenied on PutObject.
       - name: Upload to R2
+        id: upload
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
+          # AWS CLI v2 now sends extra default checksums that R2 does not
+          # fully support; Cloudflare's aws-cli guide says to only send them
+          # when the operation requires it.
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_BACKUP_BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          KEY: ${{ steps.dump.outputs.key }}
         run: |
           set -euo pipefail
-          aws s3 cp backup.sql.gz \
-            "s3://${{ secrets.R2_BACKUP_BUCKET }}/${{ steps.dump.outputs.key }}" \
-            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+          : "${AWS_ACCESS_KEY_ID:?the R2_BACKUP_ACCESS_KEY_ID repository secret is not set}"
+          : "${AWS_SECRET_ACCESS_KEY:?the R2_BACKUP_SECRET_ACCESS_KEY repository secret is not set}"
+          : "${R2_BACKUP_BUCKET:?the R2_BACKUP_BUCKET repository secret is not set}"
+          : "${R2_ACCOUNT_ID:?the R2_ACCOUNT_ID repository secret is not set}"
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          aws s3 cp backup.sql.gz "s3://${R2_BACKUP_BUCKET}/${KEY}" --endpoint-url "$ENDPOINT" \
+            || { echo "::error::R2 upload failed. AccessDenied means the token is read-only or not scoped to this bucket; it needs Object Read & Write on apex-backups."; exit 1; }
+          # Prove the object is really there, not just that cp exited 0.
+          aws s3api head-object --bucket "$R2_BACKUP_BUCKET" --key "$KEY" --endpoint-url "$ENDPOINT"
 
+      # --fail-with-body alone is not enough: a 3xx is not an HTTP error to
+      # curl, so a redirect (e.g. middleware bouncing to /login) used to pass
+      # silently. Require exactly 200.
       - name: Report success
         if: success()
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          KEY: ${{ steps.dump.outputs.key }}
         run: |
-          curl -sf -X POST "${{ secrets.APP_URL }}/api/backup/report" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+          set -euo pipefail
+          CODE=$(curl -sS -o body.txt -w '%{http_code}' --max-time 30 -X POST "$APP_URL/api/backup/report" \
+            -H "Authorization: Bearer $CRON_SECRET" \
             -H "Content-Type: application/json" \
-            -d '{"ok": true, "key": "${{ steps.dump.outputs.key }}"}'
+            -d "{\"ok\": true, \"key\": \"$KEY\"}")
+          cat body.txt; echo
+          [ "$CODE" = "200" ] || { echo "::error::/api/backup/report returned HTTP $CODE"; exit 1; }
 
+      # Only when the backup itself did not land — a failed success-report
+      # must not record a successful upload as a failed backup.
       - name: Report failure
-        if: failure()
+        if: failure() && steps.upload.outcome != 'success'
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl -sf -X POST "${{ secrets.APP_URL }}/api/backup/report" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+          set -euo pipefail
+          CODE=$(curl -sS -o body.txt -w '%{http_code}' --max-time 30 -X POST "$APP_URL/api/backup/report" \
+            -H "Authorization: Bearer $CRON_SECRET" \
             -H "Content-Type: application/json" \
-            -d '{"ok": false, "error": "backup-nightly workflow failed — see the Actions run log"}'
+            -d '{"ok": false, "error": "backup-nightly workflow failed — see the Actions run log"}')
+          cat body.txt; echo
+          [ "$CODE" = "200" ] || { echo "::error::/api/backup/report returned HTTP $CODE"; exit 1; }
