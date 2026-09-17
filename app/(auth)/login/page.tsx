@@ -71,28 +71,34 @@ function LoginForm() {
             autoFocus
           />
         </Field>
-        <Field label="Password" htmlFor="login-password">
-          <div className="relative">
-            <input
-              id="login-password"
-              className={`${inputClass} pr-10`}
-              type={showPassword ? "text" : "password"}
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+        {/* Not <Field>: the show/hide control sits beside the label, OUTSIDE
+            the input. Inside the input's right edge it was covered by the
+            autofill/key icon Safari, Chrome and password managers draw there. */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label htmlFor="login-password" className="block text-[12.5px] font-semibold">
+              Password
+            </label>
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-controls="login-password"
               aria-pressed={showPassword}
-              title={showPassword ? "Hide password" : "Show password"}
-              className="absolute inset-y-0 right-0 w-9 grid place-items-center text-muted-foreground hover:text-foreground rounded-r-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-foreground rounded-md px-1.5 py-0.5 hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Icon path={showPassword ? EYE_OFF : EYE} className="w-4 h-4" />
+              {showPassword ? "Hide password" : "Show password"}
             </button>
           </div>
-        </Field>
+          <input
+            id="login-password"
+            className={inputClass}
+            type={showPassword ? "text" : "password"}
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
         {login.result.serverError && (
           <p className="text-[12.5px] text-destructive">{login.result.serverError}</p>
         )}
