@@ -159,9 +159,30 @@ jobs:
             exit 1
           fi
 
+      # Open issue #5: this job seeds and writes test rows. It once ran against
+      # the live database because production and development shared a project.
+      # Fail closed: no production ref to compare against is also a failure.
+      - name: Refuse the production database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_PROD_PROJECT_REF: ${{ secrets.SUPABASE_PROD_PROJECT_REF }}
+        run: |
+          if [ -z "$SUPABASE_PROD_PROJECT_REF" ]; then
+            echo "::error::SUPABASE_PROD_PROJECT_REF is not set, so nothing stops this job writing to production."
+            exit 1
+          fi
+          case "$SUPABASE_DB_URL $NEXT_PUBLIC_SUPABASE_URL" in
+            *"$SUPABASE_PROD_PROJECT_REF"*)
+              echo "::error::SUPABASE_DB_URL or NEXT_PUBLIC_SUPABASE_URL points at PRODUCTION. CI must use apex-dev."
+              exit 1 ;;
+          esac
+          echo "Database is not production."
+
       - name: Apply migrations and seed
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_PROD_PROJECT_REF: ${{ secrets.SUPABASE_PROD_PROJECT_REF }}
         run: |
           pnpm exec supabase db push --db-url "$SUPABASE_DB_URL"
           pnpm db:seed

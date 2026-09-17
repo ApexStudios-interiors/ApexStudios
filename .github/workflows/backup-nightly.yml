@@ -57,12 +57,23 @@ jobs:
           /usr/lib/postgresql/17/bin/pg_dump --version | grep -qE ' 17\.' \
             || { echo "::error::expected pg_dump 17"; exit 1; }
 
+      # SUPABASE_PROD_DB_URL, not SUPABASE_DB_URL: that one is CI's development
+      # database (open issue #5 — they used to be the same project, so this
+      # "production" backup was of whatever CI had last seeded). Refuse
+      # anything that is not the production project.
       - name: Dump and compress
         id: dump
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_PROD_DB_URL }}
+          SUPABASE_PROD_PROJECT_REF: ${{ secrets.SUPABASE_PROD_PROJECT_REF }}
         run: |
           set -euo pipefail
+          : "${SUPABASE_DB_URL:?the SUPABASE_PROD_DB_URL repository secret is not set (run scripts/setup-production.mjs)}"
+          : "${SUPABASE_PROD_PROJECT_REF:?the SUPABASE_PROD_PROJECT_REF repository secret is not set}"
+          case "$SUPABASE_DB_URL" in
+            *"$SUPABASE_PROD_PROJECT_REF"*) ;;
+            *) echo "::error::SUPABASE_PROD_DB_URL is not the production project; refusing to back up the wrong database"; exit 1 ;;
+          esac
           KEY="pg_dump/$(date -u +%F).sql.gz"
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
           /usr/lib/postgresql/17/bin/pg_dump "$SUPABASE_DB_URL" --no-owner --no-privileges | gzip > backup.sql.gz
