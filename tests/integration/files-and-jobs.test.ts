@@ -1,7 +1,7 @@
 import { afterAll, afterEach, describe, expect, it } from "vitest";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { connect, SEED } from "./db";
 import { one } from "./expect-row";
+import { signedInAs } from "./auth";
 
 /**
  * build/06-files-jobs-daily-updates.md §5. AGENTS.md database rule 8: RLS
@@ -27,7 +27,6 @@ import { one } from "./expect-row";
  * whole of what `enqueue()` delegates to.
  */
 
-const PASSWORD = "apex-dev-only";
 const sql = connect();
 const cleanupJobIds: string[] = [];
 const cleanupAttachmentIds: string[] = [];
@@ -44,19 +43,6 @@ afterEach(async () => {
   cleanupUpdateIds.length = 0;
 });
 afterAll(() => sql.end({ timeout: 5 }));
-
-function anonClient(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error("NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY must be set.");
-  return createClient(url, key);
-}
-async function signedInAs(email: string): Promise<SupabaseClient> {
-  const client = anonClient();
-  const { error } = await client.auth.signInWithPassword({ email, password: PASSWORD });
-  if (error) throw new Error(`could not sign in as ${email}: ${error.message}`);
-  return client;
-}
 
 describe("rpc_enqueue_job", () => {
   it("a real site session can enqueue attachment.thumbnail", async () => {

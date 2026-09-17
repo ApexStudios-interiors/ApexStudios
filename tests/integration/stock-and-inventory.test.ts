@@ -1,8 +1,9 @@
 import { afterAll, afterEach, describe, expect, it } from "vitest";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { connect } from "./db";
 import { SEED } from "./db";
 import { one } from "./expect-row";
+import { anonClient, signedInAs } from "./auth";
 
 /**
  * build/07-stock-inventory-notifications.md. AGENTS.md's own testing table:
@@ -16,23 +17,8 @@ import { one } from "./expect-row";
  * connection).
  */
 
-const PASSWORD = "apex-dev-only";
 const SITE_EMAIL = "ravi@beapex.in";
 const ADMIN_EMAIL = "suresh@beapex.in";
-
-function anonClient(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error("NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY must be set.");
-  return createClient(url, key);
-}
-
-async function signedInAs(email: string): Promise<SupabaseClient> {
-  const supabase = anonClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password: PASSWORD });
-  if (error) throw new Error(`Could not sign in as ${email}: ${error.message}`);
-  return supabase;
-}
 
 const sql = connect();
 const openClients: SupabaseClient[] = [];
@@ -68,7 +54,6 @@ afterEach(async () => {
   }
 });
 afterAll(async () => {
-  await Promise.all(openClients.map((c) => c.auth.signOut()));
   await sql.end({ timeout: 5 });
 });
 

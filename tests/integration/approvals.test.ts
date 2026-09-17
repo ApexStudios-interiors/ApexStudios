@@ -1,8 +1,9 @@
 import { afterAll, afterEach, describe, expect, it } from "vitest";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { connect, SEED } from "./db";
 import { one } from "./expect-row";
+import { signedInAs } from "./auth";
 
 /**
  * build/08-approvals.md. AGENTS.md's own testing table: "New RPC → Integration
@@ -16,25 +17,10 @@ import { one } from "./expect-row";
  * 02-lld.md §6.3 test 6: "admin calling rpc_decide_approval must FORBIDDEN."
  */
 
-const PASSWORD = "apex-dev-only";
 const SITE_EMAIL = "ravi@beapex.in";
 const ADMIN_EMAIL = "suresh@beapex.in";
 const OWNER_EMAIL = "hello@beapex.in";
 const CLIENT_EMAIL = "tvrao@example.invalid";
-
-function anonClient(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error("NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY must be set.");
-  return createClient(url, key);
-}
-
-async function signedInAs(email: string): Promise<SupabaseClient> {
-  const supabase = anonClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password: PASSWORD });
-  if (error) throw new Error(`Could not sign in as ${email}: ${error.message}`);
-  return supabase;
-}
 
 const sql = connect();
 const openClients: SupabaseClient[] = [];
@@ -53,7 +39,6 @@ afterEach(async () => {
   }
 });
 afterAll(async () => {
-  await Promise.all(openClients.map((c) => c.auth.signOut()));
   await sql.end({ timeout: 5 });
 });
 

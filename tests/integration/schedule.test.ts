@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { connect, SEED } from "./db";
 import { one } from "./expect-row";
+import { signedInAs } from "./auth";
 
 /**
  * build/05-schedule-and-progress.md §4, Integration:
@@ -22,24 +23,8 @@ import { one } from "./expect-row";
  * it.
  */
 
-const PASSWORD = "apex-dev-only";
 const sql = connect();
 afterAll(() => sql.end({ timeout: 5 }));
-
-function anonClient(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY must be set for this suite.");
-  }
-  return createClient(url, key);
-}
-async function signedInAs(email: string): Promise<SupabaseClient> {
-  const client = anonClient();
-  const { error } = await client.auth.signInWithPassword({ email, password: PASSWORD });
-  if (error) throw new Error(`could not sign in as ${email}: ${error.message}`);
-  return client;
-}
 
 describe("a site user can create a task under a phase they cannot directly SELECT from phases (D24)", () => {
   it('does not misread phases\' admin-only RLS as "phase does not exist"', async () => {

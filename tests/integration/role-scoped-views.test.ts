@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { SEED } from "./db";
+import { signedInAs } from "./auth";
 
 /**
  * AGENTS.md database rule 8: RLS is tested from a real client SDK session,
@@ -16,25 +17,8 @@ import { SEED } from "./db";
  * fixed (v_phase_client, v_phase_site — see docs/decisions.md D21).
  */
 
-const PASSWORD = "apex-dev-only";
 const CLIENT_EMAIL = "tvrao@example.invalid";
 const SITE_EMAIL = "ravi@beapex.in";
-
-function anonClient(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY must be set for this suite.");
-  }
-  return createClient(url, key);
-}
-
-async function signedInAs(email: string): Promise<SupabaseClient> {
-  const supabase = anonClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password: PASSWORD });
-  if (error) throw new Error(`Could not sign in as ${email}: ${error.message}`);
-  return supabase;
-}
 
 const openClients: SupabaseClient[] = [];
 async function client(email: string) {
@@ -42,9 +26,7 @@ async function client(email: string) {
   openClients.push(c);
   return c;
 }
-afterAll(async () => {
-  await Promise.all(openClients.map((c) => c.auth.signOut()));
-});
+afterAll(async () => {});
 
 const FORBIDDEN_MONEY_COLUMNS = [
   "internal_amount",
