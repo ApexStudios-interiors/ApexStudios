@@ -55,7 +55,7 @@ export function DecideApprovalDialog({
       title={decision === "approved" ? "Approve" : "Reject Approval"}
       description={item}
       okLabel={pending ? "Saving…" : decision === "approved" ? "Approve" : "Reject"}
-      okDisabled={pending}
+      okPending={pending}
       onClose={closeDialog}
       onOk={onSubmit}
     >

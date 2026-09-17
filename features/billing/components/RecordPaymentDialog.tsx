@@ -16,11 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/shared/DatePicker";
-
-/** UTC-anchored, like every other date-only field in this app. */
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import { todayIst } from "@/lib/dates";
 
 /** Base UI's `Select.Value` renders the raw value ("neft") unless the root is
  *  given `items` to resolve its label from. Order matches the old `<option>`s. */
@@ -53,7 +49,10 @@ export function RecordPaymentDialog({
   const [paidSoFar, setPaidSoFar] = useState<number | null>(null);
   const [payments, setPayments] = useState<{ id: string; amount: number; paidOn: string }[]>([]);
   const [amount, setAmount] = useState("");
-  const [paidOn, setPaidOn] = useState(todayIso());
+  // Today in Asia/Kolkata. The UTC default this replaces dated a payment
+  // recorded between 00:00 and 05:30 IST to the previous day — on a financial
+  // record that feeds the GST return.
+  const [paidOn, setPaidOn] = useState(todayIst());
   const [mode, setMode] = useState<"neft" | "cheque" | "upi" | "rtgs">("neft");
   const [referenceNo, setReferenceNo] = useState("");
   // Regenerated after every attempt, success or failure — the same fix
@@ -111,7 +110,7 @@ export function RecordPaymentDialog({
       title="Record Payment"
       description={`${refNo} · ${remaining !== null ? formatINR(remaining) : "…"} outstanding`}
       okLabel={pending ? "Recording…" : "Record Payment"}
-      okDisabled={pending}
+      okPending={pending}
       onClose={closeDialog}
       onOk={onSubmit}
     >

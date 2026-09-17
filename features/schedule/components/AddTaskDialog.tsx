@@ -8,7 +8,7 @@ import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
 import { createTaskSchema } from "@/features/schedule/schema";
 import { createTask, getOwnerOptions, getPhaseOptions } from "@/features/schedule/actions";
-import { DatePickerField } from "@/features/schedule/components/DatePickerField";
+import { DatePicker } from "@/components/shared/DatePicker";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
 import {
   Select,
@@ -83,7 +83,7 @@ export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: strin
     <DialogShell
       title="Add Task"
       okLabel={create.isPending ? "Adding…" : "Add"}
-      okDisabled={create.isPending}
+      okPending={create.isPending}
       onClose={closeDialog}
       onOk={onSubmit}
     >
@@ -175,12 +175,13 @@ export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: strin
             control={control}
             name="startDate"
             render={({ field }) => (
-              <DatePickerField
+              <DatePicker
                 id="at-start"
                 ref={field.ref}
                 value={field.value}
                 onChange={field.onChange}
                 onBlur={field.onBlur}
+                required
               />
             )}
           />

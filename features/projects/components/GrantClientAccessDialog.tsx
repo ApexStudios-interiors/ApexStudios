@@ -53,7 +53,8 @@ export function GrantClientAccessDialog({
       title="Add existing client"
       description={`Choose a client login that should also see ${projectName}.`}
       okLabel={grant.isPending ? "Adding…" : "Give access"}
-      okDisabled={grant.isPending || !profileId}
+      okPending={grant.isPending}
+      okDisabled={!profileId}
       onClose={closeDialog}
       onOk={() => {
         if (profileId) grant.execute({ projectId, profileId });

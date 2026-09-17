@@ -39,7 +39,7 @@ export function CertifyBillDialog({ billId, refNo }: { billId: string; refNo: st
       title="Approve"
       description={refNo}
       okLabel={pending ? "Approving…" : "Approve"}
-      okDisabled={pending}
+      okPending={pending}
       onClose={closeDialog}
       onOk={onSubmit}
     >

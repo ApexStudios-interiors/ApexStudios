@@ -53,7 +53,7 @@ export function ApprovalPhotosDialog({
       title="Add Sample Photos"
       description={item}
       okLabel={pending ? "Uploading…" : "Upload"}
-      okDisabled={pending}
+      okPending={pending}
       onClose={closeDialog}
       onOk={onSubmit}
     >

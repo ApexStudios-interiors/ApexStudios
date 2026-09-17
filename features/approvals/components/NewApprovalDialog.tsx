@@ -123,7 +123,7 @@ export function NewApprovalDialog({
       title={supersedes ? "Raise Revised Approval" : "Request Approval"}
       description="Sent to the client for sign-off."
       okLabel={pending ? "Sending…" : "Send"}
-      okDisabled={pending}
+      okPending={pending}
       onClose={closeDialog}
       onOk={onSubmit}
     >

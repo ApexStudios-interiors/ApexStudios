@@ -82,7 +82,7 @@ export function InviteUserDialog() {
     <DialogShell
       title="Add User"
       okLabel={add.isPending ? "Adding…" : "Add User"}
-      okDisabled={add.isPending}
+      okPending={add.isPending}
       onClose={closeDialog}
       onOk={submit}
     >

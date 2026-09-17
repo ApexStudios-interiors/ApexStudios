@@ -41,7 +41,7 @@ export function BillUploadDialog({ billId, projectId }: { billId: string; projec
       title="Upload Bill Copy"
       description="The client sees this file before approving."
       okLabel={pending ? "Uploading…" : "Upload"}
-      okDisabled={pending}
+      okPending={pending}
       onClose={closeDialog}
       onOk={onSubmit}
     >

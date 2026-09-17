@@ -14,6 +14,8 @@
  * specifically to catch a regression here.
  */
 
+import { todayIst } from "@/lib/dates";
+
 const MS_PER_DAY = 86_400_000;
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -145,9 +147,15 @@ export function weightedProgress(tasks: { durationWeeks: number; progressPct: nu
   return Math.round(weighted / totalWeeks);
 }
 
-/** UTC "today" as a YYYY-MM-DD string — the same date-only shape every other
+/** "Today" as a YYYY-MM-DD string — the same date-only shape every other
  *  function here takes, computed once per request rather than each caller
- *  reaching for `new Date()` (and each other's local timezone) separately. */
+ *  reaching for `new Date()` (and each other's local timezone) separately.
+ *
+ *  It is today in `Asia/Kolkata`, not in UTC: this drives the late-task flag
+ *  and the Gantt's today line, both of which were a day behind between 00:00
+ *  and 05:30 IST while the server (Vercel, UTC) still called it yesterday.
+ *  The week arithmetic above stays UTC-based — it indexes date strings against
+ *  each other and never against the clock. */
 export function todayIso(): string {
-  return formatUtcDate(new Date());
+  return todayIst();
 }
