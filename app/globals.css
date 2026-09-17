@@ -1,6 +1,4 @@
 @import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
 
 /* This app switches themes with `data-theme` on <html> (app/layout.tsx and
    ThemeToggle), never a `.dark` class. `shadcn init` wrote `&:is(.dark *)`,
@@ -254,16 +252,4 @@ body {
     hsl(var(--foreground)) 0 5px,
     hsl(var(--muted-foreground)) 5px 10px
   );
-}
-
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-  html {
-    @apply font-sans;
-  }
 }
