@@ -275,14 +275,26 @@ const eslintConfig = defineConfig([
             "AGENTS.md: use formatINR() / formatINRCompact() from lib/money. Never an inline toLocaleString.",
         },
       ],
-      "no-restricted-globals": [
-        "error",
-        { name: "Intl", message: "AGENTS.md: currency formatting lives in lib/money." },
-      ],
     },
   },
 
-  // ── AGENTS.md Do not: localStorage/sessionStorage are for the theme only.
+  // ── The two banned globals — `Intl` (AGENTS.md Money display) and
+  //    localStorage/sessionStorage (AGENTS.md Do not) — over the same four
+  //    trees, in ONE no-restricted-globals entry.
+  //
+  //    They used to be two blocks with identical `files` patterns. ESLint flat
+  //    config REPLACES rule options rather than merging them (the same trap the
+  //    D11 comment above warns about), so for every file both blocks matched —
+  //    which was all of them — the later localStorage block won outright and
+  //    the `Intl` ban was silently never enforced. Verified before and after
+  //    with `eslint --stdin --stdin-filename`. Keep all three names in this one
+  //    entry: a second block naming any of them switches the others back off.
+  //
+  //    `ignores` is the union of the two old blocks' exemption lists, so the
+  //    merge drops none of them. It does widen each: the three quantity/date
+  //    formatters no longer need to be told about localStorage, and the two
+  //    theme files no longer about Intl. That is the cost of a single entry,
+  //    and the exempt set is five named files, not a directory.
   {
     files: [
       "app/**/*.{ts,tsx}",
@@ -290,10 +302,24 @@ const eslintConfig = defineConfig([
       "features/**/*.{ts,tsx}",
       "context/**/*.{ts,tsx}",
     ],
-    ignores: ["app/layout.tsx", "components/ui/ThemeToggle.tsx"],
+    ignores: [
+      // Theme preference — the one storage use AGENTS.md allows. `app/layout.tsx`
+      // carries the pre-hydration script, `ThemeToggle.tsx` the write.
+      "app/layout.tsx",
+      "components/ui/ThemeToggle.tsx",
+      // The three files the toLocaleString block above already exempts: two
+      // quantity formatters awaiting a shared quantity helper (TODO(build-07))
+      // and `shadcn add calendar`'s month/weekday names. None formats money, and
+      // the replacements for all three are the likeliest place an `Intl` would
+      // legitimately appear.
+      "features/stock/components/ReqTable.tsx",
+      "features/inventory/components/InventoryTable.tsx",
+      "components/ui/calendar.tsx",
+    ],
     rules: {
       "no-restricted-globals": [
         "error",
+        { name: "Intl", message: "AGENTS.md: currency formatting lives in lib/money." },
         { name: "localStorage", message: "AGENTS.md: localStorage is for the theme preference only." },
         { name: "sessionStorage", message: "AGENTS.md: sessionStorage is not used in this application." },
       ],
