@@ -8,6 +8,7 @@ import { DialogHost } from "@/components/shared/DialogHost";
 import { PreviewBanner } from "@/components/auth/PreviewBanner";
 import { getSession } from "@/lib/auth/session";
 import { getNotifications } from "@/features/notifications/queries";
+import { getPortfolio } from "@/features/projects/queries";
 
 /**
  * The authenticated app shell: Sidebar, Header, the mock-data AppProvider
@@ -28,12 +29,20 @@ export default async function AppShellLayout({ children }: { children: React.Rea
   const effectiveRole = session.impersonating?.role ?? session.role;
   const notifications = await getNotifications(session);
 
+  // The sidebar's project menu used to map over AppContext's `lib/data.ts`
+  // fixture — two hard-coded prototype projects — so a project created through
+  // the app was saved correctly and then never appeared in the sidebar. It
+  // reads the same portfolio the All Projects page does, through the same
+  // role-scoped query, so the two can no longer disagree.
+  const portfolio = await getPortfolio(session);
+  const projects = portfolio.projects.map((p) => ({ id: p.id, name: p.name }));
+
   return (
     <SessionProvider session={session}>
       <AppProvider initialRole={effectiveRole}>
         {session.impersonating && <PreviewBanner role={session.impersonating.role} />}
         <div className="grid grid-cols-[250px_1fr] min-h-screen">
-          <Sidebar />
+          <Sidebar projects={projects} />
           <div className="min-w-0">
             <Header notifications={notifications} />
             <div className="p-7 max-w-[1280px]">{children}</div>

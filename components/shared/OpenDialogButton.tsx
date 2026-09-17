@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useApp, type DialogState } from "@/context/AppContext";
-import { Button, type ButtonProps } from "@/components/ui/Button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 
 /**
  * The one piece of every converted page that still needs `AppContext`: the

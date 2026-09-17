@@ -7,7 +7,7 @@ import type { PhaseBillingRow, MaterialAtSiteRow } from "@/features/billing/quer
 import { PhaseStatusBadge } from "@/components/shared/StatusBadges";
 import type { PhaseStatus } from "@/lib/logic";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { formatINR } from "@/lib/money";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, trTotal, sub } from "@/components/ui/table";

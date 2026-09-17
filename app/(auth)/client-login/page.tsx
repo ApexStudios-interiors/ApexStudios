@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useAction } from "next-safe-action/hooks";
 import { requestMagicLink } from "@/features/auth/actions";
 import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { Field, inputClass } from "@/components/ui/DialogShell";
 
 const RESEND_COOLDOWN_S = 60;

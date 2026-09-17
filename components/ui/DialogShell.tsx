@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, useEffect } from "react";
-import { Button } from "./Button";
+import { Button } from "./button";
 
 export function DialogShell({
   title,
