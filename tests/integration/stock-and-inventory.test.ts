@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { connect } from "./db";
 import { SEED } from "./db";
 import { one } from "./expect-row";
+import { inventorySearchFilter } from "@/features/inventory/service";
 
 /**
  * build/07-stock-inventory-notifications.md. AGENTS.md's own testing table:
@@ -265,6 +266,63 @@ describe("rpc_inventory_stats — D40", () => {
     const { data: adminData, error: adminError } = await admin.rpc("rpc_inventory_stats");
     expect(adminError).toBeNull();
     expect(one(adminData as StatsRow[], "admin inventory stats row").total_value).not.toBeNull();
+  });
+});
+
+describe("rpc_inventory_stats — p_search matches the Inventory table's own filter", () => {
+  it("counts exactly the rows inventorySearchFilter returns, for hostile input too", async () => {
+    // The stat tiles and the table must describe the same rows for a `q`
+    // search. Rather than restating the matching rules, compare the RPC's
+    // count against the very PostgREST filter the table sends.
+    const tag = `Srch${Date.now()}`;
+    const names = [`${tag} M_20 grade`, `${tag} M120 grade`, `${tag} 100% acrylic`, `${tag} back\\slash`];
+    for (const name of names) {
+      const rows = await sql`
+        insert into public.inventory_items (org_id, project_id, name, category, unit, qty_on_hand, reorder_level, unit_cost, created_by)
+        values (${SEED.org}, ${SEED.project}, ${name}, null, 'bag', 0, 5, 100, ${SEED.adminProfile})
+        returning id`;
+      trackedItemIds.push(one(rows, "inserted search item").id);
+    }
+    const rows = await sql`
+      insert into public.inventory_items (org_id, project_id, name, category, unit, qty_on_hand, reorder_level, unit_cost, created_by)
+      values (${SEED.org}, ${SEED.project}, 'Plain widget', ${`${tag} category`}, 'bag', 0, 5, 100, ${SEED.adminProfile})
+      returning id`;
+    trackedItemIds.push(one(rows, "inserted category item").id);
+
+    const terms = [
+      tag,
+      tag.toUpperCase(),
+      `${tag} M_20`,
+      `${tag} 100%`,
+      `${tag} back\\slash`,
+      `*${tag}*`,
+      "_",
+      "%",
+    ];
+    type StatsRow = { total_items: number };
+
+    for (const [email, view] of [
+      [ADMIN_EMAIL, "v_inventory_status"],
+      [SITE_EMAIL, "v_inventory_site"],
+    ] as const) {
+      const session = await client(email);
+      for (const term of terms) {
+        const table = await session
+          .from(view)
+          .select("id", { count: "exact", head: true })
+          .eq("project_id", SEED.project)
+          .or(inventorySearchFilter(term));
+        expect(table.error).toBeNull();
+
+        const { data, error } = await session.rpc("rpc_inventory_stats", {
+          p_project_id: SEED.project,
+          p_search: term,
+        });
+        expect(error).toBeNull();
+        const stats = one(data as StatsRow[], `stats row for ${email} / ${term}`);
+        expect(Number(stats.total_items), `${email} searching ${JSON.stringify(term)}`).toBe(table.count);
+      }
+    }
   });
 });
 

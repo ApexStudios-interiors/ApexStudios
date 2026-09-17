@@ -1,7 +1,9 @@
 "use client";
 
+import { useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 
 /** `PackageFilterSelect`'s own pattern (Build 06), for the business-wide
  *  inventory page's project filter — a client boundary that writes to the URL
@@ -28,6 +30,8 @@ export function InventoryProjectFilterSelect({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  // Pending while the filtered page is fetched, so the Spinner can show.
+  const [isPending, startTransition] = useTransition();
 
   // `items` is what Select.Value reads to render the selected label — without
   // it the trigger would show the raw project id.
@@ -50,12 +54,15 @@ export function InventoryProjectFilterSelect({
         // otherwise be carried into a freshly filtered, differently-paged
         // list (`PackageFilterSelect`'s own reasoning).
         params.delete("cursor");
+        // Same for the table's own `page` param (lib/pagination.ts).
+        params.delete("page");
         const qs = params.toString();
-        router.push(qs ? `${pathname}?${qs}` : pathname);
+        startTransition(() => router.push(qs ? `${pathname}?${qs}` : pathname));
       }}
     >
       <SelectTrigger className="w-[190px]" aria-label="Filter by project">
         <SelectValue />
+        {isPending && <Spinner className="text-muted-foreground" />}
       </SelectTrigger>
       <SelectContent>
         {items.map((i) => (

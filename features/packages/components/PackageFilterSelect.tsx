@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Select,
@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * A client boundary on any page with a package filter — a select that
@@ -40,6 +41,8 @@ export function PackageFilterSelect({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  // Pending while the filtered page is fetched, so the Spinner can show.
+  const [isPending, startTransition] = useTransition();
   const items = useMemo(
     () => [{ value: null, label: "All packages" }, ...packages.map((p) => ({ value: p.id, label: p.name }))],
     [packages]
@@ -57,12 +60,15 @@ export function PackageFilterSelect({
         // that a stale value would otherwise carry into a freshly filtered,
         // differently-paged list.
         params.delete("cursor");
+        // Same for the tables' own `page` param (lib/pagination.ts).
+        params.delete("page");
         const qs = params.toString();
-        router.push(qs ? `${basePath}?${qs}` : basePath);
+        startTransition(() => router.push(qs ? `${basePath}?${qs}` : basePath));
       }}
     >
       <SelectTrigger aria-label="Package" className="h-9 min-w-40 text-[13px]">
         <SelectValue />
+        {isPending && <Spinner className="text-muted-foreground" />}
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>

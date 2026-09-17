@@ -1556,6 +1556,7 @@ export type Database = {
       rpc_inventory_stats: {
         Args: {
           p_project_id?: string;
+          p_search?: string;
         };
         Returns: { total_items: number; total_value: number; low_count: number; critical_count: number }[];
       };

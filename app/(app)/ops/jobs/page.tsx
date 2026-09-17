@@ -1,6 +1,8 @@
 import { requireRole } from "@/lib/auth/session";
 import { getFailedJobs } from "@/features/ops/queries";
 import { dmy } from "@/lib/logic";
+import { parsePageRequest } from "@/lib/pagination";
+import { TablePagination } from "@/components/shared/TablePagination";
 import { Card } from "@/components/ui/Card";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, th } from "@/components/ui/table";
@@ -20,18 +22,22 @@ function dmyTime(iso: string): string {
  * page's own data is real failure detail (payloads, error messages), not
  * something to render-then-hide.
  */
-export default async function FailedJobsPage() {
+export default async function FailedJobsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string; pageSize?: string }>;
+}) {
   await requireRole(["owner", "admin"]);
-  const jobs = await getFailedJobs();
+  const jobs = await getFailedJobs(parsePageRequest(await searchParams));
 
   return (
     <div>
       <div className="mb-5">
         <h1 className="text-[26px] font-bold tracking-tight">Failed Jobs</h1>
-        <p className="mt-1 text-muted-foreground text-[13.5px]">{jobs.length} job(s) need attention</p>
+        <p className="mt-1 text-muted-foreground text-[13.5px]">{jobs.total} job(s) need attention</p>
       </div>
       <Card>
-        {jobs.length === 0 ? (
+        {jobs.total === 0 ? (
           <Empty>No failed jobs.</Empty>
         ) : (
           <TableWrap>
@@ -46,7 +52,7 @@ export default async function FailedJobsPage() {
               </tr>
             </thead>
             <tbody>
-              {jobs.map((job) => (
+              {jobs.rows.map((job) => (
                 <tr key={job.id}>
                   <td className={td}>{job.name}</td>
                   <td className={`${td} max-w-[240px]`}>
@@ -67,6 +73,7 @@ export default async function FailedJobsPage() {
             </tbody>
           </TableWrap>
         )}
+        <TablePagination page={jobs.page} pageSize={jobs.pageSize} total={jobs.total} />
       </Card>
     </div>
   );

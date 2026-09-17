@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
+import { fetchPage, type Page, type PageRequest, type RangeResult } from "@/lib/pagination";
 import type { StockRequestStatus } from "./service";
 
 /**
@@ -70,14 +71,77 @@ async function fetchProfileNames(profileIds: string[]): Promise<Map<string, stri
   return new Map(data.map((p) => [p.id, p.full_name]));
 }
 
+type StockRequestFilter = { status?: StockRequestStatus; packageId?: string };
+
 export async function getStockRequestsForProject(
   session: Session,
   projectId: string,
-  opts: { status?: StockRequestStatus; packageId?: string } = {}
+  opts: StockRequestFilter = {}
 ): Promise<StockRequestDTO[]> {
+  return (await loadStockRequests(session, projectId, opts)).rows;
+}
+
+/**
+ * The Stock Requests table: one page of the same role-shaped rows, filtered
+ * and paginated in the query itself (`count: "exact"` + `.range()`,
+ * lib/pagination.ts) — never fetched whole and sliced.
+ */
+export async function getStockRequestsPage(
+  session: Session,
+  projectId: string,
+  opts: StockRequestFilter,
+  req: PageRequest
+): Promise<Page<StockRequestDTO>> {
+  return loadStockRequests(session, projectId, opts, req);
+}
+
+/** How many requests match — the Stock page's "N pending" subtitle, which
+ *  must not depend on which page of the table is showing. Same role split
+ *  as the rows: `stock_requests` for admin, `v_stock_request_site` for site. */
+export async function countStockRequests(
+  session: Session,
+  projectId: string,
+  opts: StockRequestFilter
+): Promise<number> {
   const effectiveRole = session.impersonating?.role ?? session.role;
   const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
-  if (effectiveRole === "client") return []; // 01-hld.md §7.1: no route at all
+  if (effectiveRole === "client") return 0;
+
+  const supabase = await createClient();
+  if (isAdmin) {
+    let query = supabase
+      .from("stock_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", projectId);
+    if (opts.status) query = query.eq("status", opts.status);
+    if (opts.packageId) query = query.eq("package_id", opts.packageId);
+    const { count, error } = await query;
+    if (error) throw new Error(error.message);
+    return count ?? 0;
+  }
+  let query = supabase
+    .from("v_stock_request_site")
+    .select("id", { count: "exact", head: true })
+    .eq("project_id", projectId);
+  if (opts.status) query = query.eq("status", opts.status);
+  if (opts.packageId) query = query.eq("package_id", opts.packageId);
+  const { count, error } = await query;
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+/** Without `req`, every matching row (the project dashboard's own list);
+ *  with it, one page of them. */
+async function loadStockRequests(
+  session: Session,
+  projectId: string,
+  opts: StockRequestFilter,
+  req?: PageRequest
+): Promise<Page<StockRequestDTO>> {
+  const effectiveRole = session.impersonating?.role ?? session.role;
+  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  // 01-hld.md §7.1: no route at all
+  if (effectiveRole === "client") return { rows: [], total: 0, page: 1, pageSize: req?.pageSize ?? 0 };
 
   const supabase = await createClient();
 
@@ -101,43 +165,60 @@ export async function getStockRequestsForProject(
     rejected_reason: string | null;
   };
 
-  let rows: Row[];
+  // Every matching row, or — with `req` — one page of them. `id` breaks ties
+  // between equal `created_at`s so paging is stable.
+  const all = async <T>(query: PromiseLike<RangeResult<T>>): Promise<Page<T>> => {
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    return { rows, total: rows.length, page: 1, pageSize: rows.length };
+  };
+
+  let result: Page<Row>;
   if (isAdmin) {
-    let query = supabase
-      .from("stock_requests")
-      .select(
-        "id, ref_no, project_id, package_id, material_name, qty, unit, rate, needed_by, note, status, requested_by, created_at, approved_at, ordered_at, delivered_at, rejected_reason"
-      )
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false });
-    if (opts.status) query = query.eq("status", opts.status);
-    if (opts.packageId) query = query.eq("package_id", opts.packageId);
-    const { data, error } = await query;
-    if (error) throw new Error(error.message);
-    rows = data;
+    const query = () => {
+      let q = supabase
+        .from("stock_requests")
+        .select(
+          "id, ref_no, project_id, package_id, material_name, qty, unit, rate, needed_by, note, status, requested_by, created_at, approved_at, ordered_at, delivered_at, rejected_reason",
+          { count: req ? "exact" : undefined }
+        )
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false });
+      if (opts.status) q = q.eq("status", opts.status);
+      if (opts.packageId) q = q.eq("package_id", opts.packageId);
+      return q;
+    };
+    result = req ? await fetchPage((from, to) => query().range(from, to), req) : await all(query());
   } else {
-    let query = supabase
-      .from("v_stock_request_site")
-      .select(
-        "id, ref_no, project_id, package_id, material_name, qty, unit, needed_by, note, status, requested_by, created_at, approved_at, ordered_at, delivered_at, rejected_reason"
-      )
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false });
-    if (opts.status) query = query.eq("status", opts.status);
-    if (opts.packageId) query = query.eq("package_id", opts.packageId);
-    const { data, error } = await query;
-    if (error) throw new Error(error.message);
+    const query = () => {
+      let q = supabase
+        .from("v_stock_request_site")
+        .select(
+          "id, ref_no, project_id, package_id, material_name, qty, unit, needed_by, note, status, requested_by, created_at, approved_at, ordered_at, delivered_at, rejected_reason",
+          { count: req ? "exact" : undefined }
+        )
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false });
+      if (opts.status) q = q.eq("status", opts.status);
+      if (opts.packageId) q = q.eq("package_id", opts.packageId);
+      return q;
+    };
+    const page = req ? await fetchPage((from, to) => query().range(from, to), req) : await all(query());
     // The view's own column types come back nullable (a view generally can't
     // promise NOT NULL the way its base table does) even though every one of
     // these is populated on every real row — same cast Build 05's own
     // schedule queries make for v_package_site/v_phase_site.
-    rows = data as Row[];
+    result = { ...page, rows: page.rows as Row[] };
   }
+  const rows = result.rows;
 
   const packageNames = await fetchPackageNames(isAdmin, projectId);
   const requesterNames = await fetchProfileNames([...new Set(rows.map((r) => r.requested_by))]);
 
-  return rows.map((r) => {
+  const dtos = rows.map((r) => {
     const rate = isAdmin ? (r.rate ?? null) : null;
     return {
       id: r.id,
@@ -161,4 +242,5 @@ export async function getStockRequestsForProject(
       rejectedReason: r.rejected_reason,
     };
   });
+  return { ...result, rows: dtos };
 }

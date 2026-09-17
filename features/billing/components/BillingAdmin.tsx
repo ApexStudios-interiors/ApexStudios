@@ -8,6 +8,8 @@ import type { BillableNowLine, BillDTO } from "@/features/billing/queries";
 import { previewBill, type BillableLine } from "@/features/billing/service";
 import { formatINR, formatINRCompact } from "@/lib/money";
 import { dmy } from "@/lib/logic";
+import type { Page } from "@/lib/pagination";
+import { TablePagination } from "@/components/shared/TablePagination";
 import { StatBar } from "@/components/ui/StatBar";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
@@ -27,7 +29,14 @@ type Rates = {
   mobilisationRecoveryPct: number;
 };
 
-type Stats = { billedToDate: number; received: number; outstanding: number; billableNowValue: number };
+type Stats = {
+  billedToDate: number;
+  billedCount: number;
+  received: number;
+  paidCount: number;
+  outstanding: number;
+  billableNowValue: number;
+};
 
 export function BillingAdmin({
   projectId,
@@ -38,7 +47,10 @@ export function BillingAdmin({
 }: {
   projectId: string;
   clientName: string;
-  bills: BillDTO[];
+  /** One page of bills (features/billing/queries.ts), plus the totals the
+   *  footer needs — the stat row's own counts come from `stats`, so they do
+   *  not change with the page. */
+  bills: Page<BillDTO>;
   stats: Stats;
   rates: Rates;
 }) {
@@ -140,12 +152,12 @@ export function BillingAdmin({
           {
             label: "Billed to Date",
             value: formatINRCompact(stats.billedToDate),
-            sub: `${bills.filter((b) => b.status !== "draft").length} bills, incl. GST`,
+            sub: `${stats.billedCount} bills, incl. GST`,
           },
           {
             label: "Received",
             value: formatINRCompact(stats.received),
-            sub: `${bills.filter((b) => b.status === "paid").length} paid`,
+            sub: `${stats.paidCount} paid`,
           },
           { label: "Outstanding", value: formatINRCompact(stats.outstanding), sub: "Certified, not paid" },
           {
@@ -243,8 +255,8 @@ export function BillingAdmin({
             </tr>
           </thead>
           <tbody>
-            {bills.length ? (
-              bills.map((b) => {
+            {bills.rows.length ? (
+              bills.rows.map((b) => {
                 const margin = b.marginAmount ?? 0;
                 let action: ReactNode = null;
                 if (b.status === "draft") {
@@ -342,6 +354,7 @@ export function BillingAdmin({
             )}
           </tbody>
         </TableWrap>
+        <TablePagination page={bills.page} pageSize={bills.pageSize} total={bills.total} />
       </Card>
     </div>
   );

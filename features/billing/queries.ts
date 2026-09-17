@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession, type Session } from "@/lib/auth/session";
 import { presignGet } from "@/lib/r2/presign";
+import { fetchPage, type Page, type PageRequest } from "@/lib/pagination";
 
 /**
  * build/09-billing.md §4.4. `v_billable_now` and `v_bill_client` both
@@ -374,6 +375,57 @@ export async function getBillsForClient(projectId: string): Promise<BillDTO[]> {
   return rows.map((r) => toBillDTO(r, false, labels.get(r.id) ?? []));
 }
 
+/** One page of the admin Bills table — `count: "exact"` + `.range()`
+ *  (lib/pagination.ts), so the package labels are resolved for that page
+ *  only. The stat row is NOT computed from it: `getAdminBillingStats` reads
+ *  every bill, because "Billed to Date" is not a per-page figure. */
+export async function getBillsPageForAdmin(projectId: string, req: PageRequest): Promise<Page<BillDTO>> {
+  await requireSession();
+  const supabase = await createClient();
+  const page = await fetchPage(
+    (from, to) =>
+      supabase
+        .from("bills")
+        .select(ADMIN_BILL_COLUMNS, { count: "exact" })
+        .eq("project_id", projectId)
+        .is("deleted_at", null)
+        .order("seq_no", { ascending: false })
+        .range(from, to),
+    req
+  );
+  const rows = page.rows as AdminBillRow[];
+  const labels = await packageLabelsByBill(
+    rows.map((r) => r.id),
+    true
+  );
+  return { ...page, rows: rows.map((r) => toBillDTO(r, true, labels.get(r.id) ?? [])) };
+}
+
+/** One page of the client Bills table. A draft bill has never been sent and
+ *  the client table has never shown one — that filter moves into the query
+ *  here, where it has to be, so the page and the count agree with the rows. */
+export async function getBillsPageForClient(projectId: string, req: PageRequest): Promise<Page<BillDTO>> {
+  await requireSession();
+  const supabase = await createClient();
+  const page = await fetchPage(
+    (from, to) =>
+      supabase
+        .from("v_bill_client")
+        .select(CLIENT_BILL_COLUMNS, { count: "exact" })
+        .eq("project_id", projectId)
+        .neq("status", "draft")
+        .order("seq_no", { ascending: false })
+        .range(from, to),
+    req
+  );
+  const rows = page.rows as AdminBillRow[];
+  const labels = await packageLabelsByBill(
+    rows.map((r) => r.id),
+    false
+  );
+  return { ...page, rows: rows.map((r) => toBillDTO(r, false, labels.get(r.id) ?? [])) };
+}
+
 export type BillDetail = {
   bill: BillDTO;
   lines: BillLineDTO[];
@@ -470,7 +522,11 @@ export async function getBillDetail(session: Session, billId: string): Promise<B
 
 export type AdminBillingStats = {
   billedToDate: number;
+  /** How many bills that figure covers. Counted here, over every bill, not
+   *  in the component over whichever page of the table is showing. */
+  billedCount: number;
   received: number;
+  paidCount: number;
   outstanding: number;
   billableNowCount: number;
   billableNowValue: number;
@@ -489,8 +545,10 @@ export async function getAdminBillingStats(projectId: string): Promise<AdminBill
   await requireSession();
   const [bills, billable] = await Promise.all([getBillsForAdmin(projectId), getBillableNow(projectId)]);
 
-  const billedToDate = bills.filter((b) => b.status !== "draft").reduce((a, b) => a + b.invoiceTotal, 0);
-  const received = bills.filter((b) => b.status === "paid").reduce((a, b) => a + b.netPayable, 0);
+  const billed = bills.filter((b) => b.status !== "draft");
+  const paid = bills.filter((b) => b.status === "paid");
+  const billedToDate = billed.reduce((a, b) => a + b.invoiceTotal, 0);
+  const received = paid.reduce((a, b) => a + b.netPayable, 0);
 
   const certifiedOrPaid = bills.filter((b) => b.status === "certified" || b.status === "paid");
   const netPayableTotal = certifiedOrPaid.reduce((a, b) => a + b.netPayable, 0);
@@ -500,7 +558,15 @@ export async function getAdminBillingStats(projectId: string): Promise<AdminBill
 
   const billableNowValue = billable.reduce((a, l) => a + l.amount, 0);
 
-  return { billedToDate, received, outstanding, billableNowCount: billable.length, billableNowValue };
+  return {
+    billedToDate,
+    billedCount: billed.length,
+    received,
+    paidCount: paid.length,
+    outstanding,
+    billableNowCount: billable.length,
+    billableNowValue,
+  };
 }
 
 /** The Record Payment dialog's own "already paid X, Y remaining" figures —
@@ -535,6 +601,9 @@ export type ClientBillsStats = {
   awaitingApproval: number;
   approvedUnpaid: number;
   paid: number;
+  /** The "N bills" under each figure — counted over every bill here, not in
+   *  the component over whichever page of the table is showing. */
+  counts: { raised: number; awaitingApproval: number; approvedUnpaid: number; paid: number };
 };
 
 /** The client Bills page's own stat row (ui-guide §6.11: "Bills Raised,
@@ -543,11 +612,18 @@ export type ClientBillsStats = {
 export async function getClientBillsStats(projectId: string): Promise<ClientBillsStats> {
   const bills = await getBillsForClient(projectId);
   const sum = (pred: (b: BillDTO) => boolean) => bills.filter(pred).reduce((a, b) => a + b.netPayable, 0);
+  const count = (pred: (b: BillDTO) => boolean) => bills.filter(pred).length;
   return {
     billsRaised: sum((b) => b.status !== "draft"),
     awaitingApproval: sum((b) => b.status === "submitted"),
     approvedUnpaid: sum((b) => b.status === "certified"),
     paid: sum((b) => b.status === "paid"),
+    counts: {
+      raised: count((b) => b.status !== "draft"),
+      awaitingApproval: count((b) => b.status === "submitted"),
+      approvedUnpaid: count((b) => b.status === "certified"),
+      paid: count((b) => b.status === "paid"),
+    },
   };
 }
 

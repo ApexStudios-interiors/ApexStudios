@@ -2,13 +2,15 @@ import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { forbidden } from "next/navigation";
 import { getProjectHeader } from "@/features/projects/queries";
-import { getStockRequestsForProject } from "@/features/stock/queries";
+import { countStockRequests, getStockRequestsPage } from "@/features/stock/queries";
+import { parsePageRequest } from "@/lib/pagination";
 import { getPackageOptions } from "@/features/stock/actions";
 import type { StockRequestStatus } from "@/features/stock/service";
 import { ReqTable } from "@/features/stock/components/ReqTable";
 import { StockStatusTabs } from "@/features/stock/components/StockStatusTabs";
 import { PackageFilterSelect } from "@/features/packages/components/PackageFilterSelect";
 import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
+import { TablePagination } from "@/components/shared/TablePagination";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 
@@ -21,16 +23,20 @@ const VALID_STATUSES: StockRequestStatus[] = ["pending", "approved", "ordered", 
  * itself stays a plain Server Component reading `searchParams`. 01-hld.md
  * §7.1: Client has no route here at all — `forbidden()` (build/03's
  * `authInterrupts`), not an empty state.
+ *
+ * The status and package filters and `page`/`pageSize` are all applied in
+ * the query (lib/pagination.ts); "N pending" is its own count, so it does
+ * not change with the page or the status tab.
  */
 export default async function StockPage({
   params,
   searchParams,
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ status?: string; package?: string }>;
+  searchParams: Promise<{ status?: string; package?: string; page?: string; pageSize?: string }>;
 }) {
   const { projectId } = await params;
-  const { status: rawStatus, package: packageId } = await searchParams;
+  const { status: rawStatus, package: packageId, ...paging } = await searchParams;
   const session = await requireSession();
 
   const effectiveRole = session.impersonating?.role ?? session.role;
@@ -43,14 +49,13 @@ export default async function StockPage({
     ? (rawStatus as StockRequestStatus)
     : undefined;
 
-  const [all, packages] = await Promise.all([
-    getStockRequestsForProject(session, projectId, { packageId }),
+  const [requests, pendingCount, packages] = await Promise.all([
+    getStockRequestsPage(session, projectId, { status, packageId }, parsePageRequest(paging)),
+    countStockRequests(session, projectId, { status: "pending", packageId }),
     getPackageOptions(projectId),
   ]);
 
   const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
-  const pendingCount = all.filter((r) => r.status === "pending").length;
-  const requests = status ? all.filter((r) => r.status === status) : all;
   const basePath = `/projects/${projectId}/stock`;
 
   return (
@@ -74,7 +79,8 @@ export default async function StockPage({
       </div>
 
       <Card>
-        <ReqTable requests={requests} role={effectiveRole} isAdmin={isAdmin} />
+        <ReqTable requests={requests.rows} role={effectiveRole} isAdmin={isAdmin} />
+        <TablePagination page={requests.page} pageSize={requests.pageSize} total={requests.total} />
       </Card>
     </div>
   );
