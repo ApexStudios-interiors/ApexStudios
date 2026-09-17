@@ -19,6 +19,8 @@ import { RecordPaymentDialog } from "@/features/billing/components/RecordPayment
 import { RejectBillDialog } from "@/features/billing/components/RejectBillDialog";
 import { CertifyBillDialog } from "@/features/billing/components/CertifyBillDialog";
 import { InviteUserDialog } from "@/features/auth/components/InviteUserDialog";
+import { CreateClientLoginDialog } from "@/features/users/components/CreateClientLoginDialog";
+import { GrantClientAccessDialog } from "@/features/projects/components/GrantClientAccessDialog";
 
 export function DialogHost() {
   const { dialog } = useApp();
@@ -79,6 +81,16 @@ export function DialogHost() {
       return <CertifyBillDialog billId={dialog.billId} refNo={dialog.refNo} />;
     case "inviteUser":
       return <InviteUserDialog />;
+    case "createClientLogin":
+      return <CreateClientLoginDialog projectId={dialog.projectId} projectName={dialog.projectName} />;
+    case "grantClientAccess":
+      return (
+        <GrantClientAccessDialog
+          projectId={dialog.projectId}
+          projectName={dialog.projectName}
+          clients={dialog.clients}
+        />
+      );
     default:
       return null;
   }

@@ -52,8 +52,8 @@ export function mapDomainError(e: Error): string {
 }
 
 /**
- * `actionClient` — the bare, unauthenticated client — is for the login and
- * magic-link actions ONLY. Every other action starts from `authedAction` or
+ * `actionClient` — the bare, unauthenticated client — is for the login
+ * action ONLY. Every other action starts from `authedAction` or
  * one of the role-guarded clients below. Guarding is the default, not
  * something to remember (build/03-auth-and-rbac.md §2.6).
  */

@@ -31,6 +31,21 @@ test.describe("unauthenticated access", () => {
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   });
 
+  // D51: one sign-in for every role — username + password, no magic link.
+  test("/login asks for a username and offers no magic link", async ({ page }) => {
+    await page.goto("/login");
+    await expect(page.getByLabel("Username")).toBeVisible();
+    await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+    await expect(page.getByText(/magic link/i)).toHaveCount(0);
+  });
+
+  test("the removed magic-link routes are not public", async ({ page }) => {
+    for (const path of ["/client-login", "/auth/callback", "/auth/error"]) {
+      await page.goto(path);
+      await expect(page).toHaveURL(/\/login\?next=/);
+    }
+  });
+
   test("/api/health needs no session", async ({ page }) => {
     const res = await page.request.get("/api/health");
     // 503 is a legitimate response here (placeholder R2 creds locally) — the

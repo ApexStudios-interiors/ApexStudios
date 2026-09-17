@@ -368,3 +368,42 @@ export async function getSiteStockStats(projectId: string): Promise<SiteStockSta
 
   return { pendingRequests: pendingRequests ?? 0, toReceive: toReceive ?? 0 };
 }
+
+/** One client login, as the project dashboard's Client access card lists it. */
+export type ClientLoginDTO = { id: string; fullName: string; email: string | null };
+
+export type ProjectClientAccess = {
+  /** Client logins that can see this project. */
+  members: ClientLoginDTO[];
+  /** Client logins in the org that cannot see it yet — "Add existing client". */
+  others: ClientLoginDTO[];
+};
+
+/**
+ * D51: client logins are created and granted per project. Owner/admin only —
+ * the page calls this for those roles alone, and both reads are RLS-scoped
+ * (`profiles_select` to the org, `pm_select` via is_member_of, which is true
+ * for every project for an admin). profiles carries no money columns.
+ */
+export async function getProjectClientAccess(projectId: string): Promise<ProjectClientAccess> {
+  const supabase = await createClient();
+  const [clients, members] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .eq("role", "client")
+      .is("deleted_at", null)
+      .order("full_name", { ascending: true }),
+    supabase.from("project_members").select("profile_id").eq("project_id", projectId),
+  ]);
+  if (clients.error) throw new Error(clients.error.message);
+  if (members.error) throw new Error(members.error.message);
+
+  const memberIds = new Set(members.data.map((m) => m.profile_id));
+  const result: ProjectClientAccess = { members: [], others: [] };
+  for (const p of clients.data) {
+    const dto = { id: p.id, fullName: p.full_name, email: p.email };
+    (memberIds.has(p.id) ? result.members : result.others).push(dto);
+  }
+  return result;
+}

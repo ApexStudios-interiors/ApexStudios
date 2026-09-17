@@ -44,6 +44,12 @@ drawings, and generates GST-compliant RA (Running Account) bills.
 Three roles with genuinely different data visibility: **Admin**, **Site Supervisor**,
 **Client**.
 
+**Every role signs in the same way: username + password on `/login` (D51).** There is no magic
+link, no separate client sign-in and no two-factor step (D48), and the app sends no auth email.
+Staff accounts are created on the Users page (Add User: Admin or Site Supervisor only). Client
+logins are created per project by owner/admin, from the project dashboard's Client access card,
+which also grants an existing client login access to another project.
+
 ### The one rule that matters most
 
 > **Only Admin ever sees internal cost or margin.**

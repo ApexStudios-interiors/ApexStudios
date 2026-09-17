@@ -7,10 +7,14 @@ import { adminAction } from "@/lib/safe-action";
 import { requireRole } from "@/lib/auth/session";
 import {
   addProjectMemberSchema,
+  createClientSchema,
   createProjectSchema,
+  previewProjectCodeSchema,
   setProjectStatusSchema,
   updateProjectSchema,
 } from "./schema";
+import { projectCodeBase } from "./service";
+import { insertProjectMember } from "./members";
 
 /**
  * build/04-projects-packages-phases.md §4.1: adminAction for all four, each
@@ -36,7 +40,9 @@ export const createProject = adminAction.inputSchema(createProjectSchema).action
   const { data, error } = await supabase.rpc("rpc_create_project", {
     p_name: parsedInput.name,
     p_client_id: parsedInput.clientId,
-    p_code: parsedInput.code,
+    // The base only — the RPC makes it unique within the org (migration
+    // 20260917100001), including against soft-deleted projects RLS hides.
+    p_code: projectCodeBase(parsedInput.name),
     // The generated Functions.Args type can't express nullability for a
     // scalar RPC parameter — information_schema.parameters carries no such
     // flag the way information_schema.columns does for table columns (see
@@ -52,6 +58,42 @@ export const createProject = adminAction.inputSchema(createProjectSchema).action
   revalidatePath("/");
   return { id: data as string };
 });
+
+/**
+ * What createProject would generate right now, for the dialog's read-only
+ * Project Code field. A preview, not a reservation: rpc_create_project decides
+ * again inside its own transaction.
+ */
+export const previewProjectCode = adminAction
+  .inputSchema(previewProjectCodeSchema)
+  .action(async ({ parsedInput }) => {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("rpc_next_project_code", {
+      p_base: projectCodeBase(parsedInput.name),
+    });
+    if (error) throw new Error(error.message);
+    return { code: data };
+  });
+
+/**
+ * The Client combobox's inline "Create «name»". Same guard as every other
+ * client write path: `clients_insert` (migration 0003) allows owner/admin in
+ * their own org, which is exactly adminAction plus the session's org_id.
+ */
+export const createClientRecord = adminAction
+  .inputSchema(createClientSchema)
+  .action(async ({ parsedInput, ctx }) => {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("clients")
+      .insert({ org_id: ctx.session.orgId, name: parsedInput.name })
+      .select("id, name")
+      .single();
+    if (error) throw new Error(error.message);
+
+    revalidatePath("/");
+    return data;
+  });
 
 export const updateProject = adminAction.inputSchema(updateProjectSchema).action(async ({ parsedInput }) => {
   const { id, ...patch } = parsedInput;
@@ -91,19 +133,26 @@ export const setProjectStatus = adminAction
     return { ok: true as const };
   });
 
+/**
+ * Grants an existing profile access to a project (CAN.manageProjectMembers).
+ * The project dashboard's Client access card uses it to give an existing
+ * client login a further project (D51) — one client company often has
+ * several. Returns `already_member` rather than an error for a repeat grant.
+ */
 export const addProjectMember = adminAction
   .inputSchema(addProjectMemberSchema)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const supabase = await createClient();
-    const { error } = await supabase
-      .from("project_members")
-      .insert({ project_id: parsedInput.projectId, profile_id: parsedInput.profileId });
-    if (error) throw new Error(error.message);
+    const status = await insertProjectMember(supabase, {
+      projectId: parsedInput.projectId,
+      profileId: parsedInput.profileId,
+      addedBy: ctx.session.userId,
+    });
 
     updateTag(`project:${parsedInput.projectId}`);
     revalidatePath("/");
     revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
-    return { ok: true as const };
+    return { status };
   });
 
 /**

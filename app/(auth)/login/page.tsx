@@ -11,8 +11,10 @@ import { Icon } from "@/components/ui/Icon";
 import { safeNext } from "@/lib/auth/safe-next";
 
 /**
- * Staff email + password (build/03-auth-and-rbac.md §2.7). No two-factor step
- * for any role (D48); the eye button shows or hides what was typed.
+ * The one sign-in screen for every role — owner, admin, site supervisor and
+ * client alike (D51): username + password. There is no magic link and no
+ * separate client sign-in. No two-factor step for any role (D48); the eye
+ * button shows or hides what was typed.
  * Monochrome, same card/button treatment as the dialogs — this is the first
  * screen every user sees.
  *
@@ -39,12 +41,13 @@ function LoginForm() {
   // ?next= is attacker-controlled; only same-origin paths are followed.
   const next = safeNext(useSearchParams().get("next"));
 
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   const login = useAction(signInWithPassword, {
-    onSuccess: () => {
+    onSuccess: ({ data }) => {
+      if (!data?.ok) return;
       router.push(next);
       router.refresh();
     },
@@ -56,18 +59,20 @@ function LoginForm() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          login.execute({ email, password });
+          login.execute({ username, password });
         }}
         className="flex flex-col gap-3.5"
       >
-        <Field label="Email" htmlFor="login-email">
+        <Field label="Username" htmlFor="login-username">
           <input
-            id="login-email"
+            id="login-username"
             className={inputClass}
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            type="text"
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             autoFocus
           />
         </Field>
@@ -99,18 +104,17 @@ function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
           />
         </div>
-        {login.result.serverError && (
-          <p className="text-[12.5px] text-destructive">{login.result.serverError}</p>
+        {(login.result.data?.ok === false || login.result.serverError) && (
+          <p className="text-[12.5px] text-destructive">
+            {login.result.data?.ok === false ? login.result.data.message : login.result.serverError}
+          </p>
         )}
         <Button type="submit" variant="primary" disabled={login.isPending}>
           {login.isPending ? "Signing in…" : "Sign in"}
         </Button>
       </form>
       <p className="text-[12.5px] text-muted-foreground mt-4 text-center">
-        Client?{" "}
-        <a href="/client-login" className="underline text-foreground">
-          Sign in with a magic link
-        </a>
+        Your username and password come from your Apex administrator.
       </p>
     </Card>
   );

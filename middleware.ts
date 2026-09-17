@@ -11,7 +11,10 @@ import { clientEnv } from "@/lib/env.client";
  * lib/auth/session.ts, run from a Server Component or Server Action that can
  * see the full request and hit the database if it needs to.
  */
-const PUBLIC_PATHS = ["/login", "/client-login", "/auth/callback", "/auth/error", "/api/health"];
+// D51: /login is the only sign-in route. The magic-link routes (/client-login,
+// /auth/callback, /auth/error) are deleted, so they are not public either — an
+// old link to one now lands on /login like any other protected path.
+const PUBLIC_PATHS = ["/login", "/api/health"];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
