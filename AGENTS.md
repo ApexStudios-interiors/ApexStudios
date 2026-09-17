@@ -69,59 +69,92 @@ receive, **stop and flag it**. Do not "fix" it by hiding the value in the UI.
 pnpm install
 cp .env.example .env.local            # fill in Supabase + R2 credentials
 pnpm env:check                        # every key present and well-formed
-pnpm db:link                          # link the apex-dev project (ap-south-1)
-pnpm db:push                          # apply migrations to it
+pnpm db:link                          # link the Supabase project (ap-south-1) — it is PRODUCTION (D49)
 pnpm dev                              # http://localhost:3000
 ```
 
 **There is no Docker and no local database (D14).** Development runs against the
-hosted `apex-dev` project, so every query is a round trip to Mumbai and there is
-no offline mode. `apex-dev` is shared: destructive experiments belong on a
-pull request's Supabase preview branch, not on it.
+hosted Supabase project, so every query is a round trip to Mumbai and there is
+no offline mode.
 
-`pnpm db:reset` drops and re-seeds the **linked** project. It refuses to run
-against `SUPABASE_PROD_PROJECT_REF` and makes you type the ref back. Seeded
-logins are printed by it; there is one account per role.
+**There is exactly one Supabase project, and it is production (D49).** There is no
+`apex-dev` project and no Supabase preview branch (D10 is not in effect: branching
+needs a paid plan and a `SUPABASE_ACCESS_TOKEN` this repository does not have), so
+**there is no safe non-production database today**. `pnpm dev` with `.env.local`
+reads and writes live data. `pnpm db:push` applies migrations to that live project —
+only push a migration that is meant to ship. There is nowhere to run a destructive
+experiment; do not run one.
+
+`pnpm db:reset`, `pnpm db:seed`, `pnpm db:bootstrap`, `pnpm test:rls` and
+`pnpm test:integration` all refuse to run when their target resolves to
+`SUPABASE_PROD_PROJECT_REF` (`scripts/lib/db-target.mjs`), and refuse on a
+non-interactive run when that variable is unset — so none of them can run today.
+`pnpm db:reset` additionally makes you type the ref back. `pnpm test:e2e` has no
+such guard: it signs in and writes test rows, so **never run it against production**.
 
 ## Commands
 
-| Command                    | What it does                                               |
-| -------------------------- | ---------------------------------------------------------- |
-| `pnpm dev`                 | Next.js dev server                                         |
-| `pnpm build`               | Production build — must pass before any PR                 |
-| `pnpm typecheck`           | `tsc --noEmit`, strict mode                                |
-| `pnpm lint`                | ESLint + Prettier check                                    |
-| `pnpm test`                | Vitest unit + integration                                  |
-| `pnpm test:rls`            | pgTAP policy tests against the linked or preview database  |
-| `pnpm test:e2e`            | Playwright, all three role journeys                        |
-| `pnpm db:reset`            | Drop, re-migrate, re-seed the **linked** project. Guarded. |
-| `pnpm db:push`             | Apply pending migrations to the linked project             |
-| `pnpm db:migration <name>` | Scaffold a new timestamped migration file                  |
-| `pnpm db:types`            | Regenerate Drizzle/Supabase types from the local schema    |
+| Command                    | What it does                                                |
+| -------------------------- | ----------------------------------------------------------- |
+| `pnpm dev`                 | Next.js dev server                                          |
+| `pnpm build`               | Production build — must pass before any PR                  |
+| `pnpm typecheck`           | `tsc --noEmit`, strict mode                                 |
+| `pnpm lint`                | ESLint + Prettier check                                     |
+| `pnpm test`                | Vitest unit tests (integration: `pnpm test:integration`)    |
+| `pnpm test:rls`            | pgTAP policy tests. Refuses production — no target today    |
+| `pnpm test:e2e`            | Playwright, all three role journeys. Never against prod     |
+| `pnpm db:reset`            | Drop, re-migrate, re-seed the **linked** project. Guarded.  |
+| `pnpm db:push`             | Apply pending migrations to the linked project (production) |
+| `pnpm db:migration <name>` | Scaffold a new timestamped migration file                   |
+| `pnpm db:types`            | Regenerate Drizzle/Supabase types from the local schema     |
 
-Before opening a PR: `pnpm typecheck && pnpm lint && pnpm test && pnpm test:rls && pnpm build`.
+Before opening a PR: `pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build`.
+**Automatic CI is paused (D49):** `.github/workflows/ci.yml` runs on `workflow_dispatch` only, so
+this local run is the only gate before a push. `pnpm test:rls` belongs in it again once a
+non-production database exists.
 
 ---
 
 ## Stack
 
 - **Next.js 16** App Router, React Server Components, **React 19**, TypeScript **strict**
-- **Tailwind CSS v4** + **hand-rolled primitives in `components/ui/` — not shadcn/ui**
+- **Tailwind CSS v4** + **shadcn/ui** (D53) — Base UI (not Radix), `base-nova` style, lucide
+  icons, Geist font. See **UI components** below
 - **Supabase** Postgres (datastore + auth), accessed through the Supabase client — see
   **Data access** below
 - **Drizzle** for schema definition, migrations, generated types and `service_role` job handlers
 - **Cloudflare R2** — one private bucket, presigned URLs only
-- **Vercel Cron** + a `jobs` table in Postgres — background work. No third-party job runner.
+- A `jobs` table in Postgres — background work, triggered by **Vercel Cron** (daily-or-less
+  jobs) and **GitHub Actions** (`jobs.drain`, `jobs.reap` — D47). No third-party job runner.
 - **No third-party error-tracking service (D50).** Errors go to the Vercel logs; a failed job
   is a `jobs` row on the Admin ops page. Email notification is **out of scope for v1**.
 - `zod`, `react-hook-form`, `next-safe-action`, TanStack Table, Recharts
 - `@react-pdf/renderer` (bill PDFs), `exceljs` (Admin exports)
 - **pnpm**, Node >= 20, lockfile committed, CI installs `--frozen-lockfile` (D12)
 
-> **The UI is complete and it is the functional specification.** Do not restyle, do not swap the
-> component library, do not introduce a design system. Changes to `components/ui/` require a
-> stated reason in the PR. `docs/ui-guide.md` is the spec; the screenshots under
-> `e2e/__screenshots__/proto-v1/` are the visual baseline.
+> **The UI is complete and it is the functional specification.** Do not restyle, and do not swap
+> the component library: shadcn/ui is the design system (D53), and no other is to be introduced.
+> Changes to `components/ui/` require a stated reason in the PR. `docs/ui-guide.md` is the spec;
+> the screenshots under `e2e/__screenshots__/proto-v1/` are the visual baseline.
+
+### UI components — shadcn/ui (D53)
+
+Adopted by owner decision on 2026-09-17, reversing the earlier hand-rolled-primitives rule. The
+`.agents/skills/shadcn` skill in this repository holds the full rules; the ones that bite here:
+
+- Add components with `npx shadcn@latest add <name>`.
+- **Base UI, not Radix:** custom triggers use the `render` prop, never `asChild`.
+- **`components/ui/button.tsx` is intentionally customised** (the repo's own variants, with
+  shadcn's names aliased onto them). If `shadcn add` offers to overwrite it, answer **No**. Its
+  **lowercase path is load-bearing**: every generated component imports `@/components/ui/button`;
+  macOS is case-insensitive and would resolve `Button.tsx`, Vercel's Linux build does not.
+- Form selects use `Select`; `DropdownMenu` is for action menus. `SelectItem` goes inside
+  `SelectGroup`. Base UI's `Select` needs the `items` prop, or the closed trigger shows the raw
+  value (a UUID). Pass `null`, not `""`, for no selection, and map to the form's own shape at the
+  boundary.
+- Dates are `yyyy-MM-dd` strings, parsed and formatted on the **local** calendar Y/M/D. Never
+  `new Date("yyyy-MM-dd")` (parses as UTC midnight) and never `toISOString()` (rolls the day
+  across the UTC boundary).
 
 There is **no separate Node.js backend service**. Next.js Server Actions and Route Handlers
 are the backend. See HLD §4.2 for why, and for the conditions under which we'd add one.
@@ -172,7 +205,7 @@ Root layout, not `src/` (D13).
 │     ├─ schema.ts         zod schemas shared by form and action
 │     └─ components/       this domain's own tables, widgets and dialogs
 ├─ components/
-│  ├─ ui/                  hand-rolled primitives, no business logic, do not restyle
+│  ├─ ui/                  shadcn/ui components + generic primitives, no business logic
 │  ├─ layout/              Sidebar, Header, SearchBar, NotificationsMenu
 │  ├─ auth/                SessionProvider, PreviewBanner
 │  ├─ upload/              FileUploader
@@ -339,6 +372,9 @@ Scopes match feature folders: `projects`, `packages`, `schedule`, `updates`, `in
 
 One build file is one branch is one PR. Branch names come from the build file header, e.g.
 `build/01-foundations`. Squash-merge to `main`. `main` is always deployable.
+**Exception — stacked PRs** (a PR based on another PR's branch): merge each with **"Create a merge
+commit"**, not squash. Squash-merging a base PR rewrites its commits, and the PR stacked on it then
+conflicts (verified 2026-09-17).
 
 ---
 
@@ -373,6 +409,11 @@ The RLS test suite is the highest-value test code in this repository. Do not ski
 - Do not add a `paid_amount` column to bills — part-payment goes in `payments`.
 - Do not store derived values that can go stale (inventory status, over-budget, late flag).
   Cached rollups (`progress_pct`) are the exception and are trigger-maintained.
+- Do not run `pnpm test:e2e`, the seed, a reset or any destructive experiment against the one
+  Supabase project — it is production (D49). Do not re-enable CI's `pull_request`/`push` triggers
+  until the `database` job has a non-production database.
+- Do not swap Base UI for Radix, use `asChild`, or let `shadcn add` overwrite
+  `components/ui/button.tsx` (D53).
 - Do not commit `.env.local`, service keys, R2 credentials, or seed data containing real
   client names beyond the demo dataset.
 

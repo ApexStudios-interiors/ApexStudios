@@ -173,7 +173,8 @@ previously implied the unsafe option.
 `engines: { node: ">=20" }` in `package.json`; `.npmrc` with `engine-strict=true`; CI installs
 with `--frozen-lockfile`. Next.js stays on 16 and the documents are corrected to match. React 19
 and Tailwind v4 stay. The hand-rolled `components/ui/` primitives stay — **shadcn/ui is not
-introduced.** The UI is complete and is the functional specification.
+introduced.** The UI is complete and is the functional specification. *(The shadcn/ui clause is superseded
+2026-09-17 by D53: shadcn/ui is now the design system.)*
 
 ---
 
@@ -1596,6 +1597,44 @@ step.**
   a password change, not on a role or profile change, so this mechanism does not carry over.
 - The migration has to be applied before the button works. Until then the audit RPC call fails, and
   because it runs first, the password is not changed.
+
+---
+
+### D53 — shadcn/ui adopted as the design system
+
+**Question:** D12 kept the hand-rolled `components/ui/` primitives and said shadcn/ui would not be
+introduced, and AGENTS.md said not to swap the component library or introduce a design system.
+Forms used native `<select>` and `<input type="date">` controls as a result. Keep that rule, or
+adopt a component library?
+**Decided:** 2026-09-17 by Voola — **adopt shadcn/ui as this project's design system**, reversing
+D12's shadcn clause and AGENTS.md's hand-rolled-primitives rule.
+**Answer:**
+
+- `shadcn init` was run against the repository (PR #31, `31a90d0`): **Base UI, not Radix** — custom
+  triggers use the `render` prop, never `asChild`; `base-nova` style; lucide icons; Geist in place
+  of Inter; a neutral palette in `app/globals.css`. `components.json` records the configuration.
+- Components are added with `npx shadcn@latest add <name>`. The `.agents/skills/shadcn` skill in
+  the repository carries the usage rules (form selects use `Select`, not `DropdownMenu`;
+  `SelectItem` inside `SelectGroup`; Base UI `Select` needs `items` or the trigger shows the raw
+  value; `null`, not `""`, for no selection).
+- Dates picked through the Calendar stay `yyyy-MM-dd` strings, parsed and formatted on the local
+  calendar Y/M/D — never `new Date("yyyy-MM-dd")` or `toISOString()`, both of which shift the day
+  across the UTC boundary.
+- **`components/ui/button.tsx` is customised and its casing is load-bearing.** Every generated
+  component imports `@/components/ui/button`, but the repository had `Button.tsx`. macOS is
+  case-insensitive and resolved it; Vercel's Linux build does not, so every generated component
+  would have failed to build. The file was renamed to the lowercase path, keeps the repository's
+  own variants and sizes, and aliases shadcn's variant and size names onto them. If `shadcn add`
+  offers to overwrite it, the answer is **No**.
+
+**Consequence:**
+
+- The strict-monochrome styling rule is unchanged: the aliased button variants add no colour.
+- Native form controls replaced by `Select` and the Calendar date picker no longer respond to
+  Playwright's `selectOption()` or `fill()`. The e2e specs drive them through their accessible
+  roles instead (combobox → option; date trigger → grid → day button).
+- `docs/build/01-foundations.md` still describes the hand-rolled primitives; as with D50, the build
+  files are the dated record and are left as written.
 
 ---
 

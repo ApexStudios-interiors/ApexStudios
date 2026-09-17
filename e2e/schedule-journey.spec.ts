@@ -169,8 +169,21 @@ test.describe("admin: a task beyond the 14-week default widens the viewport", ()
 
     await page.getByRole("button", { name: "Add Task" }).first().click();
     await page.getByLabel("Task").fill(taskName);
-    await page.getByLabel("Phase").selectOption({ label: "Deck finishes" });
-    await page.getByLabel("Start Date").fill("2027-01-11");
+    // Phase is a Base UI Select (combobox + listbox), not a native select.
+    await page.getByLabel("Phase").click();
+    await page.getByRole("option", { name: "Deck finishes" }).click();
+    // Start Date is a Popover + Calendar date picker, not a native date input.
+    // It opens on the current month; step forward to January 2027, waiting for
+    // each month to render before checking again.
+    await page.getByLabel("Start Date").click();
+    const calendarGrid = page.getByRole("grid", { name: /^\w+ \d{4}$/ });
+    for (let step = 0; (await calendarGrid.getAttribute("aria-label")) !== "January 2027"; step++) {
+      expect(step, "calendar never reached January 2027").toBeLessThan(60);
+      const shown = (await calendarGrid.getAttribute("aria-label")) ?? "";
+      await page.getByRole("button", { name: "Go to the Next Month" }).click();
+      await expect(calendarGrid).not.toHaveAttribute("aria-label", shown);
+    }
+    await calendarGrid.getByRole("button", { name: "January 11th, 2027" }).click();
     await page.getByLabel("Duration (weeks)").fill("2");
     await page.getByRole("button", { name: "Add", exact: true }).click();
 
