@@ -22,10 +22,14 @@ export function InventoryTable({
   items,
   isAdmin,
   showProject = false,
+  empty = "No inventory recorded yet.",
 }: {
   items: InventoryItemDTO[];
   isAdmin: boolean;
   showProject?: boolean;
+  /** The empty-state text. A search that matches nothing is not the same
+   *  situation as an inventory with nothing in it, and should not say so. */
+  empty?: string;
 }) {
   return (
     <TableWrap>
@@ -81,7 +85,7 @@ export function InventoryTable({
                 non-admin business-wide view and over-spanning it for a
                 non-admin project view. */}
             <td className={td} colSpan={5 + (showProject ? 1 : 0) + (isAdmin ? 1 : 0)}>
-              <Empty>No inventory recorded yet.</Empty>
+              <Empty>{empty}</Empty>
             </td>
           </tr>
         )}
