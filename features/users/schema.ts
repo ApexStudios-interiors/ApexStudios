@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ASSIGNABLE_ROLES } from "./service";
 
 /**
  * The part before the @. Lower-case letters, digits, dots, hyphens and
@@ -65,3 +66,22 @@ export const resetPasswordSchema = z.object({
   userId: z.uuid(),
 });
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+/**
+ * Change a user's role. `owner` is not in the enum, for the same reason it is
+ * not in STAFF_ROLES: D8 names the one owner, and a crafted request must not
+ * be able to mint another. The target's current role is read from the
+ * database, never taken from the request.
+ */
+export const setUserRoleSchema = z.object({
+  userId: z.uuid(),
+  role: z.enum(ASSIGNABLE_ROLES),
+});
+export type SetUserRoleInput = z.infer<typeof setUserRoleSchema>;
+
+/** Deactivate (`isActive: false`) or reactivate (`true`) a user. */
+export const setUserActiveSchema = z.object({
+  userId: z.uuid(),
+  isActive: z.boolean(),
+});
+export type SetUserActiveInput = z.infer<typeof setUserActiveSchema>;
