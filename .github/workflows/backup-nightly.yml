@@ -34,11 +34,28 @@ jobs:
       # depend on the distro's package set.
       - name: Install PostgreSQL client and AWS CLI
         run: |
-          sudo apt-get update && sudo apt-get install -y postgresql-client unzip
+          # pg_dump refuses to dump a server newer than itself. Ubuntu's
+          # `postgresql-client` is pinned to 16 and the runner image ships a
+          # PGDG 16 client, but the database is PostgreSQL 17 — so add the
+          # PGDG repo and install the 17 client explicitly.
+          sudo apt-get update && sudo apt-get install -y postgresql-common unzip
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
           curl -sf "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
           unzip -q awscliv2.zip
           sudo ./aws/install --update
           rm -rf awscliv2.zip aws
+
+      # Proves which pg_dump the dump will run, and fails before touching the
+      # database if it is not 17. Full path, never bare `pg_dump`:
+      # /usr/bin/pg_dump is Debian's version wrapper and can still select the
+      # preinstalled 16 client.
+      - name: Verify pg_dump version
+        run: |
+          set -euo pipefail
+          /usr/lib/postgresql/17/bin/pg_dump --version
+          /usr/lib/postgresql/17/bin/pg_dump --version | grep -qE ' 17\.' \
+            || { echo "::error::expected pg_dump 17"; exit 1; }
 
       - name: Dump and compress
         id: dump
@@ -48,7 +65,7 @@ jobs:
           set -euo pipefail
           KEY="pg_dump/$(date -u +%F).sql.gz"
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
-          pg_dump "$SUPABASE_DB_URL" --no-owner --no-privileges | gzip > backup.sql.gz
+          /usr/lib/postgresql/17/bin/pg_dump "$SUPABASE_DB_URL" --no-owner --no-privileges | gzip > backup.sql.gz
 
       # A token scoped ONLY to apex-backups (build §0.1) — distinct from the
       # app's own R2 credentials, which must never be able to reach this
