@@ -7,6 +7,7 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { NotificationsMenu } from "@/components/layout/NotificationsMenu";
 import { SearchBar } from "@/components/layout/SearchBar";
 import type { NotificationDTO } from "@/features/notifications/queries";
+import type { NavProject } from "@/components/layout/nav-project";
 
 const SECTION_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
@@ -19,8 +20,18 @@ const SECTION_LABELS: Record<string, string> = {
   billing: "Billing",
 };
 
-export function Header({ notifications }: { notifications: NotificationDTO[] }) {
-  const { data, role } = useApp();
+export function Header({
+  notifications,
+  /** The same role-scoped list the Sidebar renders, passed down by the app
+   *  shell rather than re-queried here. The breadcrumb used to name the
+   *  project and package off AppContext's `lib/data.ts` fixture, so a real
+   *  project showed no name and a real package no crumb at all. */
+  projects,
+}: {
+  notifications: NotificationDTO[];
+  projects: NavProject[];
+}) {
+  const { role } = useApp();
   const pathname = usePathname();
   const params = useParams<{ projectId?: string; moduleId?: string }>();
 
@@ -33,13 +44,13 @@ export function Header({ notifications }: { notifications: NotificationDTO[] }) 
   } else if (pathname === "/inventory") {
     crumb = <b className="text-foreground font-semibold">Inventory</b>;
   } else if (params?.projectId) {
-    const project = data.projects.find((p) => p.id === params.projectId);
+    const project = projects.find((p) => p.id === params.projectId);
     const section = sectionFromPath(pathname, params.projectId);
     const sectionLabel =
       section === "billing" ? (role === "client" ? "Bills" : "Billing") : SECTION_LABELS[section];
-    const mod = params.moduleId ? project?.modules.find((m) => m.id === params.moduleId) : null;
+    const mod = params.moduleId ? project?.packages.find((m) => m.id === params.moduleId) : null;
     // `mod` can only be non-null when `project` is defined; state that for the compiler.
-    const modNo = project && mod ? String(project.modules.indexOf(mod) + 1).padStart(2, "0") : "";
+    const modNo = project && mod ? String(project.packages.indexOf(mod) + 1).padStart(2, "0") : "";
     crumb = (
       <>
         {project?.name} <span>/</span> <b className="text-foreground font-semibold">{sectionLabel}</b>

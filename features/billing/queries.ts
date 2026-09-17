@@ -375,6 +375,38 @@ export async function getBillsForClient(projectId: string): Promise<BillDTO[]> {
   return rows.map((r) => toBillDTO(r, false, labels.get(r.id) ?? []));
 }
 
+/**
+ * Submitted bills per project, for the Sidebar's Bills badge (shown to a
+ * client only) — the prototype counted them off `lib/data.ts`, so the badge
+ * read 0 for every real project. Keyed by project because the app shell that
+ * renders the Sidebar is a layout, and Next.js does not re-render a layout on
+ * navigation: a figure scoped to "the project open right now" would be
+ * whichever project the tab was first opened on and would never change.
+ *
+ * `v_bill_client` for the same reason every other client-facing bill read
+ * uses it — `bills` itself is admin-only on select. One query projecting one
+ * column over submitted rows only; `head: true` cannot be used because
+ * PostgREST returns a single total, not a count per project.
+ */
+export async function countSubmittedBillsByProject(projectIds: string[]): Promise<Record<string, number>> {
+  await requireSession();
+  if (projectIds.length === 0) return {};
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("v_bill_client")
+    .select("project_id")
+    .in("project_id", projectIds)
+    .eq("status", "submitted");
+  if (error) throw new Error(error.message);
+
+  const counts: Record<string, number> = {};
+  for (const row of data) {
+    if (!row.project_id) continue;
+    counts[row.project_id] = (counts[row.project_id] ?? 0) + 1;
+  }
+  return counts;
+}
+
 /** One page of the admin Bills table — `count: "exact"` + `.range()`
  *  (lib/pagination.ts), so the package labels are resolved for that page
  *  only. The stat row is NOT computed from it: `getAdminBillingStats` reads

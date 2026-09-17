@@ -313,6 +313,39 @@ async function toApprovalDTOs(
 }
 
 /**
+ * Pending approvals per project, for the Sidebar's Approvals badge (shown to
+ * a client only) — the prototype counted them off `lib/data.ts`, so the badge
+ * read 0 for every real project. Keyed by project because the app shell that
+ * renders the Sidebar is a layout, and Next.js does not re-render a layout on
+ * navigation: a figure scoped to "the project open right now" would be
+ * whichever project the tab was first opened on and would never change.
+ *
+ * `ap_select` is membership-gated, not admin-gated, so this is already scoped
+ * to the caller's own projects; `projectIds` narrows it to the ones the
+ * sidebar can actually show. One query projecting one column over pending
+ * rows only — `head: true` cannot be used because PostgREST returns a single
+ * total, not a count per project.
+ */
+export async function countPendingApprovalsByProject(projectIds: string[]): Promise<Record<string, number>> {
+  await requireSession();
+  if (projectIds.length === 0) return {};
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("approvals")
+    .select("project_id")
+    .in("project_id", projectIds)
+    .eq("status", "pending")
+    .is("deleted_at", null);
+  if (error) throw new Error(error.message);
+
+  const counts: Record<string, number> = {};
+  for (const row of data) {
+    counts[row.project_id] = (counts[row.project_id] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/**
  * architecture.md §9.1's "Approvals pending > 7 days" telemetry figure for
  * Build 10's Admin dashboard — computed here, surfaced there (build §2.4's
  * own instruction). RLS's `ap_select` policy (membership, not admin-gated)
