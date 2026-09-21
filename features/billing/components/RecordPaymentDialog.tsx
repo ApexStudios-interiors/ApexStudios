@@ -25,7 +25,13 @@ const PAYMENT_MODES = [
   { value: "rtgs", label: "RTGS" },
   { value: "upi", label: "UPI" },
   { value: "cheque", label: "Cheque" },
+  { value: "cash", label: "Cash" },
+  { value: "bank_transfer", label: "Bank Transfer" },
 ] as const;
+
+/** Kept in step with the list above rather than spelled out a second time —
+ *  `recordPaymentSchema.mode` is the matching server-side enum. */
+type PaymentMode = (typeof PAYMENT_MODES)[number]["value"];
 
 /**
  * build/09-billing.md §4.5's own "Record Payment dialog." Part-payment is
@@ -53,7 +59,7 @@ export function RecordPaymentDialog({
   // recorded between 00:00 and 05:30 IST to the previous day — on a financial
   // record that feeds the GST return.
   const [paidOn, setPaidOn] = useState(todayIst());
-  const [mode, setMode] = useState<"neft" | "cheque" | "upi" | "rtgs">("neft");
+  const [mode, setMode] = useState<PaymentMode>("neft");
   const [referenceNo, setReferenceNo] = useState("");
   // Regenerated after every attempt, success or failure — the same fix
   // BillingAdmin's own create-bill flow already carries. This dialog stays

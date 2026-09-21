@@ -270,7 +270,7 @@ test.describe("admin: record a part payment, then the balance -> status becomes 
       await page.goto(`/projects/${PROJECT_ID}/billing`);
       await page.waitForLoadState("networkidle");
       const row = page.locator("tr", { hasText: `RA-` }).filter({ hasText: suffix });
-      await expect(row.getByText("Certified", { exact: true })).toBeVisible();
+      await expect(row.getByText("Payment Pending", { exact: true })).toBeVisible();
 
       // A refused attempt first, then a corrected retry in the same open
       // dialog: the dialog regenerates its idempotency key after every
@@ -290,7 +290,7 @@ test.describe("admin: record a part payment, then the balance -> status becomes 
       // only fires once the running total actually covers it.
       await page.getByLabel("Amount").fill("11300");
       await page.getByRole("button", { name: "Record Payment", exact: true }).last().click();
-      await expect(row.getByText("Certified", { exact: true })).toBeVisible({ timeout: 10_000 });
+      await expect(row.getByText("Payment Pending", { exact: true })).toBeVisible({ timeout: 10_000 });
 
       const midway = await sql`select status from public.bills where id = ${billId}`;
       expect(midway[0]?.status).toBe("certified");

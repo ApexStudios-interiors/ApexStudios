@@ -51,7 +51,7 @@ export function BillingClient({ bills, stats }: { bills: Page<BillDTO>; stats: S
             sub: `${stats.counts.awaitingApproval} bills`,
           },
           {
-            label: "Approved, Unpaid",
+            label: "Payment Pending",
             value: formatINRCompact(stats.approvedUnpaid),
             sub: `${stats.counts.approvedUnpaid} bills`,
           },
@@ -87,7 +87,7 @@ export function BillingClient({ bills, stats }: { bills: Page<BillDTO>; stats: S
                       {b.paidAt
                         ? `Paid ${dmy(b.paidAt)}`
                         : b.certifiedAt
-                          ? `Approved ${dmy(b.certifiedAt)}`
+                          ? `Payment pending since ${dmy(b.certifiedAt)}`
                           : b.submittedAt
                             ? `Submitted ${dmy(b.submittedAt)}`
                             : ""}

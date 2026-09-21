@@ -4,6 +4,7 @@ import { StockLevelBadge } from "@/components/shared/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, sub } from "@/components/ui/table";
 import { Empty } from "@/components/ui/Empty";
+import { MinimumStockInfo } from "@/features/inventory/components/MinimumStockInfo";
 
 /**
  * build/07-stock-inventory-notifications.md §2.5 step 5: already props-driven
@@ -38,7 +39,10 @@ export function InventoryTable({
           <th className={th}>Item</th>
           {showProject && <th className={th}>Project</th>}
           <th className={thNum}>On Hand</th>
-          <th className={thNum}>Reorder Level</th>
+          <th className={thNum}>
+            Minimum Stock
+            <MinimumStockInfo />
+          </th>
           {isAdmin && <th className={thNum}>Value</th>}
           <th className={th}>Location</th>
           <th className={th}>Status</th>
@@ -78,7 +82,7 @@ export function InventoryTable({
           ))
         ) : (
           <tr>
-            {/* 5 base columns (Item, On Hand, Reorder Level, Location, Status)
+            {/* 5 base columns (Item, On Hand, Minimum Stock, Location, Status)
                 plus Project and/or Value when those are shown — found live
                 via review: this stayed keyed on `showProject` alone after
                 `isAdmin` was added, under-spanning the empty state for a

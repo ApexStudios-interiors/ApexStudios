@@ -159,7 +159,7 @@ export function BillingAdmin({
             value: formatINRCompact(stats.received),
             sub: `${stats.paidCount} paid`,
           },
-          { label: "Outstanding", value: formatINRCompact(stats.outstanding), sub: "Certified, not paid" },
+          { label: "Outstanding", value: formatINRCompact(stats.outstanding), sub: "Payment pending" },
           {
             label: "Billable Now",
             value: formatINRCompact(stats.billableNowValue),
@@ -304,7 +304,7 @@ export function BillingAdmin({
                         {b.paidAt
                           ? `Paid ${dmy(b.paidAt)}`
                           : b.certifiedAt
-                            ? `Certified ${dmy(b.certifiedAt)}`
+                            ? `Payment pending since ${dmy(b.certifiedAt)}`
                             : b.submittedAt
                               ? `Submitted ${dmy(b.submittedAt)}`
                               : "Draft"}
