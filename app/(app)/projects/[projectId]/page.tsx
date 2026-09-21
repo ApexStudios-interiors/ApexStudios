@@ -7,6 +7,7 @@ import {
   getSiteStockStats,
 } from "@/features/projects/queries";
 import { ClientAccessCard } from "@/features/projects/components/ClientAccessCard";
+import { RateVisibilityCard } from "@/features/projects/components/RateVisibilityCard";
 import { getPackagesForProject, type PackagesForProject } from "@/features/packages/queries";
 import { getUpdatesForProject } from "@/features/updates/queries";
 import { getStockRequestsForProject } from "@/features/stock/queries";
@@ -120,6 +121,10 @@ export default async function ProjectDashboardPage({ params }: { params: Promise
       {clientAccess && (
         <ClientAccessCard projectId={projectId} projectName={header.name} access={clientAccess} />
       )}
+
+      {/* D55: the per-project Rate-visibility exception. Owner/admin only, on
+          the same effective role the Client access card is keyed on. */}
+      {isMoney && <RateVisibilityCard projectId={projectId} value={header.rateVisibility} />}
     </div>
   );
 }

@@ -5,8 +5,9 @@ import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
 import type { Role } from "@/lib/rbac/roles";
 import type { StockRequestDTO } from "@/features/stock/queries";
-import { availableTransitions } from "@/features/stock/service";
+import { availableTransitions, isDeadlineAtRisk } from "@/features/stock/service";
 import { transitionStockRequest } from "@/features/stock/actions";
+import { todayIst } from "@/lib/dates";
 import { dmy } from "@/lib/logic";
 import { formatINR } from "@/lib/money";
 import { StockRequestStatusBadge } from "@/components/shared/StatusBadges";
@@ -36,6 +37,10 @@ export function ReqTable({
 }) {
   const { openDialog } = useApp();
   const router = useRouter();
+  // The one "today" this business keeps (lib/dates) — the same answer on the
+  // server and in any browser timezone, so the red date cannot differ between
+  // the server render and hydration. Never `new Date()` here.
+  const today = todayIst();
   const transition = useAction(transitionStockRequest, { onSuccess: () => router.refresh() });
 
   if (!requests.length) {
@@ -79,6 +84,11 @@ export function ReqTable({
       <tbody>
         {requests.map((r) => {
           const transitions = availableTransitions(r.status, role);
+          // Red from two business days before the needed-by date, and red
+          // from then on once it has passed — while the request is still
+          // pending approval. `isDeadlineAtRisk` is the whole rule and is
+          // unit-tested; nothing about it is re-decided here.
+          const atRisk = isDeadlineAtRisk(r.status, r.neededBy, today);
           return (
             <tr key={r.id}>
               <td className={td}>
@@ -99,7 +109,7 @@ export function ReqTable({
                   {r.value != null ? formatINR(r.value) : <span className="text-muted-foreground">–</span>}
                 </td>
               )}
-              <td className={td}>{dmy(r.neededBy)}</td>
+              <td className={atRisk ? `${td} text-status-destructive font-medium` : td}>{dmy(r.neededBy)}</td>
               <td className={td}>
                 <StockRequestStatusBadge status={r.status} />
               </td>

@@ -5,7 +5,14 @@ import { revalidatePath, updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { siteAction } from "@/lib/safe-action";
 import { requireSession } from "@/lib/auth/session";
-import { createStockRequestSchema, transitionStockRequestSchema } from "./schema";
+import { getProjectRateVisibility } from "@/features/projects/actions";
+import { siteMayEnterRate } from "@/features/projects/service";
+import {
+  createStockRequestSchema,
+  duplicateRequestCheckSchema,
+  transitionStockRequestSchema,
+} from "./schema";
+import { isDuplicateOfDelivered } from "./service";
 
 /**
  * build/07-stock-inventory-notifications.md §2.2. `rpc_create_stock_request`
@@ -23,6 +30,12 @@ export const createStockRequest = siteAction
     // somehow crafted a `rate` in its POST body must not have it stored
     // regardless — this check has to be the real role either way.
     const isAdmin = ctx.session.role === "owner" || ctx.session.role === "admin";
+    // D55: a site supervisor may set a rate only where THIS project is
+    // explicitly set to 'editable'. 'hidden' and 'readonly' both discard it,
+    // so a crafted POST body cannot set one just because the field was not
+    // rendered. Read server-side, from the project row, never taken from the
+    // form. Skipped for an admin, whose answer does not depend on it.
+    const mayEnterRate = isAdmin || siteMayEnterRate(await getProjectRateVisibility(parsedInput.projectId));
     const supabase = await createClient();
 
     const { data, error } = await supabase.rpc("rpc_create_stock_request", {
@@ -34,10 +47,11 @@ export const createStockRequest = siteAction
       p_phase_id: parsedInput.phaseId,
       p_inventory_item_id: parsedInput.inventoryItemId,
       // Stripped here, before the RPC is ever called — not "ignored in the
-      // form". The RPC also refuses to store it for a non-admin caller, as a
-      // second, harder boundary (a security definer function is the real
-      // write path regardless of what called it).
-      p_rate: isAdmin ? parsedInput.rate : undefined,
+      // form". The RPC applies the same rule again (owner/admin always; site
+      // only where the project is 'editable'), as a second, harder boundary:
+      // a security definer function is the real write path regardless of what
+      // called it.
+      p_rate: mayEnterRate ? parsedInput.rate : undefined,
       p_needed_by: parsedInput.neededBy,
       p_note: parsedInput.note,
     });
@@ -70,6 +84,63 @@ export const transitionStockRequest = siteAction
     revalidatePath("/inventory");
     return { id: row.id, status: row.status };
   });
+
+/**
+ * "Has this exact order already been delivered?" — the New Stock Request
+ * form's advisory warning. An ALERT, never a block: it changes nothing about
+ * what may be submitted or about the request workflow.
+ *
+ * Read through the user's own Supabase client, so RLS decides which requests
+ * they may match against — never Drizzle (the D11 rule). A site session reads
+ * `v_stock_request_site`, which omits `rate`; an admin reads the base table
+ * with the same column list, so no money leaves the database on this path for
+ * either role.
+ *
+ * Narrowed in the QUERY to the fields that can be compared in SQL (project,
+ * delivered, quantity, needed-by); the material rule — linked inventory item
+ * when there is one, trimmed case-insensitive name otherwise — is then applied
+ * by `isDuplicateOfDelivered`, which is pure and unit-tested.
+ */
+export async function hasDeliveredDuplicate(input: unknown): Promise<boolean> {
+  const session = await requireSession();
+  const parsed = duplicateRequestCheckSchema.safeParse(input);
+  if (!parsed.success) return false;
+  const candidate = parsed.data;
+
+  const effectiveRole = session.impersonating?.role ?? session.role;
+  // 01-hld.md §7.1: a client has no stock surface at all.
+  if (effectiveRole === "client") return false;
+  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+
+  const supabase = await createClient();
+  const columns = "id, inventory_item_id, material_name, qty, needed_by";
+  const { data, error } = isAdmin
+    ? await supabase
+        .from("stock_requests")
+        .select(columns)
+        .eq("project_id", candidate.projectId)
+        .eq("status", "delivered")
+        .eq("qty", candidate.qty)
+        .eq("needed_by", candidate.neededBy)
+        .is("deleted_at", null)
+    : await supabase
+        .from("v_stock_request_site")
+        .select(columns)
+        .eq("project_id", candidate.projectId)
+        .eq("status", "delivered")
+        .eq("qty", candidate.qty)
+        .eq("needed_by", candidate.neededBy);
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).some((row) =>
+    isDuplicateOfDelivered(candidate, {
+      inventoryItemId: row.inventory_item_id,
+      materialName: row.material_name ?? "",
+      qty: Number(row.qty),
+      neededBy: row.needed_by,
+    })
+  );
+}
 
 /** `NewRequestDialog`'s material-name suggestion list — sourced from
  *  existing `inventory_items` for the org, not free-text history (build

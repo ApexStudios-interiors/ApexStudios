@@ -61,3 +61,49 @@ export function projectCodeBase(projectName: string): string {
 
 // packageStatusLabel and phaseVariance live in features/packages/service.ts —
 // that is the feature that owns packages and phases.
+
+/**
+ * D55 — per-project Rate visibility for Site Supervisors.
+ *
+ * AGENTS.md's headline rule is that a Site Supervisor sees no money. This is
+ * the one explicit, per-project exception, and it defaults to `hidden`, so a
+ * project behaves exactly as before until an owner/admin switches it on.
+ *
+ *   hidden    the Rate field is not rendered for site; a submitted rate is
+ *             discarded server-side
+ *   readonly  site sees the field, disabled; a submitted rate is still
+ *             discarded
+ *   editable  site may enter a rate and it is stored
+ *
+ * Owner/admin are unaffected by all three: they always see and edit Rate.
+ */
+export const RATE_VISIBILITY_MODES = ["hidden", "readonly", "editable"] as const;
+export type RateVisibility = (typeof RATE_VISIBILITY_MODES)[number];
+
+export const RATE_VISIBILITY_LABEL: Record<RateVisibility, string> = {
+  hidden: "Hidden",
+  readonly: "Visible, not editable",
+  editable: "Visible and editable",
+};
+
+/** The column is `text` with a check constraint, so it arrives typed as
+ *  `string`. Anything unrecognised falls back to the safe mode rather than
+ *  being trusted — a value outside the three can only mean the database and
+ *  this file have drifted, and `hidden` is the answer that leaks nothing. */
+export function parseRateVisibility(value: string | null | undefined): RateVisibility {
+  return (RATE_VISIBILITY_MODES as readonly string[]).includes(value ?? "")
+    ? (value as RateVisibility)
+    : "hidden";
+}
+
+/** Whether a site supervisor may STORE a rate on a request for this project.
+ *  The one rule behind both the form and the server action — never re-decided
+ *  at either call site. */
+export function siteMayEnterRate(mode: RateVisibility): boolean {
+  return mode === "editable";
+}
+
+/** Whether the Rate field is rendered at all for a site supervisor. */
+export function siteMaySeeRateField(mode: RateVisibility): boolean {
+  return mode === "readonly" || mode === "editable";
+}

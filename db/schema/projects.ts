@@ -44,6 +44,10 @@ export const projects = pgTable(
     nextSrSeq: integer("next_sr_seq").notNull().default(1),
     /** Same pattern again, for rpc_create_approval's AP-{code}-{n} ref_no. */
     nextApSeq: integer("next_ap_seq").notNull().default(1),
+    /** D55: whether a Site Supervisor may see/enter the per-unit Rate on a
+     *  stock request for THIS project — 'hidden' | 'readonly' | 'editable'.
+     *  Defaults to hidden; see migration 20260921090001 for the full rule. */
+    rateVisibility: text("rate_visibility").notNull().default("hidden"),
     ...auditColumns,
   },
   (t) => [index("idx_projects_org_status").on(t.orgId, t.status), index("idx_projects_client").on(t.clientId)]

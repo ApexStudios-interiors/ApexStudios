@@ -1638,6 +1638,49 @@ D12's shadcn clause and AGENTS.md's hand-rolled-primitives rule.
 
 ---
 
+### D55 — Rate on a stock request is visible to Site Supervisors per project, hidden by default
+
+**Question:** AGENTS.md's headline rule is that a Site Supervisor sees no money at all, and the
+New Stock Request form renders its Rate field for owner/admin only. Site supervisors raising
+requests asked to see, and sometimes enter, the per-unit rate they were quoted. Keep the blanket
+rule, or allow an exception?
+**Decided:** 2026-09-21 by Voola — **allow it, per project, with three modes, defaulting to
+hidden.** D54 is unaffected; this does not reopen the general money-visibility rule.
+**Answer:**
+
+- `projects.rate_visibility` (migration `20260921090001_project_rate_visibility.sql`) is
+  `text not null default 'hidden'` with a check constraint on `'hidden' | 'readonly' | 'editable'`.
+  There is no enum type: the three modes belong to this one column.
+  - `hidden` — the Rate field is not rendered for a site supervisor, and a `rate` in a crafted
+    request is discarded.
+  - `readonly` — the field renders, disabled; a submitted `rate` is still discarded.
+  - `editable` — a site supervisor may enter a rate and it is stored.
+- **The default is `hidden`, so no existing project changes behaviour.** Owner/admin are
+  unaffected by all three modes: they always see and edit Rate.
+- **Enforcement is server-side, twice.** `createStockRequest` re-reads the project's mode through
+  the user's own Supabase client and strips `rate` unless the caller may set one;
+  `rpc_create_stock_request` then decides again inside the write, because a `security definer`
+  function is the real write path whatever called it. The form field is a convenience, never the
+  boundary.
+- **The exception is about writing, not reading.** `v_stock_request_site` still omits `rate`, the
+  stock list's Value column is still admin-only, and no role-scoped view changed. A site
+  supervisor on an `editable` project can type a rate onto a new request and cannot read it back.
+- The control is a small **Rate visibility** card on the project dashboard, owner/admin only,
+  following the Client access card (D51) — there is no edit-project dialog and no project
+  settings page to put it in.
+- `rpc_create_project` is untouched: it names its insert columns explicitly, so every new project
+  takes the `hidden` default. Its signature and grants are unchanged.
+
+**Consequence:**
+
+- AGENTS.md's "the one rule that matters most" now carries a pointer to this entry. It remains the
+  rule; this is the single, named exception to it, and extending it to any other surface needs a
+  new decision.
+- The pgTAP file `supabase/tests/14_project_rate_visibility_test.sql` is written but **unrun** —
+  there is no non-production database to run it against (D49).
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |
