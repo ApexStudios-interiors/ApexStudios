@@ -1281,8 +1281,8 @@ middleware. Signatures below are the zod input shape.
 | `confirmUpload` | `{ key, entityType, entityId, fileName, mimeType, sizeBytes }` | member |
 | `getDownloadUrl` | `{ attachmentId }` | member |
 | `inviteUser` | `{ fullName, email?, phone?, role, projectIds? }` | admin |
-| `setUserRole` | `{ profileId, role }` | owner; revokes refresh tokens |
-| `deactivateUser` | `{ profileId }` | owner |
+| `setUserRole` | `{ profileId, role }` | owner, or admin on a site/client target (D54); revokes the target's sessions |
+| `deactivateUser` | `{ profileId }` | owner, or admin on a site/client target (D54); revokes sessions and bans the account until reactivated |
 | `retryJob` | `{ jobId }` | admin — resets a `failed` job to `pending` |
 
 ### Search
