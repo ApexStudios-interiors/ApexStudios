@@ -40,7 +40,10 @@ export const recordPaymentSchema = z.object({
   billId: z.uuid(),
   amount: z.coerce.number().positive("Amount must be positive"),
   paidOn: z.iso.date(),
-  mode: z.enum(["neft", "cheque", "upi", "rtgs"]).optional(),
+  // Free text in the database (`payments.mode` is `text`, no check
+  // constraint), so this list is the only thing that fixes the vocabulary —
+  // widening it needs no migration. Stored values stay lowercase.
+  mode: z.enum(["neft", "cheque", "upi", "rtgs", "cash", "bank_transfer"]).optional(),
   referenceNo: z.string().trim().optional(),
   idempotencyKey: z.uuid(),
 });

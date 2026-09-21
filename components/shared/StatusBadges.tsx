@@ -56,8 +56,12 @@ export function BillStatusBadge({ status }: { status: BillDTO["status"] }) {
       return <Badge variant="secondary">Draft</Badge>;
     case "submitted":
       return <Badge variant="warning">Submitted</Badge>;
+    // Presentation only. The `certified` status itself is untouched — it is
+    // the client's certification of the bill, referenced by rpc_transition_bill
+    // and the RLS policies. What it means to a reader of the table, though,
+    // is that the bill is certified and now waiting to be paid.
     case "certified":
-      return <Badge variant="default">Certified</Badge>;
+      return <Badge variant="default">Payment Pending</Badge>;
     case "paid":
       return <Badge variant="success">Paid</Badge>;
     case "cancelled":
