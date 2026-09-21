@@ -845,6 +845,7 @@ export type Database = {
           next_sr_seq: number;
           next_ap_seq: number;
           mobilisation_recovery_pct: number;
+          rate_visibility: string;
         };
         Insert: {
           id?: string;
@@ -874,6 +875,7 @@ export type Database = {
           next_sr_seq?: number;
           next_ap_seq?: number;
           mobilisation_recovery_pct?: number;
+          rate_visibility?: string;
         };
         Update: {
           id?: string;
@@ -903,6 +905,7 @@ export type Database = {
           next_sr_seq?: number;
           next_ap_seq?: number;
           mobilisation_recovery_pct?: number;
+          rate_visibility?: string;
         };
         Relationships: [];
       };

@@ -224,8 +224,16 @@ async function loadStockRequests(
     rejected_reason: string | null;
   };
 
-  // Every matching row, or — with `req` — one page of them. `id` breaks ties
-  // between equal `created_at`s so paging is stable.
+  // Every matching row, or — with `req` — one page of them.
+  //
+  // Ordered by `needed_by` ascending, so the most urgent request is first —
+  // applied in the QUERY, not to a fetched page, or page 2 would be sorted
+  // against page 1's contents. Rows with NO needed-by date sort LAST
+  // (`nullsFirst: false`): a request with no deadline carries no urgency
+  // signal at all, and Postgres's own default for an ascending order would
+  // otherwise put those nulls at the very top, above the genuinely overdue
+  // ones. `created_at` then `id` break ties, exactly as before, so paging
+  // stays stable within one needed-by date.
   const all = async <T>(query: PromiseLike<RangeResult<T>>): Promise<Page<T>> => {
     const { data, error } = await query;
     if (error) throw new Error(error.message);
@@ -244,6 +252,7 @@ async function loadStockRequests(
         )
         .eq("project_id", projectId)
         .is("deleted_at", null)
+        .order("needed_by", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false })
         .order("id", { ascending: false });
       if (opts.status) q = q.eq("status", opts.status);
@@ -260,6 +269,7 @@ async function loadStockRequests(
           { count: req ? "exact" : undefined }
         )
         .eq("project_id", projectId)
+        .order("needed_by", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false })
         .order("id", { ascending: false });
       if (opts.status) q = q.eq("status", opts.status);

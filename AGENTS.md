@@ -61,6 +61,16 @@ If a change you are making would put `internal_amount`, `unit_cost`, `rate`,
 `internal_cost_amount` or `margin_amount` into a response that a non-Admin session could
 receive, **stop and flag it**. Do not "fix" it by hiding the value in the UI.
 
+**The one exception, and it is narrow (D55).** `projects.rate_visibility` lets an owner/admin
+allow Site Supervisors to see and enter the per-unit **Rate** on the New Stock Request form,
+**for one project at a time**. It defaults to `hidden`, so the rule above is what every project
+does until someone deliberately switches one on. It governs only what a supervisor may _type_ on
+that form: `v_stock_request_site` still omits `rate`, the stock list's Value column is still
+admin-only, and no other money column, view or role is widened by it. Enforcement is server-side
+in `features/stock/actions.ts` **and** again in `rpc_create_stock_request`; the form field is a
+convenience, never the boundary. Do not extend this exception to any other surface without a new
+owner decision.
+
 ---
 
 ## Setup

@@ -51,6 +51,12 @@ export function toIsoDate(date: Date): string {
  * register it like any other field. `required` stops a re-click on the
  * selected day from clearing the value — for fields whose schema has no empty
  * state (a task's start date, a payment's `paidOn`).
+ *
+ * `minDate` — a `yyyy-MM-dd` string, the same shape as `value` — disables
+ * every earlier day, the boundary day itself remaining selectable. It is
+ * optional and defaults to no minimum, so every existing caller is unchanged.
+ * The UI is a convenience only: whatever a field's minimum means, its own zod
+ * schema has to say so too, because a form is not a validator.
  */
 export function DatePicker({
   id,
@@ -61,6 +67,7 @@ export function DatePicker({
   placeholder = "Pick a date",
   disabled = false,
   required = false,
+  minDate,
 }: {
   id?: string;
   value: string | undefined;
@@ -70,9 +77,11 @@ export function DatePicker({
   placeholder?: string;
   disabled?: boolean;
   required?: boolean;
+  minDate?: string;
 }) {
   const [open, setOpen] = useState(false);
   const selected = value ? fromIsoDate(value) : undefined;
+  const min = minDate ? fromIsoDate(minDate) : undefined;
 
   return (
     <Popover
@@ -96,7 +105,12 @@ export function DatePicker({
         <Calendar
           mode="single"
           selected={selected}
-          defaultMonth={selected}
+          defaultMonth={selected ?? min}
+          // react-day-picker's own matcher: strictly before the boundary, so
+          // the boundary day is still selectable. Undefined when there is no
+          // minimum, which is every caller that does not ask for one.
+          disabled={min ? { before: min } : undefined}
+          startMonth={min}
           onSelect={(date) => {
             if (date) onChange(toIsoDate(date));
             else if (!required) onChange("");

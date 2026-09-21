@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
-import { projectStatusLabel } from "./service";
+import { parseRateVisibility, projectStatusLabel, type RateVisibility } from "./service";
 
 /**
  * Three separate functions, not one with a role ternary on the select list
@@ -274,6 +274,9 @@ export type ProjectHeaderDTO = {
   start: string | null;
   status: string;
   progressPct: number;
+  /** D55 — per-project Rate visibility for Site Supervisors. Not money: it is
+   *  the policy about who may type a rate, and every role may read it. */
+  rateVisibility: RateVisibility;
 };
 
 export async function getProjectHeader(
@@ -285,7 +288,7 @@ export async function getProjectHeader(
   const supabase = await createClient();
   const { data: p, error } = await supabase
     .from("projects")
-    .select("id, name, location, status, progress_pct, start_date, client_id")
+    .select("id, name, location, status, progress_pct, start_date, client_id, rate_visibility")
     .eq("id", projectId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -305,6 +308,7 @@ export async function getProjectHeader(
     start: p.start_date,
     status: projectStatusLabel(p.status),
     progressPct: p.progress_pct,
+    rateVisibility: parseRateVisibility(p.rate_visibility),
   };
 }
 

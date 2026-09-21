@@ -4,16 +4,17 @@ import "server-only";
 import { revalidatePath, updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminAction } from "@/lib/safe-action";
-import { requireRole } from "@/lib/auth/session";
+import { requireRole, requireSession } from "@/lib/auth/session";
 import {
   addProjectMemberSchema,
   createClientSchema,
   createProjectSchema,
   previewProjectCodeSchema,
+  setProjectRateVisibilitySchema,
   setProjectStatusSchema,
   updateProjectSchema,
 } from "./schema";
-import { projectCodeBase } from "./service";
+import { parseRateVisibility, projectCodeBase, type RateVisibility } from "./service";
 import { insertProjectMember } from "./members";
 
 /**
@@ -132,6 +133,52 @@ export const setProjectStatus = adminAction
     revalidatePath(`/projects/${parsedInput.id}`, "layout");
     return { ok: true as const };
   });
+
+/**
+ * D55 — whether a Site Supervisor may see and enter the per-unit Rate on a
+ * stock request for this project. `adminAction` is the guard here and
+ * `projects_update` (migration 0004) is the guard in the database; the column's
+ * own check constraint refuses anything outside the three modes.
+ */
+export const setProjectRateVisibility = adminAction
+  .inputSchema(setProjectRateVisibilitySchema)
+  .action(async ({ parsedInput }) => {
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("projects")
+      .update({ rate_visibility: parsedInput.rateVisibility })
+      .eq("id", parsedInput.id);
+    if (error) throw new Error(error.message);
+
+    updateTag(`project:${parsedInput.id}`);
+    revalidatePath(`/projects/${parsedInput.id}`, "layout");
+    return { ok: true as const };
+  });
+
+/**
+ * The same setting, read by `NewRequestDialog` so the form knows whether to
+ * render the Rate field for a site supervisor (D55). A plain Server Action,
+ * like `getClientOptions` above and the stock dialog's other option loaders:
+ * this reads, it does not mutate.
+ *
+ * Readable by any member of the project — `projects_select` already allows it,
+ * and the mode itself carries no money, only a policy about who may type one.
+ * It is NOT the enforcement: `createStockRequest` re-reads it server-side and
+ * `rpc_create_stock_request` decides again inside the write.
+ */
+export async function getProjectRateVisibility(projectId: string): Promise<RateVisibility> {
+  "use server";
+  await requireSession();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("projects")
+    .select("rate_visibility")
+    .eq("id", projectId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return parseRateVisibility(data?.rate_visibility);
+}
 
 /**
  * Grants an existing profile access to a project (CAN.manageProjectMembers).

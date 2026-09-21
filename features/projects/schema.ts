@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RATE_VISIBILITY_MODES } from "./service";
 
 /**
  * 02-lld.md §7. The action and the form parse this same object. There is no
@@ -40,6 +41,14 @@ export const setProjectStatusSchema = z.object({
   status: z.enum(["planning", "active", "on_hold", "completed", "archived"]),
 });
 export type SetProjectStatusInput = z.infer<typeof setProjectStatusSchema>;
+
+/** D55 — the project dashboard's "Rate visibility" card. Owner/admin only;
+ *  `adminAction` is the guard, this is only the shape. */
+export const setProjectRateVisibilitySchema = z.object({
+  id: z.uuid(),
+  rateVisibility: z.enum(RATE_VISIBILITY_MODES),
+});
+export type SetProjectRateVisibilityInput = z.infer<typeof setProjectRateVisibilitySchema>;
 
 export const addProjectMemberSchema = z.object({
   projectId: z.uuid(),
