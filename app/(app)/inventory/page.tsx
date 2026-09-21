@@ -55,7 +55,7 @@ export default async function BusinessInventoryPage({
           ...(isAdmin
             ? [{ label: "Total Value", value: formatINRCompact(stats.totalValue ?? 0), sub: "at unit cost" }]
             : []),
-          { label: "Low Stock", value: stats.lowCount, sub: "below reorder level" },
+          { label: "Low Stock", value: stats.lowCount, sub: "below minimum stock" },
           { label: "Critical", value: stats.criticalCount, sub: "out of stock" },
         ]}
       />
