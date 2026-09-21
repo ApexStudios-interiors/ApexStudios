@@ -183,7 +183,7 @@ See §8 — documented together since they're the same table, just scoped differ
 
 ### 6.12 Users (`/users`, Admin only)
 - "**+ Invite User**" button → *Invite User* dialog.
-- Table: avatar + name, contact, a role dropdown (changes live), Remove button (demo-only — doesn't actually delete).
+- Table: avatar + name, contact, a role dropdown and a Deactivate/Reactivate button (D54). Both are real: changing a role or deactivating signs that person out everywhere, and deactivation bans the login until it is reversed. Deactivate is reversible — nothing is deleted. Owner and admin only, and an admin may act only on site/client users.
 
 ---
 

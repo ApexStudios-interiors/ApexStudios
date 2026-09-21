@@ -64,8 +64,16 @@ export const CAN = {
 
   // ── Users (build/03-auth-and-rbac.md §2.10) ─────────────────────────────
   inviteUser: ["owner", "admin"],
-  setUserRole: ["owner"],
-  deactivateUser: ["owner"],
+  // D54 widened these from owner-only (D8): an admin may change the role of,
+  // or deactivate, a SITE or CLIENT user — never the owner, never another
+  // admin, never themselves. That second half is a property of the TARGET, so
+  // this table (which maps an action to caller roles) cannot express it. The
+  // real gate is `userAdminRefusal` in features/users/service.ts, re-checked
+  // by rpc_set_user_role / rpc_set_user_active and, underneath both, by
+  // trg_profiles_privilege_guard — which is what actually stopped the
+  // privilege escalation this table never could.
+  setUserRole: ["owner", "admin"],
+  deactivateUser: ["owner", "admin"],
   manageProjectMembers: ["owner", "admin"],
 
   // ── Impersonation (D20) ──────────────────────────────────────────────────
