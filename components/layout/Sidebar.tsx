@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
 import { Fragment, useRef, useState, useTransition } from "react";
 import { useAction } from "next-safe-action/hooks";
+import { BookOpenIcon } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { useSession } from "@/components/auth/SessionProvider";
 import { signOut } from "@/features/auth/actions";
@@ -65,6 +66,11 @@ export function Sidebar({
   const allowed = ALLOWED_SECTIONS[role];
 
   const canPreview = session.role === "owner" || session.role === "admin";
+  /** The Studio group — Users and Failed Jobs — is owner/admin only. Docs sits
+   *  directly below it and is help content every role may read, so it renders
+   *  outside that gate; when the group is hidden, Docs takes over the group
+   *  label's own top spacing so the link lands in the same place for everyone. */
+  const showStudio = role === "admin" || role === "owner";
 
   return (
     <aside className="bg-sidebar border-r border-border flex flex-col sticky top-0 self-start h-screen overflow-auto p-3">
@@ -228,41 +234,59 @@ export function Sidebar({
         </>
       )}
 
-      {(role === "admin" || role === "owner") && (
-        <div className="shrink-0">
-          <div className="text-[11px] font-semibold text-muted-foreground px-2 pt-3.5 pb-1.5 uppercase tracking-wider">
-            Studio
-          </div>
-          <Link
-            href="/users"
-            className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md px-2 py-[7px] cursor-pointer text-[13.5px] ${
-              pathname === "/users"
-                ? "bg-accent font-semibold text-foreground"
-                : "font-medium text-foreground hover:bg-accent"
-            }`}
-          >
-            <Icon
-              name="users"
-              className={`w-4 h-4 flex-none ${pathname === "/users" ? "text-foreground" : "text-muted-foreground"}`}
-            />
-            Users
-          </Link>
-          <Link
-            href="/ops/jobs"
-            className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md px-2 py-[7px] cursor-pointer text-[13.5px] ${
-              pathname === "/ops/jobs"
-                ? "bg-accent font-semibold text-foreground"
-                : "font-medium text-foreground hover:bg-accent"
-            }`}
-          >
-            <Icon
-              name="box"
-              className={`w-4 h-4 flex-none ${pathname === "/ops/jobs" ? "text-foreground" : "text-muted-foreground"}`}
-            />
-            Failed Jobs
-          </Link>
-        </div>
-      )}
+      <div className="shrink-0">
+        {showStudio && (
+          <>
+            <div className="text-[11px] font-semibold text-muted-foreground px-2 pt-3.5 pb-1.5 uppercase tracking-wider">
+              Studio
+            </div>
+            <Link
+              href="/users"
+              className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md px-2 py-[7px] cursor-pointer text-[13.5px] ${
+                pathname === "/users"
+                  ? "bg-accent font-semibold text-foreground"
+                  : "font-medium text-foreground hover:bg-accent"
+              }`}
+            >
+              <Icon
+                name="users"
+                className={`w-4 h-4 flex-none ${pathname === "/users" ? "text-foreground" : "text-muted-foreground"}`}
+              />
+              Users
+            </Link>
+            <Link
+              href="/ops/jobs"
+              className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md px-2 py-[7px] cursor-pointer text-[13.5px] ${
+                pathname === "/ops/jobs"
+                  ? "bg-accent font-semibold text-foreground"
+                  : "font-medium text-foreground hover:bg-accent"
+              }`}
+            >
+              <Icon
+                name="box"
+                className={`w-4 h-4 flex-none ${pathname === "/ops/jobs" ? "text-foreground" : "text-muted-foreground"}`}
+              />
+              Failed Jobs
+            </Link>
+          </>
+        )}
+        <Link
+          href="/docs"
+          className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md px-2 py-[7px] cursor-pointer text-[13.5px] ${
+            showStudio ? "" : "mt-3.5"
+          } ${
+            pathname === "/docs"
+              ? "bg-accent font-semibold text-foreground"
+              : "font-medium text-foreground hover:bg-accent"
+          }`}
+        >
+          <BookOpenIcon
+            className={`w-4 h-4 flex-none ${pathname === "/docs" ? "text-foreground" : "text-muted-foreground"}`}
+            aria-hidden="true"
+          />
+          Docs
+        </Link>
+      </div>
 
       <div className="shrink-0 relative mt-auto" ref={userMenuRef}>
         {userMenuOpen && (
