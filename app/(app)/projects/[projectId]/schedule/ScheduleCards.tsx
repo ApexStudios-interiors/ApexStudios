@@ -30,6 +30,16 @@ export function ScheduleCards({
   const [closed, setClosed] = useState<Set<string>>(
     () => new Set(schedule.packages.filter((p) => p.taskCount === 0).map((p) => p.packageId))
   );
+  // Phase rows live inside each Gantt, which is also rendered standalone on
+  // the per-package Schedule tab, so the state stays there rather than being
+  // lifted into a shape that page has no use for. What crosses the boundary
+  // is the instruction itself: one press = one new epoch, which every Gantt
+  // applies once. A Gantt mounted later (a package re-opened after Collapse
+  // all) reads the same signal for its initial state, so the two buttons
+  // reach every phase row whether or not its card was open at the time.
+  const [collapseSignal, setCollapseSignal] = useState({ epoch: 0, collapsed: false });
+  const signal = (collapsedNext: boolean) =>
+    setCollapseSignal((prev) => ({ epoch: prev.epoch + 1, collapsed: collapsedNext }));
 
   const toggle = (id: string) => {
     setClosed((prev) => {
@@ -50,13 +60,23 @@ export function ScheduleCards({
           </p>
         </div>
         <div className="ml-auto flex gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setClosed(new Set())}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setClosed(new Set());
+              signal(false);
+            }}
+          >
             Expand all
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setClosed(new Set(schedule.packages.map((p) => p.packageId)))}
+            onClick={() => {
+              setClosed(new Set(schedule.packages.map((p) => p.packageId)));
+              signal(true);
+            }}
           >
             Collapse all
           </Button>
@@ -104,6 +124,7 @@ export function ScheduleCards({
                 viewport={pkg.viewport}
                 monthHeaders={pkg.monthHeaders}
                 canEdit={canEdit}
+                collapseSignal={collapseSignal}
               />
             )}
           </Card>
