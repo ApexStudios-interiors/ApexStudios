@@ -9,7 +9,12 @@ import { buildAttachmentKey, keyBelongsTo } from "@/lib/r2/keys";
 import { headObject } from "@/lib/r2/head";
 import { presignGet, presignPut } from "@/lib/r2/presign";
 import { isAllowedMime, maxBytesFor, MAX_PHOTOS_PER_ENTITY } from "@/lib/r2/constraints";
-import { confirmUploadSchema, getDownloadUrlSchema, requestUploadUrlSchema } from "./schema";
+import {
+  confirmUploadSchema,
+  deleteAttachmentSchema,
+  getDownloadUrlSchema,
+  requestUploadUrlSchema,
+} from "./schema";
 
 /**
  * build/06-files-jobs-daily-updates.md §2.2, in full. `authedAction`, not a
@@ -142,3 +147,50 @@ export async function getThumbnailUrl(attachmentId: string): Promise<string | nu
   const objectPath = attachment.thumb_r2_key ?? attachment.r2_key;
   return presignGet(objectPath);
 }
+
+/**
+ * Drops one attachment row when the user removes a file from a form before
+ * the form itself is saved.
+ *
+ * Why a real DELETE and not `deleted_at`: `requestUploadUrl` above counts
+ * every row for the entity with `deleted_at is null` against
+ * `MAX_PHOTOS_PER_ENTITY`, and `attachments` has no UPDATE policy — so a
+ * removed-but-kept row permanently consumed one of the four slots and the
+ * next upload to that entity was refused with "already has N attachments".
+ * `att_delete_uploader` is the policy written for exactly this case: the
+ * uploader may delete their own row within 24 hours.
+ *
+ * Runs on the user's own client, never the admin one, so RLS is the decision
+ * and this action cannot delete a row the caller could not delete for
+ * themselves.
+ *
+ * It does NOT throw when nothing is deleted. Three ways that happens, all of
+ * them ending in the state the caller wanted:
+ *   - the row is already gone;
+ *   - the row is older than 24 hours, so `att_delete_uploader` no longer
+ *     matches and the delete silently affects zero rows;
+ *   - the row belongs to an approval that has since been decided or deleted,
+ *     which the same policy freezes.
+ * The caller is a form removing a tile and must not be blocked by any of
+ * them — the cost of a miss is one leaked slot, not a broken form.
+ *
+ * The R2 object is left behind deliberately. It is now unreferenced, which is
+ * precisely what `attachment.orphan_sweep` collects (it reads every
+ * `attachments` row's `r2_key`/`thumb_r2_key` and deletes any object older
+ * than 24 hours that no row names) — the same path a cancelled dialog's
+ * uploads already take.
+ */
+export const deleteAttachment = authedAction
+  .inputSchema(deleteAttachmentSchema)
+  .action(async ({ parsedInput }) => {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("attachments")
+      .delete()
+      .eq("id", parsedInput.attachmentId)
+      .select("id");
+    // A transport or database error is worth surfacing; "no row matched" is
+    // not an error and is reported as `deleted: false` instead.
+    if (error) throw new Error(error.message);
+    return { deleted: (data ?? []).length > 0 };
+  });

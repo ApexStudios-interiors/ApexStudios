@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { confirmUpload, requestUploadUrl } from "@/features/attachments/actions";
+import { confirmUpload, deleteAttachment, requestUploadUrl } from "@/features/attachments/actions";
 import type { AllowedMime } from "@/lib/r2/constraints";
 
 /**
@@ -224,11 +224,29 @@ export function FileUploader({
     });
   }
 
-  /** Drops the file from this form. An already-confirmed attachment is left
-   *  on the server and simply stops being referenced — `attachment.orphan_sweep`
-   *  (weekly.maintenance) is what collects those, exactly as it does for a
-   *  dialog the user cancels. */
+  /** Drops the file from this form, and deletes its `attachments` row if one
+   *  was ever confirmed.
+   *
+   *  Deleting the row is not housekeeping — it is what returns the slot.
+   *  `requestUploadUrl` counts every live row for this entity against
+   *  `MAX_PHOTOS_PER_ENTITY`, so a row left behind meant a removed photo
+   *  still consumed one of the four and a later upload to the same entity was
+   *  refused. Only a "done" item has a row at all; one still uploading or in
+   *  error has nothing on the server to delete.
+   *
+   *  Deliberately not awaited, and a failure is swallowed: the tile goes
+   *  immediately either way, `onChange` still fires, and a delete the
+   *  server declines (a row older than the 24-hour `att_delete_uploader`
+   *  window, say) costs one leaked slot rather than a form stuck half-way
+   *  through removing a photo. The R2 object it leaves unreferenced is what
+   *  `attachment.orphan_sweep` collects, exactly as for a cancelled dialog. */
   function remove(id: string) {
+    const removed = items.find((i) => i.id === id);
+    if (removed?.status === "done" && removed.attachmentId) {
+      void deleteAttachment({ attachmentId: removed.attachmentId }).catch(() => {
+        // Non-fatal by design — see above.
+      });
+    }
     // Belt and braces for the re-pick: the picker only fires `change` when the
     // chosen file differs from what the input already holds, so an input left
     // naming the file being removed would swallow the next selection of that
