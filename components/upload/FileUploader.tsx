@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { confirmUpload, deleteAttachment, requestUploadUrl } from "@/features/attachments/actions";
 import type { AllowedMime } from "@/lib/r2/constraints";
+import { takeNextQueued } from "@/lib/upload/queue";
 
 /**
  * build/06-files-jobs-daily-updates.md §2.3. Used by `PostUpdateDialog`
@@ -88,6 +89,15 @@ export function FileUploader({
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const inFlight = useRef(0);
   const queue = useRef<UploadItem[]>([]);
+  /** Client-local ids the user has removed. An item can be removed while it
+   *  is still queued or still uploading, and neither can be un-started: the
+   *  queue is drained asynchronously and an XHR already in flight will finish.
+   *  Both paths consult this set so a removed file never ends up as a live
+   *  `attachments` row — which would consume one of `MAX_PHOTOS_PER_ENTITY`
+   *  with no tile left on screen to remove it by. A ref, not state, because
+   *  `processNext` reads it after awaiting and must see the latest value, not
+   *  the one captured when its render closed over it. */
+  const removedIds = useRef<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Unmount only — the dialog closing must not leave every previewed photo
@@ -118,7 +128,9 @@ export function FileUploader({
   // trip over. `pump` below just kicks off up to MAX_CONCURRENT of these.
   async function processNext(): Promise<void> {
     if (inFlight.current >= MAX_CONCURRENT) return;
-    const item = queue.current.shift();
+    // Skips past anything removed while it waited its turn, rather than
+    // uploading a file the user has already taken off the form.
+    const item = takeNextQueued(queue.current, removedIds.current);
     if (!item) return;
     inFlight.current++;
 
@@ -154,6 +166,16 @@ export function FileUploader({
         sizeBytes: item.file.size,
       });
       if (!confirmed?.data) throw new Error(confirmed?.serverError ?? "Could not confirm the upload");
+
+      // Removed while this upload was in flight. The row exists now, so it has
+      // to be deleted rather than merely not referenced — the same reason
+      // `remove` deletes a finished one. Swallowed identically: a refused
+      // delete costs one slot, and there is no tile left to report it on.
+      if (removedIds.current.has(item.id)) {
+        removedIds.current.delete(item.id);
+        void deleteAttachment({ attachmentId: confirmed.data.id }).catch(() => {});
+        return;
+      }
 
       setItems((prev) => {
         const next = prev.map((i) =>
@@ -231,8 +253,9 @@ export function FileUploader({
    *  `requestUploadUrl` counts every live row for this entity against
    *  `MAX_PHOTOS_PER_ENTITY`, so a row left behind meant a removed photo
    *  still consumed one of the four and a later upload to the same entity was
-   *  refused. Only a "done" item has a row at all; one still uploading or in
-   *  error has nothing on the server to delete.
+   *  refused. A "done" item has its row deleted here; one still queued or
+   *  still uploading has no row YET, so it is recorded in `removedIds` and
+   *  handled by whichever async path reaches it.
    *
    *  Deliberately not awaited, and a failure is swallowed: the tile goes
    *  immediately either way, `onChange` still fires, and a delete the
@@ -242,6 +265,10 @@ export function FileUploader({
    *  `attachment.orphan_sweep` collects, exactly as for a cancelled dialog. */
   function remove(id: string) {
     const removed = items.find((i) => i.id === id);
+    // Take it out of the queue if it never started, and mark it for the two
+    // paths that cannot be unwound synchronously (see `removedIds`).
+    queue.current = queue.current.filter((i) => i.id !== id);
+    if (removed && removed.status !== "done") removedIds.current.add(id);
     if (removed?.status === "done" && removed.attachmentId) {
       void deleteAttachment({ attachmentId: removed.attachmentId }).catch(() => {
         // Non-fatal by design — see above.
