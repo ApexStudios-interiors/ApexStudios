@@ -233,6 +233,11 @@ export const GLOSSARY: GlossaryGroup[] = [
           "What everyone signs in with, together with a password, on one login screen. A username like ravi signs in as ravi@beapex.in.",
       },
       {
+        term: "Change my password",
+        definition:
+          "In the user menu at the bottom of the sidebar. You must type your current password, and the new one must be at least 12 characters. You stay signed in on this device; every other device is signed out. This is the only way to change your own password — the admin Reset password button deliberately cannot be aimed at yourself.",
+      },
+      {
         term: "Client login",
         definition:
           "A client's account, created per project from the project dashboard's Client access card. One client login can be given access to several projects.",
@@ -240,7 +245,7 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "Preview as (impersonation)",
         definition:
-          "An owner or admin viewing a project as a Site Supervisor or Client would, to check what they see. It is read-only, lasts 15 minutes, shows a banner the whole time, and is written to the audit log.",
+          "An owner or admin viewing a project as a Site Supervisor or Client would, to check what they see. It is read-only, lasts 15 minutes, shows a banner the whole time, and is written to the audit log. The owner can also preview as Admin; an admin cannot. Previewing only changes what you SEE — every action still checks your real role.",
       },
     ],
   },
@@ -266,7 +271,7 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "Notifications",
         definition:
-          "The bell in the header. It lists open items across all your projects — pending requests, submitted bills, low stock, pending approvals, depending on your role — and an item disappears once the work is done.",
+          "The bell in the header. It lists open WORK across all your projects — pending requests, submitted bills, low stock, pending approvals, depending on your role. It is not an inbox: the count drops when the work is actually done (you approve the request, the client certifies the bill), not when you read the item. Opening one and seeing the number stay the same is expected.",
       },
       {
         term: "Audit log",
@@ -458,6 +463,7 @@ export const FLOWS: Flow[] = [
       "Staff: on the Users page click Add User, enter a username, name and role (Admin or Site Supervisor). The username and a generated password are shown once, each with a Copy button — share them now, because the password cannot be viewed again.",
       "Clients: on the project's dashboard, use the Client access card. Create client login makes a new client account for this project (credentials shown once, as above); Add existing client gives a client who already has a login access to this project.",
       "Reset password: on the Users page click Reset password next to the user. A new password is shown once, and the user is signed out everywhere. An owner may reset anyone but themselves; an admin may reset only Site Supervisors and Clients — never the owner, another admin or themselves.",
+      "Change your OWN password from the user menu at the bottom of the sidebar (Change my password). It asks for your current password first, needs at least 12 characters, and signs you out of every other device while keeping you signed in here. Nobody — not even the owner — can reset their own password from the Users page, so this is the route.",
       "Change role, deactivate or reactivate from the same row. The same who-may-act-on-whom rule applies: an admin may act on Site Supervisors and Clients only, the owner on anyone but themselves, and nobody on themselves. Deactivating signs the person out and blocks their login until it is reversed; nothing is deleted.",
     ],
   },
