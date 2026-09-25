@@ -50,3 +50,11 @@ export const getDownloadUrlSchema = z.object({
   attachmentId: z.uuid(),
 });
 export type GetDownloadUrlInput = z.infer<typeof getDownloadUrlSchema>;
+
+/** `FileUploader`'s remove control. Deleting the row is what returns the
+ *  slot the entity's `MAX_PHOTOS_PER_ENTITY` cap counts — see
+ *  `deleteAttachment` in actions.ts. */
+export const deleteAttachmentSchema = z.object({
+  attachmentId: z.uuid(),
+});
+export type DeleteAttachmentInput = z.infer<typeof deleteAttachmentSchema>;

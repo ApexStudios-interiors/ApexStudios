@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { confirmUpload, requestUploadUrl } from "@/features/attachments/actions";
+import { confirmUpload, deleteAttachment, requestUploadUrl } from "@/features/attachments/actions";
 import type { AllowedMime } from "@/lib/r2/constraints";
 
 /**
@@ -181,11 +181,15 @@ export function FileUploader({
     }
   }
 
-  function handleFiles(fileList: FileList | null) {
-    if (!fileList) return;
+  /** Takes an already-materialised array, not the live `FileList`: reading a
+   *  file input's `files` and then clearing its `value` are two steps, and a
+   *  `FileList` is a live view that empties the moment `value` is reset. The
+   *  caller copies first, resets, then hands the copy here — so the reset can
+   *  never be skipped by anything that happens while the files are processed. */
+  function handleFiles(selected: File[]) {
     const activeCount = items.filter((i) => i.status !== "error").length;
     const room = Math.max(0, maxFiles - activeCount);
-    const files = Array.from(fileList).slice(0, room);
+    const files = selected.slice(0, room);
 
     const newItems: UploadItem[] = files.map((file) => {
       const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
@@ -220,11 +224,37 @@ export function FileUploader({
     });
   }
 
-  /** Drops the file from this form. An already-confirmed attachment is left
-   *  on the server and simply stops being referenced — `attachment.orphan_sweep`
-   *  (weekly.maintenance) is what collects those, exactly as it does for a
-   *  dialog the user cancels. */
+  /** Drops the file from this form, and deletes its `attachments` row if one
+   *  was ever confirmed.
+   *
+   *  Deleting the row is not housekeeping — it is what returns the slot.
+   *  `requestUploadUrl` counts every live row for this entity against
+   *  `MAX_PHOTOS_PER_ENTITY`, so a row left behind meant a removed photo
+   *  still consumed one of the four and a later upload to the same entity was
+   *  refused. Only a "done" item has a row at all; one still uploading or in
+   *  error has nothing on the server to delete.
+   *
+   *  Deliberately not awaited, and a failure is swallowed: the tile goes
+   *  immediately either way, `onChange` still fires, and a delete the
+   *  server declines (a row older than the 24-hour `att_delete_uploader`
+   *  window, say) costs one leaked slot rather than a form stuck half-way
+   *  through removing a photo. The R2 object it leaves unreferenced is what
+   *  `attachment.orphan_sweep` collects, exactly as for a cancelled dialog. */
   function remove(id: string) {
+    const removed = items.find((i) => i.id === id);
+    if (removed?.status === "done" && removed.attachmentId) {
+      void deleteAttachment({ attachmentId: removed.attachmentId }).catch(() => {
+        // Non-fatal by design — see above.
+      });
+    }
+    // Belt and braces for the re-pick: the picker only fires `change` when the
+    // chosen file differs from what the input already holds, so an input left
+    // naming the file being removed would swallow the next selection of that
+    // same file. The change handler already clears it, but this makes the
+    // invariant "after a removal the input names nothing" hold unconditionally
+    // — including for a removal that follows a drop, which never touches the
+    // input at all.
+    if (inputRef.current) inputRef.current.value = "";
     setItems((prev) => {
       const target = prev.find((i) => i.id === id);
       if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
@@ -257,7 +287,7 @@ export function FileUploader({
           onDrop={(e) => {
             e.preventDefault();
             setIsDraggingOver(false);
-            handleFiles(e.dataTransfer.files);
+            handleFiles(Array.from(e.dataTransfer.files));
           }}
           className={`w-full rounded-md border border-dashed px-4 py-5 text-center transition-colors ${
             isDraggingOver ? "border-border-strong bg-accent" : "border-border hover:bg-accent"
@@ -279,8 +309,15 @@ export function FileUploader({
         multiple
         hidden
         onChange={(e) => {
-          handleFiles(e.target.files);
-          e.target.value = ""; // lets the same file be re-picked after fixing it
+          // Copy, THEN clear, THEN process. Chrome and Safari fire no `change`
+          // when the picked file is identical to the one the input already
+          // holds, so the reset is what lets the same photo be chosen again
+          // after it was removed. Doing it before `handleFiles` means nothing
+          // that runs while the selection is processed can leave a stale
+          // filename on the input and silence the next pick.
+          const selected = Array.from(e.target.files ?? []);
+          e.target.value = "";
+          handleFiles(selected);
         }}
       />
       {items.length > 0 && (
