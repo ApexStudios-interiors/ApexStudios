@@ -9,7 +9,9 @@ import { useApp } from "@/context/AppContext";
 import { useSession } from "@/components/auth/SessionProvider";
 import { signOut } from "@/features/auth/actions";
 import { startPreview } from "@/features/auth/impersonation-actions";
+import { ChangeMyPasswordDialog } from "@/features/users/components/ChangeMyPasswordDialog";
 import { Icon, type IconName } from "@/components/ui/Icon";
+import type { PreviewRole } from "@/lib/auth/impersonation";
 import type { NavProject } from "@/components/layout/nav-project";
 import { initials } from "@/lib/logic";
 import { ALLOWED_SECTIONS, type Section, sectionFromPath } from "@/lib/rbac/nav";
@@ -27,8 +29,17 @@ const NAV_ITEMS: { key: Section; label: string; icon: IconName; href: (id: strin
   { key: "billing", label: "Billing", icon: "bill", href: (id) => `/projects/${id}/billing` },
 ];
 
-/** D20: which roles owner/admin may preview a project as. */
-const PREVIEW_OPTIONS: { value: "client" | "site"; label: string }[] = [
+/**
+ * D20: which roles owner/admin may preview a project as.
+ *
+ * `admin` is offered to the OWNER only (`ownerOnly`). An admin previewing as
+ * admin would see their own screens, and no other role may be handed an
+ * admin-shaped view of anything. Hiding the entry is a courtesy: startPreview
+ * refuses `admin` from a non-owner REAL session, and getSession ignores an
+ * admin preview cookie held by anyone but the owner.
+ */
+const PREVIEW_OPTIONS: { value: PreviewRole; label: string; ownerOnly?: boolean }[] = [
+  { value: "admin", label: "Admin", ownerOnly: true },
   { value: "site", label: "Site Supervisor" },
   { value: "client", label: "Client" },
 ];
@@ -53,6 +64,7 @@ export function Sidebar({
   const [modsOpen, setModsOpen] = useState(true);
   const [projectsMenuOpen, setProjectsMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const projectsMenuRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [signOutPending, startSignOut] = useTransition();
@@ -296,7 +308,7 @@ export function Sidebar({
                 <div className="px-3 pt-1.5 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                   Preview as
                 </div>
-                {PREVIEW_OPTIONS.map((opt) => (
+                {PREVIEW_OPTIONS.filter((opt) => !opt.ownerOnly || session.role === "owner").map((opt) => (
                   <button
                     key={opt.value}
                     disabled={preview.isPending}
@@ -309,6 +321,15 @@ export function Sidebar({
                 <div className="border-t border-border my-1" />
               </>
             )}
+            <button
+              onClick={() => {
+                setUserMenuOpen(false);
+                setPasswordOpen(true);
+              }}
+              className="flex items-center gap-2 w-full text-left px-3 py-2 text-[13px] text-foreground hover:bg-accent"
+            >
+              Change my password
+            </button>
             <button
               disabled={signOutPending}
               onClick={() => startSignOut(() => signOut())}
@@ -334,6 +355,7 @@ export function Sidebar({
             className="w-3.5 h-3.5 ml-auto text-muted-foreground -rotate-90 flex-none"
           />
         </button>
+        {passwordOpen && <ChangeMyPasswordDialog onClose={() => setPasswordOpen(false)} />}
       </div>
     </aside>
   );

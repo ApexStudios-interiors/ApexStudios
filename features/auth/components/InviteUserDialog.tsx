@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
@@ -81,6 +82,18 @@ export function InviteUserDialog() {
   return (
     <DialogShell
       title="Add User"
+      // D51 discoverability: the missing "Client" option is by design, not an
+      // omission — a client's access is defined by the projects they are on,
+      // so the login is created from the project. Say where, and link there.
+      description={
+        <>
+          Staff only. To create a client login, open the project and use its Client access card —{" "}
+          <Link href="/" onClick={closeDialog} className="underline underline-offset-2">
+            all projects
+          </Link>
+          .
+        </>
+      }
       okLabel={add.isPending ? "Adding…" : "Add User"}
       okPending={add.isPending}
       onClose={closeDialog}

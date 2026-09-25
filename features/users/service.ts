@@ -419,6 +419,62 @@ export async function changeUserActive(
   return { status: "done", userId: target.id, isActive: nextActive };
 }
 
+// ── Change my password ───────────────────────────────────────────────────────
+
+/** Why a self-service password change was refused. No variant carries a password. */
+export type ChangeMyPasswordRefusal =
+  /** The session has no email address, so there is nothing to re-authenticate against. */
+  | "no_email"
+  /** The new password is the current one. */
+  | "same_as_current"
+  /** Re-authentication with the current password failed. */
+  | "wrong_password";
+
+/**
+ * The steps of a self-service change, injected so the ordering is testable
+ * without GoTrue. The real ones are in features/users/actions.ts and both go
+ * through the USER-scoped Supabase client — this path holds no service_role
+ * client and can therefore only ever act on the caller's own account.
+ */
+export type ChangeMyPasswordSteps = {
+  /** Re-authenticates: signs in as `email` with `password`. False if GoTrue refuses. */
+  verifyCurrentPassword: (email: string, password: string) => Promise<boolean>;
+  /** supabase.auth.updateUser({ password }) — the caller's own account. Throws on failure. */
+  setOwnPassword: (password: string) => Promise<void>;
+};
+
+export type ChangeMyPasswordResult =
+  { status: "changed" } | { status: "refused"; reason: ChangeMyPasswordRefusal };
+
+/**
+ * Verify, then change. The current password is required because a session
+ * cookie alone is not evidence that the person at the keyboard is the account
+ * holder — without it, an unlocked laptop is a permanent account takeover.
+ * GoTrue's own `secure_password_change` is off (supabase/config.toml), so this
+ * check is ours to make; the only way to check a password against GoTrue is to
+ * present it, i.e. re-authenticate.
+ *
+ * The cheap refusals come first, so a new password identical to the current
+ * one never reaches Auth. Neither password is logged, returned, or put in any
+ * refusal or error — the result carries a reason and nothing else.
+ */
+export async function changeMyPassword(
+  steps: ChangeMyPasswordSteps,
+  actor: { email: string | null },
+  input: { currentPassword: string; newPassword: string }
+): Promise<ChangeMyPasswordResult> {
+  if (!actor.email) return { status: "refused", reason: "no_email" };
+  if (input.newPassword === input.currentPassword) {
+    return { status: "refused", reason: "same_as_current" };
+  }
+
+  const verified = await steps.verifyCurrentPassword(actor.email, input.currentPassword);
+  if (!verified) return { status: "refused", reason: "wrong_password" };
+
+  await steps.setOwnPassword(input.newPassword);
+  return { status: "changed" };
+}
+
 const LOWER = "abcdefghijkmnpqrstuvwxyz"; // no l, o
 const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // no I, O
 const DIGITS = "23456789"; // no 0, 1

@@ -3,7 +3,7 @@
 import "server-only";
 import { revalidatePath, updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { adminAction } from "@/lib/safe-action";
+import { adminAction, authedAction } from "@/lib/safe-action";
 import {
   createAuthUser,
   deleteAuthUser,
@@ -17,12 +17,14 @@ import { insertProjectMember } from "@/features/projects/members";
 import { countActiveOwners } from "./queries";
 import {
   addUserSchema,
+  changeMyPasswordSchema,
   createClientLoginSchema,
   resetPasswordSchema,
   setUserActiveSchema,
   setUserRoleSchema,
 } from "./schema";
 import {
+  changeMyPassword,
   changeUserActive,
   changeUserRole,
   provisionAccount,
@@ -302,6 +304,60 @@ export const setUserRole = adminAction.inputSchema(setUserRoleSchema).action(asy
   revalidatePath("/users");
   return { status: "changed" as const, role: result.to };
 });
+
+/**
+ * Change my password — every signed-in role, their own account only.
+ *
+ * `authedAction`, not `adminAction`: a site supervisor and a client have the
+ * same right to their own password as the owner. There is no target id in the
+ * input at all, so this action cannot be aimed at anyone else; it acts through
+ * the caller's own RLS-scoped Supabase client, which holds no service_role key
+ * and no GoTrue admin API.
+ *
+ * VERIFYING THE CURRENT PASSWORD. GoTrue exposes no "check this password"
+ * endpoint, and `secure_password_change` is off in supabase/config.toml, so
+ * `updateUser({ password })` on its own would let anyone at an unlocked laptop
+ * take the account. The check is therefore a real re-authentication:
+ * `signInWithPassword` with the session's own email and the typed current
+ * password. It succeeds only for the same account (the email is the session's,
+ * never the browser's), and it issues a fresh session for this browser, which
+ * @supabase/ssr writes back over the current cookies.
+ *
+ * SESSIONS. GoTrue's user-scoped update calls `UpdatePassword(tx, sessionID)`
+ * with the CURRENT session id, which logs out every session except this one
+ * (models.LogoutAllExceptMe) — unlike the admin reset in lib/auth/admin.ts,
+ * which passes nil and ends them all. So the caller stays signed in here and
+ * is signed out everywhere else, which is what the dialog says. If a future
+ * GoTrue were to end this session too, the next navigation simply fails
+ * app/(app)/layout.tsx's session check and redirects to /login — the dialog's
+ * own success state does not depend on the session surviving.
+ *
+ * Neither password is logged, returned, or placed in any error: the refusal is
+ * a reason code, and a thrown error is the failing step's own.
+ */
+export const changeMyPasswordAction = authedAction
+  .inputSchema(changeMyPasswordSchema)
+  .action(async ({ parsedInput, ctx }) => {
+    const supabase = await createClient();
+    const result = await changeMyPassword(
+      {
+        verifyCurrentPassword: async (email, password) => {
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          return !error;
+        },
+        setOwnPassword: async (password) => {
+          const { error } = await supabase.auth.updateUser({ password });
+          // GoTrue's code, never the input — the input is the password.
+          if (error) throw new Error(`updateOwnPassword: ${error.code ?? error.status ?? "unknown"}`);
+        },
+      },
+      { email: ctx.session.email },
+      { currentPassword: parsedInput.currentPassword, newPassword: parsedInput.newPassword }
+    );
+
+    if (result.status === "refused") return { status: "refused" as const, reason: result.reason };
+    return { status: "changed" as const };
+  });
 
 export const setUserActive = adminAction
   .inputSchema(setUserActiveSchema)
