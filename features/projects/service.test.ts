@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { projectCodeBase } from "./service";
+import {
+  LOCATION_MAX_LENGTH,
+  PACKAGE_NAME_MAX_LENGTH,
+  isSameProjectName,
+  isValidLocation,
+  isValidPackageName,
+  normalisePackageNames,
+  projectCodeBase,
+} from "./service";
 
 /** The shape projects_code_ck enforces (migration 0004). */
 const CODE_CK = /^[A-Z0-9]+(-[A-Z0-9]+)*$/;
@@ -44,5 +52,91 @@ describe("projectCodeBase", () => {
       expect(base.length).toBeGreaterThanOrEqual(3);
       expect(base.length).toBeLessThanOrEqual(20);
     }
+  });
+});
+
+describe("isValidLocation", () => {
+  it("accepts a real address", () => {
+    expect(isValidLocation("Ghanpur, Hyderabad")).toBe(true);
+  });
+
+  it("rejects a phone number on its own", () => {
+    expect(isValidLocation("98765456789")).toBe(false);
+  });
+
+  it("rejects digits and punctuation with no letter anywhere", () => {
+    expect(isValidLocation("+91 98765-45678")).toBe(false);
+    expect(isValidLocation("123456")).toBe(false);
+    expect(isValidLocation("!@#$%")).toBe(false);
+  });
+
+  it("stays optional — empty and whitespace-only are fine", () => {
+    expect(isValidLocation("")).toBe(true);
+    expect(isValidLocation("   ")).toBe(true);
+  });
+
+  it("accepts a non-Latin script", () => {
+    expect(isValidLocation("హైదరాబాద్")).toBe(true);
+  });
+
+  it("caps the length at 200 characters, measured after trimming", () => {
+    expect(isValidLocation("A".repeat(LOCATION_MAX_LENGTH))).toBe(true);
+    expect(isValidLocation("A".repeat(LOCATION_MAX_LENGTH + 1))).toBe(false);
+    expect(isValidLocation(`  ${"A".repeat(LOCATION_MAX_LENGTH)}  `)).toBe(true);
+  });
+});
+
+describe("isValidPackageName", () => {
+  it("accepts the names the owner listed", () => {
+    for (const name of ["Interiors", "MEP", "Facade", "MEP & HVAC", "Block-A / Tower 2"]) {
+      expect(isValidPackageName(name)).toBe(true);
+    }
+  });
+
+  it("accepts a dot and a digit", () => {
+    expect(isValidPackageName("Phase 2.1")).toBe(true);
+  });
+
+  it("rejects punctuation soup", () => {
+    expect(isValidPackageName("Facade !@#$%^&*")).toBe(false);
+  });
+
+  it("rejects an empty or whitespace-only entry", () => {
+    expect(isValidPackageName("")).toBe(false);
+    expect(isValidPackageName("   ")).toBe(false);
+  });
+
+  it("measures 1–60 characters after trimming", () => {
+    expect(isValidPackageName(` ${"A".repeat(PACKAGE_NAME_MAX_LENGTH)} `)).toBe(true);
+    expect(isValidPackageName("A".repeat(PACKAGE_NAME_MAX_LENGTH + 1))).toBe(false);
+  });
+});
+
+describe("normalisePackageNames", () => {
+  it("splits nothing — it trims, drops blanks and drops duplicates", () => {
+    expect(normalisePackageNames(["Interiors", " MEP ", "", "   ", "Facade"])).toEqual([
+      "Interiors",
+      "MEP",
+      "Facade",
+    ]);
+  });
+
+  it("drops a case-insensitive duplicate, keeping the first spelling", () => {
+    expect(normalisePackageNames(["Interiors", "interiors", "INTERIORS"])).toEqual(["Interiors"]);
+  });
+
+  it("leaves an empty submission empty", () => {
+    expect(normalisePackageNames([])).toEqual([]);
+    expect(normalisePackageNames(["", " "])).toEqual([]);
+  });
+});
+
+describe("isSameProjectName", () => {
+  it("ignores case and surrounding whitespace", () => {
+    expect(isSameProjectName("Model Villas", " model villas ")).toBe(true);
+  });
+
+  it("does not treat different names as the same", () => {
+    expect(isSameProjectName("Model Villas", "Model Villas 2")).toBe(false);
   });
 });

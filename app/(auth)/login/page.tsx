@@ -53,6 +53,18 @@ function LoginForm() {
     },
   });
 
+  // next-safe-action's default ("formatted") validation-error shape: one node
+  // per field, each with its own `_errors`. loginSchema requires both fields,
+  // so an empty submit lands here rather than in `data`/`serverError` — which
+  // is why an empty form used to fail silently. Shown beneath the field it
+  // belongs to, the same way every react-hook-form dialog shows
+  // `errors.x.message`.
+  const usernameError = login.result.validationErrors?.username?._errors?.[0];
+  const passwordError = login.result.validationErrors?.password?._errors?.[0];
+  // Deliberately generic, and deliberately NOT per-field: naming which of the
+  // two was wrong would let anyone enumerate usernames.
+  const signInError = login.result.data?.ok === false ? login.result.data.message : login.result.serverError;
+
   return (
     <Card className="p-5">
       <h1 className="text-[17px] font-bold tracking-tight mb-4">Sign in</h1>
@@ -73,9 +85,16 @@ function LoginForm() {
             spellCheck={false}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
+            aria-invalid={!!usernameError}
+            aria-describedby={usernameError ? "login-username-error" : undefined}
             autoFocus
           />
         </Field>
+        {usernameError && (
+          <p id="login-username-error" className="text-[12.5px] text-destructive -mt-2">
+            {usernameError}
+          </p>
+        )}
         {/* Not <Field>: the show/hide control sits beside the label, OUTSIDE
             the input. Inside the input's right edge it was covered by the
             autofill/key icon Safari, Chrome and password managers draw there. */}
@@ -102,13 +121,16 @@ function LoginForm() {
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            aria-invalid={!!passwordError}
+            aria-describedby={passwordError ? "login-password-error" : undefined}
           />
+          {passwordError && (
+            <p id="login-password-error" className="text-[12.5px] text-destructive mt-1.5">
+              {passwordError}
+            </p>
+          )}
         </div>
-        {(login.result.data?.ok === false || login.result.serverError) && (
-          <p className="text-[12.5px] text-destructive">
-            {login.result.data?.ok === false ? login.result.data.message : login.result.serverError}
-          </p>
-        )}
+        {signInError && <p className="text-[12.5px] text-destructive">{signInError}</p>}
         <Button type="submit" variant="primary" disabled={login.isPending}>
           {login.isPending ? "Signing in…" : "Sign in"}
         </Button>
