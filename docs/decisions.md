@@ -1718,6 +1718,100 @@ hidden.** D54 is unaffected; this does not reopen the general money-visibility r
   there is no non-production database to run it against (D49).
 
 ---
+### D56 — The notification bell counts open work, not unread items
+
+**Question:** A tester reported that opening a notification does not decrease the count, and expected
+it to behave like an inbox.
+**Answered:** 2026-09-25 by Voola — **leave the behaviour as it is.**
+**Answer:** The bell reads live from `v_notifications` and has no per-user read state, exactly as
+ADR-014 decided ("No notification table, no read state"). An item leaves the list when the WORK is
+done — the stock request is approved, the bill certified, the approval decided — not when someone
+looks at it.
+**Reasoning:** Read state would need a new table, a write on every glance, and would make the badge
+mean "things you have not looked at" instead of "things needing action". For a four-person team
+where the list IS the to-do list, the second meaning is the useful one. The alternative considered
+and rejected was clearing the badge when the menu opens, which stores nothing and therefore returns
+on the next refresh — more confusing than the present behaviour, not less.
+**Consequence:** the Docs page now states this in the Notifications glossary entry, so it is not
+re-reported as a bug.
+
+---
+
+### D57 — New Project: light field validation, and duplicate names warn rather than block
+
+**Question:** A tester created a project with a phone number as the Location, `Facade !@#$%^&*` as a
+package name, and a second project with a name already in use. All three were accepted.
+**Answered:** 2026-09-25 by Voola.
+**Answer:**
+- **Location** — must contain at least one letter, max 200 characters. `"98765456789"` is refused;
+  `"Ghanpur, Hyderabad"` is fine. Still optional.
+- **Package names** — letters, numbers, spaces and `& - . /` only, 1–60 characters each; blanks and
+  case-insensitive duplicates within one submission are dropped. `"MEP & HVAC"` and
+  `"Block-A / Tower 2"` pass; the refusal names the offending entry.
+- **Duplicate project name** — **warn, then allow.** A second project may share a name after a
+  deliberate "Create anyway"; the project CODE is already auto-uniqued (`SNOWFLAK`, `SNOWFLAK-2`).
+**Reasoning:** Strict alphanumeric was considered and rejected — it would refuse `"MEP & HVAC"` and
+`"Ghanpur, Hyderabad"`, which are the real names this business uses. On duplicates, a hard unique
+constraint would block the legitimate case of two phases of one site sharing a name; the code, which
+is what appears on every bill number forever, is the identifier that genuinely must not collide.
+**Consequence:** the validators are pure functions in `features/projects/service.ts`, applied by the
+zod schema so the Server Action enforces them (a crafted request cannot bypass), and by the dialog
+for immediate feedback. `updateProjectSchema` uses the same validators, so the create and edit paths
+cannot drift — that path has no UI today, so whoever builds the edit screen inherits the rule.
+The duplicate check is a query the dialog runs, never a server-side rejection.
+
+---
+
+### D58 — Removing a photo from a form deletes its attachment row (a hard delete)
+
+**Question:** A tester could not re-upload an image after removing it. `requestUploadUrl` counts
+every `attachments` row for the entity against `MAX_PHOTOS_PER_ENTITY` (4), and the UI's remove
+never deleted the row — so each upload consumed a slot permanently and the server eventually
+refused with "this daily_update already has 4 attachments", which surfaced as nothing happening.
+**Answered:** 2026-09-25.
+**Answer:** Removing a file from a form now DELETES its `attachments` row through the user's own
+client, so RLS decides. The existing policy `att_delete_uploader` already sanctions exactly this:
+`uploaded_by = auth.uid() and created_at > now() - interval '24 hours'`.
+**Why a hard delete, against AGENTS.md database rule 7 ("soft delete only"):** `attachments` has no
+UPDATE policy, so a user cannot soft-delete at all — closing this any other way would mean a new
+policy or an RPC. Rule 7 exists because GST record retention and stock arithmetic break when rows
+vanish; neither applies to a photo removed from a form that was never submitted, and the schema's
+own DELETE policy is the sanctioned exception. Note for the record: a soft delete WOULD have freed
+the slot (the count filters `deleted_at is null`) — it was simply not available to a user.
+**Consequence:** failure is non-fatal — the tile disappears and the form still submits; a refused
+delete costs one leaked slot, which is the old behaviour, not a regression. After 24 hours the
+policy stops matching and the slot stays consumed, which is stated in the action's own comment
+rather than pretended away. The R2 object is collected by `attachment.orphan_sweep`, the same path a
+cancelled dialog already takes.
+
+---
+
+### D59 — Self-service password change, and the owner may preview as Admin
+
+**Question:** Testing found the owner had no way to change their own password at all, and asked for
+Preview as to include Admin.
+**Answered:** 2026-09-25 by Voola.
+**Answer (passwords):** Any signed-in user may change their OWN password from the sidebar user menu.
+The current password is required and is verified by genuinely re-authenticating (GoTrue has no
+"check this password" call, and `secure_password_change` is off, so nothing else would have checked
+it). Minimum 12 characters, matching `minimum_password_length` in `supabase/config.toml`. A
+self-service change keeps the CURRENT session and ends every other one — unlike the admin Reset
+button (`updateUserById`), which ends them all.
+**Why it was needed:** D52 refuses a self-reset through the admin button and D54 refuses an admin
+resetting the owner, so the owner's only recovery was a service-role script. That is not a password
+policy, it is a lockout waiting to happen.
+**Answer (preview):** Preview as now offers Admin **to the owner alone**. Enforced server-side in
+`startPreview` against the REAL session role, and again in `getSession`, which ignores an `admin`
+preview cookie held by anyone but the owner — the cookie outlives the session that minted it by up
+to 15 minutes, so a demoted owner would otherwise keep admin shaping. It is a narrowing, not a
+widening: `admin` holds no capability `owner` lacks, and `impersonating` shapes reads only. The D20
+audit row records the previewed role unchanged.
+**Also:** Add User offers staff roles only, by design (D51) — a client login is created per project
+from the Client access card. Testers read the absent option as a missing feature, so both the Add
+User dialog and the Users page now say where client logins come from.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |
