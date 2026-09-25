@@ -14,7 +14,13 @@ import {
   setProjectStatusSchema,
   updateProjectSchema,
 } from "./schema";
-import { parseRateVisibility, projectCodeBase, type RateVisibility } from "./service";
+import {
+  isSameProjectName,
+  normalisePackageNames,
+  parseRateVisibility,
+  projectCodeBase,
+  type RateVisibility,
+} from "./service";
 import { insertProjectMember } from "./members";
 
 /**
@@ -51,7 +57,10 @@ export const createProject = adminAction.inputSchema(createProjectSchema).action
     // genuinely accept null.
     p_location: (parsedInput.location ?? null) as unknown as string,
     p_start_date: parsedInput.startDate,
-    p_package_names: parsedInput.packages,
+    // Blanks and within-submission duplicates dropped here, not in the form:
+    // the schema has already refused any name that is not a name, and this is
+    // the last point a crafted request passes through.
+    p_package_names: normalisePackageNames(parsedInput.packages),
   });
   if (error) throw new Error(error.message);
 
@@ -178,6 +187,32 @@ export async function getProjectRateVisibility(projectId: string): Promise<RateV
     .maybeSingle();
   if (error) throw new Error(error.message);
   return parseRateVisibility(data?.rate_visibility);
+}
+
+/**
+ * The New Project dialog's duplicate-name check — a WARNING, never a rejection.
+ * Two projects genuinely may share a name (a repeat commission for the same
+ * client, a second phase), and `rpc_create_project` already makes the project
+ * code unique, so nothing breaks; the person is told and decides. That is why
+ * this lives here as a read rather than in `createProject`, and why there is
+ * no unique constraint in the database.
+ *
+ * Names are compared in JS rather than with `ilike`: a project name may
+ * legitimately contain `%` or `_`, which are wildcards in a LIKE pattern. One
+ * org's project list is small (tens of rows), and RLS scopes it to the
+ * caller's org and the soft-delete filter is explicit.
+ */
+export async function findProjectWithName(name: string): Promise<{ id: string; name: string } | null> {
+  "use server";
+  await requireRole(["owner", "admin"]);
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("projects")
+    .select("id, name")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return data.find((project) => isSameProjectName(project.name, name)) ?? null;
 }
 
 /**

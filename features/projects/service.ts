@@ -107,3 +107,63 @@ export function siteMayEnterRate(mode: RateVisibility): boolean {
 export function siteMaySeeRateField(mode: RateVisibility): boolean {
   return mode === "readonly" || mode === "editable";
 }
+
+// ── New Project field validation ─────────────────────────────────────────────
+// Pure, so the form and the Server Action apply exactly the same rules — the
+// action is the boundary, the form is only the convenience.
+
+/** Location is free text (an Indian site address has no fixed shape), so the
+ *  check is deliberately light: it exists only to reject a value that is
+ *  plainly not a place. */
+export const LOCATION_MAX_LENGTH = 200;
+
+/** At least one letter, in any script — "Ghanpur, Hyderabad" passes,
+ *  "98765456789" does not. Empty stays legal: Location is optional. */
+export function isValidLocation(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed === "") return true;
+  if (trimmed.length > LOCATION_MAX_LENGTH) return false;
+  return /\p{L}/u.test(trimmed);
+}
+
+export const PACKAGE_NAME_MAX_LENGTH = 60;
+
+/** Letters, numbers, spaces and `& - . /` — enough for "MEP & HVAC" and
+ *  "Block-A / Tower 2", and nothing else. The name ends up in a project's
+ *  package list and in exports, so punctuation soup is rejected rather than
+ *  stored. Applied to the already-trimmed name. */
+const PACKAGE_NAME_ALLOWED = /^[\p{L}\p{N} &\-./]+$/u;
+
+export function isValidPackageName(name: string): boolean {
+  const trimmed = name.trim();
+  return (
+    trimmed.length >= 1 && trimmed.length <= PACKAGE_NAME_MAX_LENGTH && PACKAGE_NAME_ALLOWED.test(trimmed)
+  );
+}
+
+/**
+ * The package names a submission actually creates: each trimmed, blanks
+ * dropped, and duplicates within the one submission dropped case-insensitively
+ * (the first spelling wins). Validation is separate — this only normalises.
+ */
+export function normalisePackageNames(names: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of names) {
+    const name = raw.trim();
+    if (name === "") continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
+}
+
+/** Whether two project names are "the same name" for the duplicate warning —
+ *  case- and surrounding-whitespace-insensitive. A warning only: a duplicate
+ *  name is allowed (the code is auto-uniqued), so this is never a reason to
+ *  reject a write. */
+export function isSameProjectName(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}

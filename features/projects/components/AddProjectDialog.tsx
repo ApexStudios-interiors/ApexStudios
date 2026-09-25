@@ -6,9 +6,16 @@ import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
-import { createProjectSchema } from "@/features/projects/schema";
-import { createProject, getClientOptions, previewProjectCode } from "@/features/projects/actions";
+import { createProjectSchema, packageNameMessage } from "@/features/projects/schema";
+import { isValidPackageName, normalisePackageNames } from "@/features/projects/service";
+import {
+  createProject,
+  findProjectWithName,
+  getClientOptions,
+  previewProjectCode,
+} from "@/features/projects/actions";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
+import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/shared/DatePicker";
 import { ClientCombobox, type ClientOption } from "./ClientCombobox";
 
@@ -81,23 +88,69 @@ export function AddProjectDialog() {
   // The prototype's "comma separated" packages field is a single text input,
   // not an array field react-hook-form registers directly — kept as its own
   // bit of local state and split at submit time, same as the prototype did.
+  // Because it is not registered, its zod issues never reach `errors`, so the
+  // same pure rule is applied here explicitly. createProjectSchema decides
+  // again on the server, which is the boundary: a crafted request cannot get
+  // past it.
   const [packagesText, setPackagesText] = useState("");
+  const [packagesError, setPackagesError] = useState<string | null>(null);
 
-  const onSubmit = handleSubmit((values) => {
-    create.execute({
-      ...values,
-      packages: packagesText
+  // A project with the same name is allowed (a second phase for the same
+  // client is a real thing, and the project code is auto-uniqued), so this is
+  // a warning that asks for one more deliberate click — never a rejection.
+  // `for` is the name the warning is about, so editing the name away from it
+  // retires the warning without an effect that resets state.
+  const [duplicate, setDuplicate] = useState<{ for: string; id: string; name: string } | null>(null);
+  const [checkingDuplicate, setCheckingDuplicate] = useState(false);
+  const duplicateShown = duplicate?.for === trimmedName.toLowerCase() ? duplicate : null;
+
+  /** `confirmed` is the second, deliberate action: "Create anyway" submits the
+   *  same form with the duplicate check skipped. Passed as an argument rather
+   *  than held in state, so the confirming click cannot read a stale value. */
+  const submitWith = (confirmed: boolean) =>
+    handleSubmit(async (values) => {
+      const entries = packagesText
         .split(",")
         .map((s) => s.trim())
-        .filter(Boolean),
+        .filter(Boolean);
+      const offender = entries.find((name) => !isValidPackageName(name));
+      if (offender) {
+        setPackagesError(packageNameMessage(offender));
+        return;
+      }
+      setPackagesError(null);
+
+      if (!confirmed) {
+        setCheckingDuplicate(true);
+        try {
+          const existing = await findProjectWithName(values.name);
+          if (existing) {
+            setDuplicate({ ...existing, for: values.name.toLowerCase() });
+            return;
+          }
+        } catch {
+          toast("Could not check for an existing project with this name.");
+        } finally {
+          setCheckingDuplicate(false);
+        }
+      }
+      setDuplicate(null);
+
+      create.execute({ ...values, packages: normalisePackageNames(entries) });
     });
-  });
+
+  const onSubmit = (e?: React.BaseSyntheticEvent) => {
+    void submitWith(false)(e);
+  };
+  const createAnyway = () => {
+    void submitWith(true)();
+  };
 
   return (
     <DialogShell
       title="New Project"
       okLabel={create.isPending ? "Creating…" : "Create"}
-      okPending={create.isPending}
+      okPending={create.isPending || checkingDuplicate}
       onClose={closeDialog}
       onOk={onSubmit}
     >
@@ -144,9 +197,17 @@ export function AddProjectDialog() {
             />
           </Field>
         </div>
-        <Field label="Location" htmlFor="ap-location">
-          <input id="ap-location" className={inputClass} {...register("location")} />
-        </Field>
+        <div>
+          <Field label="Location" htmlFor="ap-location">
+            <input
+              id="ap-location"
+              className={inputClass}
+              placeholder="Ghanpur, Hyderabad"
+              {...register("location")}
+            />
+          </Field>
+          {errors.location && <p className="text-xs text-destructive mt-1">{errors.location.message}</p>}
+        </div>
         <Field label="Start Date" htmlFor="ap-start">
           <Controller
             control={control}
@@ -164,16 +225,36 @@ export function AddProjectDialog() {
           />
         </Field>
         <div className="col-span-2">
-          <Field label="Packages" hint="Comma separated" htmlFor="ap-packages">
+          <Field
+            label="Packages"
+            hint="Comma separated. Letters, numbers, spaces and & - . / only, up to 60 characters each."
+            htmlFor="ap-packages"
+          >
             <input
               id="ap-packages"
               className={inputClass}
               placeholder="Interiors, MEP, Facade"
               value={packagesText}
-              onChange={(e) => setPackagesText(e.target.value)}
+              onChange={(e) => {
+                setPackagesText(e.target.value);
+                setPackagesError(null);
+              }}
+              aria-invalid={!!packagesError}
             />
           </Field>
+          {packagesError && <p className="text-xs text-destructive mt-1">{packagesError}</p>}
         </div>
+        {duplicateShown && (
+          <div className="col-span-2 rounded-lg bg-status-warning-bg px-3 py-2.5">
+            <p className="text-[12.5px] text-status-warning">
+              A project called “{duplicateShown.name}” already exists. You can still create this one — its
+              project code will be different — but check it is not a duplicate first.
+            </p>
+            <Button type="button" className="mt-2" onClick={createAnyway} disabled={create.isPending}>
+              Create anyway
+            </Button>
+          </div>
+        )}
         {create.result.serverError && (
           <p className="col-span-2 text-[12.5px] text-destructive">{create.result.serverError}</p>
         )}
