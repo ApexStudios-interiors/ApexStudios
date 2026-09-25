@@ -48,6 +48,19 @@ export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: strin
   // Owner has a `null` item because "To assign" is a real choice a user can
   // go back to; Phase has none because its empty option was only a placeholder.
   const phaseItems = useMemo(() => (phases ?? []).map((p) => ({ value: p.id, label: p.name })), [phases]);
+  // Three states, not two — the same fix NewRequestDialog needed ("Loading…"
+  // shown forever for a package with no phases). `null` means the fetch has
+  // not returned; `[]` means it has and this package genuinely has none.
+  // Collapsing both onto `!phases` left the field ENABLED and saying
+  // "Select a phase" over an empty list, which reads as broken.
+  //
+  // Unlike the stock form, Phase is REQUIRED here: `createTaskSchema.phaseId`
+  // is `z.uuid()`, with no ""-to-undefined escape. A package with no phases
+  // is therefore a dead end for Add Task, so the dialog says so up front and
+  // disables Add rather than letting the whole form be filled in and fail on
+  // submit.
+  const phasesLoading = phases === null;
+  const noPhases = phases !== null && phases.length === 0;
   const ownerItems = useMemo(
     () => [
       { value: null, label: owners ? "To assign" : "Loading…" },
@@ -84,6 +97,9 @@ export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: strin
       title="Add Task"
       okLabel={create.isPending ? "Adding…" : "Add"}
       okPending={create.isPending}
+      // Nothing to choose and Phase is required: the form cannot succeed, so
+      // don't let it be filled in and submitted only to fail.
+      okDisabled={noPhases}
       onClose={closeDialog}
       onOk={onSubmit}
     >
@@ -110,17 +126,21 @@ export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: strin
               render={({ field }) => (
                 <Select
                   items={phaseItems}
-                  disabled={!phases}
+                  disabled={!phases?.length}
                   // null until options load: no items means no label, and a
                   // set id would print as a raw UUID.
-                  value={phases ? field.value || null : null}
+                  value={phases?.length ? field.value || null : null}
                   onValueChange={(value: string | null) => field.onChange(value ?? "")}
                   onOpenChange={(open) => {
                     if (!open) field.onBlur();
                   }}
                 >
                   <SelectTrigger id="at-phase" ref={field.ref} className="h-9 w-full text-[13.5px]">
-                    <SelectValue placeholder={phases ? "Select a phase" : "Loading…"} />
+                    <SelectValue
+                      placeholder={
+                        phasesLoading ? "Loading…" : noPhases ? "No phases in this package" : "Select a phase"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
@@ -135,7 +155,14 @@ export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: strin
               )}
             />
           </Field>
-          {errors.phaseId && <p className="text-xs text-destructive mt-1">{errors.phaseId.message}</p>}
+          {noPhases ? (
+            <p className="text-xs text-muted-foreground mt-1">
+              This package has no phases yet. Add a phase to it before adding a task — a task must belong to
+              one.
+            </p>
+          ) : (
+            errors.phaseId && <p className="text-xs text-destructive mt-1">{errors.phaseId.message}</p>
+          )}
         </div>
         <div className="col-span-2">
           <Field label="Owner" htmlFor="at-owner">
