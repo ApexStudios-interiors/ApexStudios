@@ -263,7 +263,18 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
                   >
                     <SelectValue
                       placeholder={
-                        visiblePhases?.length ? "None" : packageId ? "Loading…" : "Select a package first"
+                        // Three states, not two: `null` means the fetch has not
+                        // returned yet; `[]` means it has and the package simply
+                        // has no phases. Collapsing both onto `.length` showed
+                        // "Loading…" forever for a package with zero phases,
+                        // which is a legitimate state — Phase is optional.
+                        !packageId
+                          ? "Select a package first"
+                          : visiblePhases === null
+                            ? "Loading…"
+                            : visiblePhases.length === 0
+                              ? "No phases in this package"
+                              : "None"
                       }
                     />
                   </SelectTrigger>
