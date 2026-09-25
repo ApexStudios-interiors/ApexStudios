@@ -317,6 +317,12 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
               id="nr-qty"
               type="number"
               step="any"
+              // Negative quantities are rejected by the schema, so the
+              // stepper must not offer them in the first place: `min` stops
+              // the spinner and the browser's own validation below zero.
+              // The schema still owns the real rule (`positive()`), which is
+              // stricter than `min=0` — 0 is refused with a message.
+              min={0}
               className={inputClass}
               placeholder="0"
               {...register("qty")}
@@ -378,11 +384,19 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
               id="nr-rate"
               type="number"
               step="any"
+              // Same reason as Quantity above: `rate` is `nonnegative()`, so
+              // the stepper cannot be allowed to reach a value the schema
+              // will only ever refuse.
+              min={0}
               className={inputClass}
               placeholder={rateDisabled ? "Set by admin" : "Optional"}
               disabled={rateDisabled}
               {...register("rate")}
             />
+            {/* Rate had no error paragraph at all, so a rejected value (a
+                negative rate) was silently dropped with nothing on screen —
+                rendered here the same way every other field's message is. */}
+            {errors.rate && <p className="text-xs text-destructive mt-1">{errors.rate.message}</p>}
           </Field>
         )}
         <div className="col-span-2">

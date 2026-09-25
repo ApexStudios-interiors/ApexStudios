@@ -36,7 +36,10 @@ export const createStockRequestSchema = z.object({
   // real rate of ₹0 instead of "not specified." Preprocessing "" to
   // undefined first is the same "" -> undefined shape as phaseId/neededBy
   // above, just ahead of the coercion instead of after it.
-  rate: z.preprocess((v) => (v === "" ? undefined : v), z.coerce.number().nonnegative().optional()),
+  rate: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.coerce.number().nonnegative("Rate cannot be negative").optional()
+  ),
   neededBy: z
     .union([z.iso.date(), z.literal("")])
     .optional()
