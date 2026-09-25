@@ -19,6 +19,21 @@ import type { Role } from "@/lib/rbac/roles";
 const COOKIE_NAME = "apex_preview";
 const TTL_MS = 15 * 60 * 1000;
 
+/**
+ * The roles a preview may be started as. `owner` is deliberately absent — a
+ * preview only ever narrows, and there is nothing above the owner to preview.
+ * `admin` is owner-only, which is a property of the CALLER, not of the cookie:
+ * it is enforced in features/auth/impersonation-actions.ts (the real session
+ * role, before the cookie is minted) and again in lib/auth/session.ts (which
+ * ignores an admin preview held by anyone but the owner).
+ */
+export const PREVIEW_ROLES = ["client", "site", "admin"] as const;
+export type PreviewRole = (typeof PREVIEW_ROLES)[number];
+
+function isPreviewRole(role: unknown): role is PreviewRole {
+  return (PREVIEW_ROLES as readonly unknown[]).includes(role);
+}
+
 export type ImpersonationPayload = { role: Role; projectId: string; issuedAt: number };
 
 function sign(payload: string): string {
@@ -26,7 +41,7 @@ function sign(payload: string): string {
 }
 
 export function encodePreviewCookie(
-  role: Role,
+  role: PreviewRole,
   projectId: string
 ): { name: string; value: string; maxAge: number } {
   const payload: ImpersonationPayload = { role, projectId, issuedAt: Date.now() };
@@ -56,7 +71,7 @@ export function decodePreviewCookie(raw: string | undefined): ImpersonationPaylo
     return null;
   }
   if (Date.now() - payload.issuedAt > TTL_MS) return null;
-  if (payload.role !== "client" && payload.role !== "site") return null;
+  if (!isPreviewRole(payload.role)) return null;
   if (typeof payload.projectId !== "string" || !payload.projectId) return null;
   return payload;
 }

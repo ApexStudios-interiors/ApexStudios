@@ -85,3 +85,44 @@ export const setUserActiveSchema = z.object({
   isActive: z.boolean(),
 });
 export type SetUserActiveInput = z.infer<typeof setUserActiveSchema>;
+
+/**
+ * Change my password — the self-service path every signed-in role has, and the
+ * only password path the owner has at all: D52 refuses resetting your OWN
+ * password through the admin Reset button (`passwordResetRefusal` → `self`),
+ * and D54 refuses an admin acting on the owner.
+ *
+ * The minimum is 12 characters, the same number as
+ * `supabase/config.toml`'s `minimum_password_length`. Lower would only move
+ * the refusal to GoTrue, whose message is not ours to write; higher would
+ * refuse a password the admin Reset path would happily set. Length is the only
+ * strength rule — NIST SP 800-63B asks for a length floor and advises against
+ * composition rules.
+ *
+ * The maximum is 72 BYTES: bcrypt's own input limit, which GoTrue hashes with,
+ * checked here so the message is a useful one rather than a 422 from Auth.
+ */
+export const PASSWORD_MIN_LENGTH = 12;
+export const PASSWORD_MAX_BYTES = 72;
+
+export const changeMyPasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Enter your current password"),
+    newPassword: z
+      .string()
+      .min(PASSWORD_MIN_LENGTH, `At least ${PASSWORD_MIN_LENGTH} characters`)
+      .refine(
+        (v) => new TextEncoder().encode(v).length <= PASSWORD_MAX_BYTES,
+        `At most ${PASSWORD_MAX_BYTES} bytes`
+      ),
+    confirmPassword: z.string().min(1, "Repeat the new password"),
+  })
+  .refine((v) => v.newPassword === v.confirmPassword, {
+    path: ["confirmPassword"],
+    message: "The two passwords don't match",
+  })
+  .refine((v) => v.newPassword !== v.currentPassword, {
+    path: ["newPassword"],
+    message: "Choose a password different from your current one",
+  });
+export type ChangeMyPasswordInput = z.infer<typeof changeMyPasswordSchema>;

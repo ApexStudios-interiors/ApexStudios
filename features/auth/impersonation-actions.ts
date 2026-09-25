@@ -6,7 +6,8 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { adminAction, authedAction } from "@/lib/safe-action";
 import { createClient } from "@/lib/supabase/server";
-import { encodePreviewCookie, PREVIEW_COOKIE_NAME } from "@/lib/auth/impersonation";
+import { encodePreviewCookie, PREVIEW_COOKIE_NAME, PREVIEW_ROLES } from "@/lib/auth/impersonation";
+import { ForbiddenError } from "@/lib/auth/session";
 
 /**
  * D20. Read the module doc on lib/auth/session.ts's `impersonating` field
@@ -16,13 +17,24 @@ import { encodePreviewCookie, PREVIEW_COOKIE_NAME } from "@/lib/auth/impersonati
  * like every other guarded action, before it will even start a preview.
  */
 const startSchema = z.object({
-  role: z.enum(["client", "site"]),
+  role: z.enum(PREVIEW_ROLES),
   // Mock AppContext project id today; a real uuid once Build 04 lands. See
   // the migration's own comment for why this is text, not a project FK.
   projectId: z.string().min(1),
 });
 
-export const startPreview = adminAction.inputSchema(startSchema).action(async ({ parsedInput }) => {
+export const startPreview = adminAction.inputSchema(startSchema).action(async ({ parsedInput, ctx }) => {
+  // Previewing as Admin is the OWNER's alone. Checked here, against the REAL
+  // session role (adminAction's requireRole ignores the preview cookie), not
+  // merely by which entries the sidebar renders — an admin previewing as admin
+  // gains nothing but would put an admin-shaped view behind a preview banner
+  // that says a write will be refused, and no lesser role may reach it at all.
+  // For the owner this is a narrowing: CAN (lib/rbac/permissions.ts) gives
+  // `admin` no capability `owner` lacks, so the previewed reads are a subset.
+  if (parsedInput.role === "admin" && ctx.session.role !== "owner") {
+    throw new ForbiddenError("startPreview: previewing as admin is owner-only");
+  }
+
   const supabase = await createClient();
   const { error } = await supabase.rpc("rpc_log_impersonation", {
     p_action: "start",

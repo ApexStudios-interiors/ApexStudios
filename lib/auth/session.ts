@@ -95,7 +95,13 @@ export const getSession = cache(async (): Promise<Session | null> => {
   if (role === "owner" || role === "admin") {
     const cookieStore = await cookies();
     const preview = decodePreviewCookie(cookieStore.get(PREVIEW_COOKIE_NAME)?.value);
-    if (preview) impersonating = { role: preview.role, projectId: preview.projectId };
+    // Previewing as Admin is the owner's alone (D20). startPreview refuses it
+    // for anyone else, so a cookie should never exist here — but a cookie
+    // outlives the session that minted it (15 minutes), and an owner demoted
+    // to admin mid-preview would otherwise keep an admin-shaped view of their
+    // own reads. Ignoring it costs nothing and closes that window.
+    const previewAllowed = preview && (preview.role !== "admin" || role === "owner");
+    if (preview && previewAllowed) impersonating = { role: preview.role, projectId: preview.projectId };
   }
 
   return {
