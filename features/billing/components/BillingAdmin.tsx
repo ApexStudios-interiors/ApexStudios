@@ -19,6 +19,7 @@ import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, sub } from "@/components/ui/table";
 import { Empty } from "@/components/ui/Empty";
 import { Icon } from "@/components/ui/Icon";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type Rates = {
   gstRatePct: number;
@@ -101,6 +102,18 @@ export function BillingAdmin({
     return previewBill(lines, rates);
   }, [selItems, rates]);
 
+  // Why Create Bill cannot act, in the user's terms. `null` while the fetch
+  // is still in flight or a creation is under way — the button's own
+  // "Creating…" label and the table's Loading row already say that.
+  const disabledReason =
+    pending || items === null
+      ? null
+      : items.length === 0
+        ? "Nothing is billable yet. Items appear here when materials are delivered or milestones complete."
+        : selItems.length === 0
+          ? "Select at least one item to bill."
+          : null;
+
   const toggle = (sourceId: string) => {
     const next = new Set(sel);
     if (next.has(sourceId)) next.delete(sourceId);
@@ -176,10 +189,31 @@ export function BillingAdmin({
               {selItems.length} selected · {formatINR(preview.grossAmount)} · margin{" "}
               {formatINR(preview.marginAmount)}
             </span>
-            <Button variant="primary" size="sm" disabled={!selItems.length || pending} onClick={handleCreate}>
-              <Icon name="plus" className="w-[15px] h-[15px]" />
-              {pending ? "Creating…" : "Create Bill"}
-            </Button>
+            <Tooltip>
+              {/* A disabled button fires no pointer events, so the tooltip
+                  hangs off a focusable wrapper instead — the same shape as
+                  features/inventory/components/MinimumStockInfo.tsx. */}
+              <TooltipTrigger
+                render={<span />}
+                tabIndex={disabledReason ? 0 : -1}
+                className="inline-flex rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={!selItems.length || pending}
+                  onClick={handleCreate}
+                >
+                  <Icon name="plus" className="w-[15px] h-[15px]" />
+                  {pending ? "Creating…" : "Create Bill"}
+                </Button>
+              </TooltipTrigger>
+              {disabledReason && (
+                <TooltipContent className="max-w-[260px] text-left font-normal normal-case tracking-normal">
+                  {disabledReason}
+                </TooltipContent>
+              )}
+            </Tooltip>
           </div>
         </CardHeader>
         <TableWrap>
