@@ -21,6 +21,10 @@ const locationField = z
   .max(LOCATION_MAX_LENGTH, `Location must be ${LOCATION_MAX_LENGTH} characters or fewer`)
   .refine(isValidLocation, LOCATION_MESSAGE);
 
+/** A project name, on every path that sets one. Defined once so create and
+ *  update cannot drift apart. */
+const nameField = z.string().trim().min(1, "Name is required");
+
 /** Named for the offending entry, so the person can see which one to fix. */
 export function packageNameMessage(name: string): string {
   return `"${name}" is not a valid package name — use letters, numbers, spaces and & - . / only, up to ${PACKAGE_NAME_MAX_LENGTH} characters.`;
@@ -52,7 +56,7 @@ const packagesField = z
  * and rpc_create_project), so a browser cannot choose one.
  */
 export const createProjectSchema = z.object({
-  name: z.string().trim().min(1, "Name is required"),
+  name: nameField,
   clientId: z.uuid("Select or create a client"),
   location: locationField.optional(),
   startDate: z.iso.date(),
@@ -72,10 +76,18 @@ export const createClientSchema = z.object({
 });
 export type CreateClientInput = z.infer<typeof createClientSchema>;
 
+/**
+ * Editing an existing project. Every field it shares with the create path is
+ * built from the SAME `nameField` / `locationField`, so a value the New Project
+ * dialog refuses cannot be set by editing instead — the two schemas cannot
+ * disagree, because there is only one definition of each rule. It carries no
+ * package names: packages are created by `createProject` and maintained by the
+ * packages feature, never by this action.
+ */
 export const updateProjectSchema = z.object({
   id: z.uuid(),
-  name: z.string().trim().min(1).optional(),
-  location: z.string().trim().optional(),
+  name: nameField.optional(),
+  location: locationField.optional(),
   targetEndDate: z.iso.date().optional(),
   contractValue: z.string().optional(),
 });

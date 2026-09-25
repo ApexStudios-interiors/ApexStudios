@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createProjectSchema } from "./schema";
+import { createProjectSchema, updateProjectSchema } from "./schema";
 
 /**
  * The form applies these rules too, but the form is a convenience: this is the
@@ -50,5 +50,36 @@ describe("createProjectSchema", () => {
   it("tolerates blank entries — a trailing comma is a typo, not an error", () => {
     const result = createProjectSchema.safeParse({ ...base, packages: ["Interiors", "", "  "] });
     expect(result.success).toBe(true);
+  });
+});
+
+/**
+ * The edit path must refuse exactly what the create path refuses — otherwise a
+ * location the New Project dialog rejects becomes settable by editing instead.
+ * Nothing in the app calls `updateProject` today; these tests are what stops
+ * the rule being rediscovered when the edit screen is built.
+ */
+describe("updateProjectSchema", () => {
+  const id = "22222222-2222-4222-8222-222222222222";
+
+  it("accepts a real location", () => {
+    expect(updateProjectSchema.safeParse({ id, location: "Ghanpur, Hyderabad" }).success).toBe(true);
+  });
+
+  it("keeps location optional — omitted and empty are both fine", () => {
+    expect(updateProjectSchema.safeParse({ id }).success).toBe(true);
+    expect(updateProjectSchema.safeParse({ id, location: "  " }).success).toBe(true);
+  });
+
+  it("rejects a location that is only a phone number", () => {
+    expect(updateProjectSchema.safeParse({ id, location: "98765456789" }).success).toBe(false);
+  });
+
+  it("rejects a location longer than 200 characters", () => {
+    expect(updateProjectSchema.safeParse({ id, location: `A${"b".repeat(200)}` }).success).toBe(false);
+  });
+
+  it("rejects a name that is only whitespace, as create does", () => {
+    expect(updateProjectSchema.safeParse({ id, name: "   " }).success).toBe(false);
   });
 });
