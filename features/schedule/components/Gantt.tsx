@@ -38,6 +38,7 @@ export function Gantt({
   viewport,
   monthHeaders,
   canEdit,
+  collapseSignal,
 }: {
   projectId: string;
   packageId: string;
@@ -46,9 +47,27 @@ export function Gantt({
   viewport: { from: number; to: number };
   monthHeaders: { label: string; span: number }[];
   canEdit: boolean;
+  /**
+   * An Expand all / Collapse all instruction from whatever renders this
+   * chart. `epoch` changes on every press, so pressing the same button twice
+   * still applies; `collapsed` is which way. Optional — the standalone
+   * per-package Schedule tab has no such buttons and passes nothing.
+   */
+  collapseSignal?: { epoch: number; collapsed: boolean };
 }) {
   const { openDialog, toast } = useApp();
-  const [closed, setClosed] = useState<Set<string>>(new Set());
+  const [closed, setClosed] = useState<Set<string>>(() =>
+    collapseSignal?.collapsed ? new Set(phases.map((p) => p.id)) : new Set()
+  );
+  // The signal is applied by adjusting state DURING render, not in an
+  // effect. An effect keyed on the prop would re-run on its own schedule and
+  // stamp over a phase the user collapsed by hand afterwards; this reacts to
+  // the press exactly once, so per-row toggling keeps working in between.
+  const [seenEpoch, setSeenEpoch] = useState(collapseSignal?.epoch ?? 0);
+  if (collapseSignal && collapseSignal.epoch !== seenEpoch) {
+    setSeenEpoch(collapseSignal.epoch);
+    setClosed(collapseSignal.collapsed ? new Set(phases.map((p) => p.id)) : new Set());
+  }
 
   const today = useMemo(() => todayIso(), []);
   const todayWeek = weekIndex(today, projectStart);
