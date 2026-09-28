@@ -142,7 +142,34 @@ export function passwordResetRefusal(actor: ResetActor, target: ResetTarget | nu
   if (actor.role !== "owner" && actor.role !== "admin") return "forbidden_role";
   if (!target || target.deletedAt !== null) return "not_found";
   if (target.id === actor.userId) return "self";
-  if (actor.role === "admin" && target.role !== "site" && target.role !== "client") return "forbidden_role";
+  // D65: an admin may also reset the OWNER. Widened by owner decision on
+  // 2026-09-28, after testing established that a forgotten owner password was
+  // unrecoverable through the product: an admin was refused the owner, the
+  // owner was refused themselves (D52), and a second owner can never be
+  // created at all (fn_guard_profile_privilege_change: "the owner role cannot
+  // be assigned").
+  //
+  // The cost was stated and accepted: ANY ADMIN CAN NOW RESET THE OWNER'S
+  // PASSWORD AND SIGN IN AS THEM. The audit row is written before the password
+  // changes, so it records the attempt rather than preventing it.
+  //
+  // Still refused: another ADMIN, declined separately by the same decision,
+  // which is what makes this rule asymmetric.
+  //
+  // `rpc_record_password_reset` enforces the identical rule in the database
+  // (migration 20260928100001). Change one and you must change both, or the
+  // page offers a button the database refuses.
+  //
+  // NOTE this is the PASSWORD rule. The role-change/deactivation rule further
+  // down keeps D54 unchanged: an admin still may not act on the owner there.
+  if (
+    actor.role === "admin" &&
+    target.role !== "site" &&
+    target.role !== "client" &&
+    target.role !== "owner"
+  ) {
+    return "forbidden_role";
+  }
   if (!target.isActive) return "inactive";
   if (!target.email) return "no_email";
   return null;

@@ -1900,6 +1900,48 @@ account, audit row or not.
 
 ---
 
+### D65 — An admin may reset the owner's password
+
+**Question:** "There is no access to change the password of owner."
+**Answered:** 2026-09-28 by Voola, after being shown the cost and choosing this option over three
+alternatives.
+
+**The finding.** Verified against production: three doors were shut on one account.
+| Route | Before |
+|---|---|
+| Admin resets the owner | refused — the rule in migration 20260917110001 |
+| Owner resets themselves | refused — D52 |
+| A second owner resets the first | **impossible** — `fn_guard_profile_privilege_change` raises *"the owner role cannot be assigned"* for every promotion (D8) |
+
+A forgotten owner password was therefore unrecoverable through the product; the only route was a
+service-role script.
+
+**Answer:** an admin may now reset the owner. Changed in **both** layers — `passwordResetRefusal`
+and `rpc_record_password_reset` (migration `20260928100001`, applied to production) — because a UI
+rule alone would offer a button the database refuses.
+
+**The cost, stated plainly.** Any of the three admins can now reset the owner's password and sign in
+as the owner. The previous version of that function named this as privilege escalation and refused
+it. It is now permitted **by decision, not by oversight**. The audit row is written BEFORE the
+password changes, so it records the attempt — it does not prevent it. The alternatives offered and
+not taken were: a second owner as break-glass, email-based reset, and a documented service-role
+runbook.
+
+**Deliberately asymmetric.** An admin still may **not** reset another admin — widening that was
+offered separately and declined. So: admin → site, client, owner; not a peer admin; never
+themselves.
+
+**NOT changed:** the role-change and deactivation rule (D54) is a different function and keeps its
+own restriction — an admin still may not change the owner's role or deactivate them. Only the
+password rule moved. The two live within twenty lines of each other in `service.ts`, so both now say
+so in comments.
+
+**Related:** D64 moved self-service password change to the Users page; that covers changing a
+password you KNOW. This covers recovering one you have forgotten. They are different problems and
+needed different answers.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |
