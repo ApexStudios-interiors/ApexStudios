@@ -97,10 +97,27 @@ describe("resetUserPassword", () => {
     expect(result.data?.password).toBe(password);
   });
 
-  it("refuses admin → owner before the audit call or GoTrue", async () => {
+  it("D65: admin → owner is allowed, and a preview does not change that", async () => {
+    // Until 2026-09-28 this was refused as privilege escalation. It is now
+    // permitted by owner decision (a forgotten owner password was otherwise
+    // unrecoverable). The preview cookie is still irrelevant either way: the
+    // REAL role decides, which is the property this case exists to pin.
     sessionAs("admin", ADMIN_ID, PREVIEW_AS_CLIENT);
     h.target = profile(OWNER_ID, "owner");
     const result = await resetUserPassword({ userId: OWNER_ID });
+
+    expect(result.serverError).toBeUndefined();
+    expect(h.rpc).toHaveBeenCalledWith("rpc_record_password_reset", { p_target_id: OWNER_ID });
+    expect(h.setAuthPassword).toHaveBeenCalled();
+  });
+
+  it("refuses admin → another admin before the audit call or GoTrue", async () => {
+    // D65 is asymmetric: widening THIS was offered and declined. Keeps the
+    // "refused before anything is written or changed" coverage the
+    // admin → owner case used to provide.
+    sessionAs("admin", ADMIN_ID, PREVIEW_AS_CLIENT);
+    h.target = profile(OTHER_ADMIN_ID, "admin");
+    const result = await resetUserPassword({ userId: OTHER_ADMIN_ID });
 
     expect(result.serverError).toBe("You don't have permission to do that.");
     expect(result.data).toBeUndefined();

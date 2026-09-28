@@ -9,7 +9,6 @@ import { useApp } from "@/context/AppContext";
 import { useSession } from "@/components/auth/SessionProvider";
 import { signOut } from "@/features/auth/actions";
 import { startPreview } from "@/features/auth/impersonation-actions";
-import { ChangeMyPasswordDialog } from "@/features/users/components/ChangeMyPasswordDialog";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import type { PreviewRole } from "@/lib/auth/impersonation";
 import type { NavProject } from "@/components/layout/nav-project";
@@ -64,7 +63,6 @@ export function Sidebar({
   const [modsOpen, setModsOpen] = useState(true);
   const [projectsMenuOpen, setProjectsMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [passwordOpen, setPasswordOpen] = useState(false);
   const projectsMenuRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [signOutPending, startSignOut] = useTransition();
@@ -322,15 +320,6 @@ export function Sidebar({
               </>
             )}
             <button
-              onClick={() => {
-                setUserMenuOpen(false);
-                setPasswordOpen(true);
-              }}
-              className="flex items-center gap-2 w-full text-left px-3 py-2 text-[13px] text-foreground hover:bg-accent"
-            >
-              Change my password
-            </button>
-            <button
               disabled={signOutPending}
               onClick={() => startSignOut(() => signOut())}
               className="flex items-center gap-2 w-full text-left px-3 py-2 text-[13px] text-foreground hover:bg-accent disabled:opacity-50"
@@ -355,7 +344,6 @@ export function Sidebar({
             className="w-3.5 h-3.5 ml-auto text-muted-foreground -rotate-90 flex-none"
           />
         </button>
-        {passwordOpen && <ChangeMyPasswordDialog onClose={() => setPasswordOpen(false)} />}
       </div>
     </aside>
   );

@@ -229,11 +229,19 @@ describe("passwordResetRefusal — who may reset whom", () => {
     expect(passwordResetRefusal(ADMIN, target({ id: "x", role }))).toBeNull();
   });
 
-  it("refuses admin → owner (privilege escalation)", () => {
-    expect(passwordResetRefusal(ADMIN, target({ id: "d1", role: "owner" }))).toBe("forbidden_role");
+  it("D65: admin MAY reset the owner", () => {
+    // This was refused as privilege escalation until 2026-09-28, and it still
+    // is privilege escalation — it is now permitted by owner decision because
+    // a forgotten owner password was otherwise unrecoverable: no admin could
+    // reset it, the owner could not reset themselves (D52), and a second owner
+    // can never be created (fn_guard_profile_privilege_change). The audit row
+    // records the attempt; it does not prevent it.
+    expect(passwordResetRefusal(ADMIN, target({ id: "d1", role: "owner" }))).toBeNull();
   });
 
-  it("refuses admin → another admin", () => {
+  it("D65 is asymmetric: admin still may NOT reset another admin", () => {
+    // Widening this too was offered and declined. If it is ever widened, it
+    // is a decision, not a tidy-up.
     expect(passwordResetRefusal(ADMIN, target({ id: "d3", role: "admin" }))).toBe("forbidden_role");
   });
 
@@ -265,7 +273,9 @@ describe("passwordResetRefusal — who may reset whom", () => {
 
   it("canResetPassword agrees with the refusal", () => {
     expect(canResetPassword(ADMIN, target())).toBe(true);
-    expect(canResetPassword(ADMIN, target({ id: "d1", role: "owner" }))).toBe(false);
+    // D65: the owner is now allowed; a peer admin is still not.
+    expect(canResetPassword(ADMIN, target({ id: "d1", role: "owner" }))).toBe(true);
+    expect(canResetPassword(ADMIN, target({ id: "d3", role: "admin" }))).toBe(false);
   });
 });
 
@@ -305,7 +315,6 @@ describe("resetAccountPassword", () => {
   });
 
   it.each([
-    ["admin → owner", ADMIN, target({ id: "d1", role: "owner", email: "hello@beapex.in" }), "forbidden_role"],
     [
       "admin → admin",
       ADMIN,

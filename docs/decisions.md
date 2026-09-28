@@ -1915,6 +1915,86 @@ the absent `TooltipProvider` is fine. No change was made to either.
 
 ---
 
+### D64 — Password management lives on the Users page; the sidebar item is gone
+
+**Question:** "As an admin login there is no access to reset or change password in users but there is
+an option to change password in logout page. Delete the change password in the left panel, instead
+keep the one in admin/owner login Users."
+**Answered:** 2026-09-28 by Voola.
+
+**First, the premise is not a bug.** An admin sees **Reset** only on *site* and *client* rows,
+because D52 refuses a self-reset and D54 refuses an admin acting on the owner or another admin. With
+one owner, three admins, two site users and one client, an admin sees Reset on three rows out of
+seven — which reads as "no access" without being it. Nothing about those rules changed.
+
+**Answer:**
+- **Removed** "Change my password" from the sidebar user menu, for every role.
+- **Added** it to the Users page, on the signed-in user's OWN row, where Reset sits for everybody
+  else. `/users` is owner/admin-only, so this is by construction the owner-and-admin route the owner
+  asked for.
+- Site and client keep **no** self-service route: they are not on that page and ask an owner or
+  admin, who resets and passes on the generated password once. Confirmed as the intended policy.
+
+**Why "Change my password" and not the Reset button on your own row.** Reset generates a password,
+shows it once, and ends every session (D52). Aimed at yourself that signs you out on the spot and
+hands you a random string to type back in. The existing self-service dialog asks for your current
+password, lets you choose the new one, and keeps THIS session while ending the others.
+`passwordResetRefusal` still returns `"self"` for the Reset path, unchanged — this sits beside that
+rule rather than relaxing it.
+
+**The lockout this avoids.** Deleting the sidebar item alone would have left the owner with no way
+to change their password at all, ever: the Users page refuses a self-reset and no admin may reset the
+owner. That is exactly the hole D59 was created to close, and it was raised before the change was
+made rather than discovered afterwards.
+
+**Not done:** admins still cannot reset other admins, so an admin who forgets their password needs
+the owner. Widening that was offered and declined — an admin could otherwise take over a colleague's
+account, audit row or not.
+
+---
+
+### D65 — An admin may reset the owner's password
+
+**Question:** "There is no access to change the password of owner."
+**Answered:** 2026-09-28 by Voola, after being shown the cost and choosing this option over three
+alternatives.
+
+**The finding.** Verified against production: three doors were shut on one account.
+| Route | Before |
+|---|---|
+| Admin resets the owner | refused — the rule in migration 20260917110001 |
+| Owner resets themselves | refused — D52 |
+| A second owner resets the first | **impossible** — `fn_guard_profile_privilege_change` raises *"the owner role cannot be assigned"* for every promotion (D8) |
+
+A forgotten owner password was therefore unrecoverable through the product; the only route was a
+service-role script.
+
+**Answer:** an admin may now reset the owner. Changed in **both** layers — `passwordResetRefusal`
+and `rpc_record_password_reset` (migration `20260928100001`, applied to production) — because a UI
+rule alone would offer a button the database refuses.
+
+**The cost, stated plainly.** Any of the three admins can now reset the owner's password and sign in
+as the owner. The previous version of that function named this as privilege escalation and refused
+it. It is now permitted **by decision, not by oversight**. The audit row is written BEFORE the
+password changes, so it records the attempt — it does not prevent it. The alternatives offered and
+not taken were: a second owner as break-glass, email-based reset, and a documented service-role
+runbook.
+
+**Deliberately asymmetric.** An admin still may **not** reset another admin — widening that was
+offered separately and declined. So: admin → site, client, owner; not a peer admin; never
+themselves.
+
+**NOT changed:** the role-change and deactivation rule (D54) is a different function and keeps its
+own restriction — an admin still may not change the owner's role or deactivate them. Only the
+password rule moved. The two live within twenty lines of each other in `service.ts`, so both now say
+so in comments.
+
+**Related:** D64 moved self-service password change to the Users page; that covers changing a
+password you KNOW. This covers recovering one you have forgotten. They are different problems and
+needed different answers.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |
