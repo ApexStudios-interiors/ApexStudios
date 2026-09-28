@@ -1862,6 +1862,44 @@ this decision breaks; the two schemas point at each other in comments for that r
 
 ---
 
+### D64 — Password management lives on the Users page; the sidebar item is gone
+
+**Question:** "As an admin login there is no access to reset or change password in users but there is
+an option to change password in logout page. Delete the change password in the left panel, instead
+keep the one in admin/owner login Users."
+**Answered:** 2026-09-28 by Voola.
+
+**First, the premise is not a bug.** An admin sees **Reset** only on *site* and *client* rows,
+because D52 refuses a self-reset and D54 refuses an admin acting on the owner or another admin. With
+one owner, three admins, two site users and one client, an admin sees Reset on three rows out of
+seven — which reads as "no access" without being it. Nothing about those rules changed.
+
+**Answer:**
+- **Removed** "Change my password" from the sidebar user menu, for every role.
+- **Added** it to the Users page, on the signed-in user's OWN row, where Reset sits for everybody
+  else. `/users` is owner/admin-only, so this is by construction the owner-and-admin route the owner
+  asked for.
+- Site and client keep **no** self-service route: they are not on that page and ask an owner or
+  admin, who resets and passes on the generated password once. Confirmed as the intended policy.
+
+**Why "Change my password" and not the Reset button on your own row.** Reset generates a password,
+shows it once, and ends every session (D52). Aimed at yourself that signs you out on the spot and
+hands you a random string to type back in. The existing self-service dialog asks for your current
+password, lets you choose the new one, and keeps THIS session while ending the others.
+`passwordResetRefusal` still returns `"self"` for the Reset path, unchanged — this sits beside that
+rule rather than relaxing it.
+
+**The lockout this avoids.** Deleting the sidebar item alone would have left the owner with no way
+to change their password at all, ever: the Users page refuses a self-reset and no admin may reset the
+owner. That is exactly the hole D59 was created to close, and it was raised before the change was
+made rather than discovered afterwards.
+
+**Not done:** admins still cannot reset other admins, so an admin who forgets their password needs
+the owner. Widening that was offered and declined — an admin could otherwise take over a colleague's
+account, audit row or not.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |

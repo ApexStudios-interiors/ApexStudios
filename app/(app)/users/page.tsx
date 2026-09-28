@@ -4,6 +4,7 @@ import { countActiveOwners, listUsers } from "@/features/users/queries";
 import { UserRoleSelect } from "@/features/users/components/UserRoleSelect";
 import { DeactivateUserButton } from "@/features/users/components/DeactivateUserButton";
 import { ResetPasswordButton } from "@/features/users/components/ResetPasswordButton";
+import { ChangeMyPasswordButton } from "@/features/users/components/ChangeMyPasswordButton";
 import { activeChangeRefusal, passwordResetRefusal, roleControlRefusal } from "@/features/users/service";
 import { initials } from "@/lib/logic";
 import { parsePageRequest } from "@/lib/pagination";
@@ -101,11 +102,20 @@ export default async function UsersPage({
                   </td>
                   <td className={td} style={{ textAlign: "right" }}>
                     <div className="flex justify-end gap-1">
-                      <ResetPasswordButton
-                        userId={u.id}
-                        fullName={u.fullName}
-                        refusal={passwordResetRefusal(actor, target)}
-                      />
+                      {/* Your own row gets "Change my password" instead of
+                          "Reset" — Reset is refused against yourself (D52) and
+                          would be the wrong tool anyway, since it ends the
+                          session you are using. This is the route that moved
+                          off the sidebar in D64. */}
+                      {u.id === actor.userId ? (
+                        <ChangeMyPasswordButton />
+                      ) : (
+                        <ResetPasswordButton
+                          userId={u.id}
+                          fullName={u.fullName}
+                          refusal={passwordResetRefusal(actor, target)}
+                        />
+                      )}
                       <DeactivateUserButton
                         userId={u.id}
                         fullName={u.fullName}

@@ -235,7 +235,7 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "Change my password",
         definition:
-          "In the user menu at the bottom of the sidebar. You must type your current password, and the new one must be at least 12 characters. You stay signed in on this device; every other device is signed out. This is the only way to change your own password — the admin Reset password button deliberately cannot be aimed at yourself.",
+          "On the Users page, on your own row. Owner and admin only — the Users page is not open to anyone else, which is the point: a site supervisor or client asks an owner or admin to reset theirs. You must type your current password, and the new one must be at least 12 characters. You stay signed in on this device; every other device is signed out",
       },
       {
         term: "Client login",
@@ -463,7 +463,7 @@ export const FLOWS: Flow[] = [
       "Staff: on the Users page click Add User, enter a username, name and role (Admin or Site Supervisor). The username and a generated password are shown once, each with a Copy button — share them now, because the password cannot be viewed again.",
       "Clients: on the project's dashboard, use the Client access card. Create client login makes a new client account for this project (credentials shown once, as above); Add existing client gives a client who already has a login access to this project.",
       "Reset password: on the Users page click Reset password next to the user. A new password is shown once, and the user is signed out everywhere. An owner may reset anyone but themselves; an admin may reset only Site Supervisors and Clients — never the owner, another admin or themselves.",
-      "Change your OWN password from the user menu at the bottom of the sidebar (Change my password). It asks for your current password first, needs at least 12 characters, and signs you out of every other device while keeping you signed in here. Nobody — not even the owner — can reset their own password from the Users page, so this is the route.",
+      "Change your OWN password on the Users page, on your own row — the Change my password button sits where Reset sits for everyone else. It asks for your current password first, needs at least 12 characters, and signs you out of every other device while keeping you signed in here. Site supervisors and clients have no self-service route: they ask an owner or admin to Reset theirs, and are given the new password once.",
       "Change role, deactivate or reactivate from the same row. The same who-may-act-on-whom rule applies: an admin may act on Site Supervisors and Clients only, the owner on anyone but themselves, and nobody on themselves. Deactivating signs the person out and blocks their login until it is reversed; nothing is deleted.",
     ],
   },
