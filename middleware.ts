@@ -1,6 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { clientEnv } from "@/lib/env.client";
+import { isUuid } from "@/lib/routing/slug";
+import {
+  packageIdFromSlug,
+  packageSlugFromId,
+  projectIdFromSlug,
+  projectSlugFromId,
+} from "@/lib/routing/resolve";
 
 /**
  * architecture.md §3. Answers exactly one question: "are you signed in?"
@@ -68,7 +75,76 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  // Readable project URLs. Only for a signed-in request: every lookup below
+  // runs through the caller's own RLS-scoped client, so it cannot be used to
+  // discover a project code in another organisation.
+  if (user) {
+    const routed = await resolveProjectPath(request, supabase);
+    if (routed) return routed;
+  }
+
   return response;
+}
+
+/** `/projects/<seg>[/packages/<seg>][/rest]` — the only paths this touches. */
+const PROJECT_PATH = /^\/projects\/([^/]+)(?:\/packages\/([^/]+))?(\/.*)?$/;
+
+/**
+ * Two directions, one matcher:
+ *
+ *   readable -> ids   REWRITE. The route on disk still receives UUIDs, so
+ *                     nothing downstream changes — including every
+ *                     `revalidatePath('/projects/<uuid>', 'layout')`, which
+ *                     would otherwise be invalidating a path that no longer
+ *                     renders.
+ *   ids -> readable   REDIRECT, so an old bookmark or a notification link
+ *                     (the bell builds its hrefs from UUIDs in the database)
+ *                     lands on the clean URL.
+ *
+ * Anything that does not resolve is left alone rather than 404'd here: the
+ * page's own `notFound()` is the right place to say a project does not exist,
+ * and a resolver failure must never turn a real page into a dead one.
+ */
+async function resolveProjectPath(
+  request: NextRequest,
+  supabase: Parameters<typeof projectIdFromSlug>[0]
+): Promise<NextResponse | null> {
+  const m = PROJECT_PATH.exec(request.nextUrl.pathname);
+  if (!m) return null;
+  const [, projectSeg, packageSeg, rest = ""] = m;
+  if (!projectSeg) return null;
+
+  const projectIsId = isUuid(projectSeg);
+  const packageIsId = packageSeg ? isUuid(packageSeg) : false;
+  // Already clean, or already all ids with nothing to translate — the common
+  // case, and it costs no query.
+  if (!projectIsId && !(packageSeg && packageIsId)) {
+    const projectId = await projectIdFromSlug(supabase, projectSeg);
+    if (!projectId) return null;
+    let target = `/projects/${projectId}`;
+    if (packageSeg) {
+      const packageId = await packageIdFromSlug(supabase, projectId, packageSeg);
+      if (!packageId) return null;
+      target += `/packages/${packageId}`;
+    }
+    const url = request.nextUrl.clone();
+    url.pathname = target + rest;
+    return NextResponse.rewrite(url);
+  }
+
+  if (!projectIsId) return null;
+
+  const slug = await projectSlugFromId(supabase, projectSeg);
+  if (!slug) return null;
+  let target = `/projects/${slug}`;
+  if (packageSeg) {
+    const pkgSlug = packageIsId ? await packageSlugFromId(supabase, projectSeg, packageSeg) : packageSeg;
+    if (!pkgSlug) return null;
+    target += `/packages/${pkgSlug}`;
+  }
+  const url = request.nextUrl.clone();
+  url.pathname = target + rest;
+  return NextResponse.redirect(url);
 }
 
 export const config = {
