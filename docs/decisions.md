@@ -1862,6 +1862,30 @@ this decision breaks; the two schemas point at each other in comments for that r
 
 ---
 
+### D62 — A disabled control states its reason in plain sight, not only in a tooltip
+
+**Question:** Testing reported Create Bill as disabled with no way to tell why, and asked for a
+hover message. D51's PR had already added exactly that hover message.
+**Answered:** 2026-09-28.
+**Answer:** The reason is now rendered as **visible text beside the button** whenever the button is
+disabled, replacing the "N selected · ₹X · margin ₹Y" summary that is meaningless at zero. The
+tooltip stays, and `aria-describedby` ties the visible sentence to the button.
+**Why the tooltip was not enough, and why this generalises:** a tooltip needs a hover. There is no
+hover on a phone or a tablet, which is what a site supervisor and a travelling owner actually use,
+and a user who simply never hovers is told nothing at all. The affordance existed and still failed
+its one job — the tester read the button as broken rather than as waiting for something. **Treat
+this as the rule for every disabled control in this app**, not a one-off for this button.
+**Note on the underlying behaviour:** the button was working correctly. `loadBillable` pre-selects
+every row, so the button is enabled whenever anything is billable; seeing it disabled means the
+project had nothing billable yet, which the table's own empty state said but the button area did
+not. Nothing about when it enables was changed — only what it tells you.
+**Also checked, and NOT a bug:** the tooltip itself works. `components/ui/button.tsx` carries
+`disabled:pointer-events-none`, so hover passes through the disabled button to the focusable
+wrapper, and Base UI's `Tooltip.Root` reads its provider context optionally and never throws, so
+the absent `TooltipProvider` is fine. No change was made to either.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |
