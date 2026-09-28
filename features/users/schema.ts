@@ -101,21 +101,31 @@ export type SetUserActiveInput = z.infer<typeof setUserActiveSchema>;
  *
  * The maximum is 72 BYTES: bcrypt's own input limit, which GoTrue hashes with,
  * checked here so the message is a useful one rather than a 422 from Auth.
+ *
+ * All three fields are trimmed (D61, 2026-09-28). This is the SETTER half of
+ * that decision and is what makes trimming at login safe: a password stored
+ * from this form has no edge whitespace to lose, so login's own trim can
+ * never strip a character the hash needs. Changing one end without the other
+ * locks people out — see features/auth/schema.ts.
  */
 export const PASSWORD_MIN_LENGTH = 12;
 export const PASSWORD_MAX_BYTES = 72;
 
 export const changeMyPasswordSchema = z
   .object({
-    currentPassword: z.string().min(1, "Enter your current password"),
+    currentPassword: z.string().trim().min(1, "Enter your current password"),
     newPassword: z
       .string()
+      // .trim() BEFORE .min(): otherwise "          a" would pass a 12-character
+      // floor on whitespace alone. Zod applies the chain in order, so the
+      // length rule and both cross-field checks below all see the trimmed value.
+      .trim()
       .min(PASSWORD_MIN_LENGTH, `At least ${PASSWORD_MIN_LENGTH} characters`)
       .refine(
         (v) => new TextEncoder().encode(v).length <= PASSWORD_MAX_BYTES,
         `At most ${PASSWORD_MAX_BYTES} bytes`
       ),
-    confirmPassword: z.string().min(1, "Repeat the new password"),
+    confirmPassword: z.string().trim().min(1, "Repeat the new password"),
   })
   .refine((v) => v.newPassword === v.confirmPassword, {
     path: ["confirmPassword"],
