@@ -271,7 +271,7 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "Notifications",
         definition:
-          "The bell in the header. It lists open WORK across all your projects — pending requests, submitted bills, low stock, pending approvals, depending on your role. It is not an inbox: the count drops when the work is actually done (you approve the request, the client certifies the bill), not when you read the item. Opening one and seeing the number stay the same is expected.",
+          "The bell in the header. It lists open WORK across all your projects — pending requests, submitted bills, low stock, pending approvals, depending on your role. The number on the bell counts the ones you have NOT opened yet, so it drops as you read them. Items you have already opened stay in the list, in grey without a dot, because reading something does not finish it — they leave only when the work is actually done. If the same thing comes up again (a request goes back to pending, stock drops low a second time), it counts as new again.",
       },
       {
         term: "Audit log",

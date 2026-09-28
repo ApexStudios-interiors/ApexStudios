@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
+import { isUnread, receiptsByKey, type ReadReceipt } from "./service";
 
 /**
  * build/07-stock-inventory-notifications.md §2.6. Replaces `buildNotifications()`
@@ -8,9 +9,11 @@ import type { Session } from "@/lib/auth/session";
  * both the bell badge count and the dropdown — there is no separate count
  * query to drift out of sync with the list.
  *
- * No read state, no notifications table (ADR-014): a row exists exactly as
- * long as the thing needing attention exists, so there is nothing to mark
- * read and nothing to garbage-collect.
+ * Still no notifications table (ADR-014): a row exists exactly as long as the
+ * thing needing attention exists. D60 (2026-09-28) added per-user READ state
+ * on top of that — `notification_reads` records only that this user has seen
+ * a given item, so the badge can count unread while the dropdown keeps
+ * listing everything. A read notification is not finished work.
  *
  * Scoped across every project the session can access, not the current one —
  * the view is `security_invoker = on`, so each branch's own RLS policy
@@ -36,6 +39,8 @@ export type NotificationDTO = {
   title: string;
   href: string;
   createdAt: string;
+  /** False once this user has opened it, until the work is raised again. */
+  unread: boolean;
 };
 
 type NotificationRow = {
@@ -59,9 +64,14 @@ export async function getNotifications(session: Session): Promise<NotificationDT
   if (error) throw new Error(error.message);
 
   const rows = data as NotificationRow[];
-  const projectNames = await fetchProjectNames(
-    rows.map((r) => r.project_id).filter((id): id is string => id != null)
-  );
+  const [projectNames, reads] = await Promise.all([
+    fetchProjectNames(rows.map((r) => r.project_id).filter((id): id is string => id != null)),
+    // The REAL user's receipts, not the impersonated one's: read state belongs
+    // to the person clicking. Matches markNotificationRead, which writes
+    // against session.userId for the same reason.
+    fetchReadReceipts(session.userId),
+  ]);
+  const readAtByKey = receiptsByKey(reads);
 
   return rows.map((r) => ({
     kind: r.kind as NotificationDTO["kind"],
@@ -71,6 +81,7 @@ export async function getNotifications(session: Session): Promise<NotificationDT
     title: r.title,
     href: r.href,
     createdAt: r.created_at,
+    unread: isUnread({ kind: r.kind, entityId: r.entity_id, createdAt: r.created_at }, readAtByKey),
   }));
 }
 
@@ -81,4 +92,22 @@ async function fetchProjectNames(projectIds: string[]): Promise<Map<string, stri
   const { data, error } = await supabase.from("projects").select("id, name").in("id", ids);
   if (error) throw new Error(error.message);
   return new Map(data.map((p) => [p.id, p.name]));
+}
+
+/**
+ * Every read receipt this user holds. Unscoped by project or kind on purpose:
+ * the set is bounded by (this user x notifications they have opened), which
+ * for this business is tens of rows, and one unfiltered read is cheaper than
+ * building an `in` list of the ids we happen to be rendering.
+ *
+ * `nr_select_own` restricts it to the caller's own rows regardless.
+ */
+async function fetchReadReceipts(profileId: string): Promise<ReadReceipt[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("notification_reads")
+    .select("kind, entity_id, read_at")
+    .eq("profile_id", profileId);
+  if (error) throw new Error(error.message);
+  return data.map((r) => ({ kind: r.kind, entityId: r.entity_id, readAt: r.read_at }));
 }

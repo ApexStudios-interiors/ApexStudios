@@ -558,6 +558,27 @@ export type Database = {
         };
         Relationships: [];
       };
+      notification_reads: {
+        Row: {
+          profile_id: string;
+          kind: string;
+          entity_id: string;
+          read_at: string;
+        };
+        Insert: {
+          profile_id: string;
+          kind: string;
+          entity_id: string;
+          read_at?: string;
+        };
+        Update: {
+          profile_id?: string;
+          kind?: string;
+          entity_id?: string;
+          read_at?: string;
+        };
+        Relationships: [];
+      };
       orgs: {
         Row: {
           id: string;
@@ -1430,11 +1451,22 @@ export type Database = {
         };
         Returns: number;
       };
+      fn_guard_profile_privilege_change: {
+        Args: Record<string, never>;
+        Returns: unknown;
+      };
       fn_money: {
         Args: {
           v: number;
         };
         Returns: number;
+      };
+      fn_next_project_code: {
+        Args: {
+          p_org_id: string;
+          p_base: string;
+        };
+        Returns: string;
       };
       fn_recompute_progress: {
         Args: {

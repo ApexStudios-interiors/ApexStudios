@@ -1812,6 +1812,56 @@ User dialog and the Users page now say where client logins come from.
 
 ---
 
+### D60 — The bell counts unread, not open work (partly reversing ADR-014 and D56)
+
+**Question:** A second test round reported the same thing D56 had already answered: opening a
+notification leaves the badge at 9.
+**Answered:** 2026-09-28 by Voola — **reverse D56.** The count must go down.
+**Answer:** A new `notification_reads` table stores per-user read state. The **badge counts unread**;
+the **dropdown still lists everything**, read or not, with a dot and heavier text marking unread.
+**What is NOT reversed:** there is still no notifications table. `v_notifications` remains computed
+live, so a row exists exactly as long as the work does. `notification_reads` only records that a
+person has SEEN one — it cannot create, hold or outlive a notification, and a stale row is inert
+rather than wrong.
+**Reasoning:** D56 was defensible and I argued for it, but "the count is correct, you are reading it
+wrong" lost twice against real users. Keeping the read item VISIBLE is what preserves the thing D56
+was actually protecting — the list is still the to-do list, and no open work disappears because
+someone glanced at it. That is ordinary inbox behaviour: Gmail keeps read mail in the inbox and
+still drops the unread count.
+**Consequence:** `read_at` is a timestamp, not a boolean, and unread means *no row, or
+`read_at < created_at`*. `v_notifications` recomputes `created_at` from the underlying row, so a
+stock request returning to pending or an item dropping below its reorder level a second time
+correctly becomes unread again. A boolean would have silenced that entity permanently — the one
+bug that would have been much worse than the one being fixed. Read state follows the REAL user, not
+an impersonated one: an owner previewing as Site must not mark the supervisor's items read
+(Build 05's rule that impersonation only shapes reads). Marking is awaited before navigating,
+because a server action fired during a navigation can be cancelled with the page — which would
+reproduce the exact symptom. Applied to production as
+`20260928090001_notification_reads.sql`.
+
+---
+
+### D61 — Both sign-in fields are trimmed, and so is every password setter
+
+**Question:** Testing found trailing spaces surviving a paste into the sign-in boxes. The username
+was already trimmed twice (schema and `signInEmail`); the password deliberately was not.
+**Answered:** 2026-09-28 by Voola — **trim the password too, at login AND at every setter.**
+**Answer:** `loginSchema.password` and all three fields of `changeMyPasswordSchema` now `.trim()`.
+On the new password the trim runs BEFORE the length check, so 11 spaces and one character no longer
+clears the 12-character floor.
+**Why this is safe here, though the general advice (OWASP/NIST) is to accept a password exactly as
+typed:** trimming at login alone WOULD be a bug — a password set with a trailing space would become
+permanently un-enterable, because login would strip the character the stored hash needs. Two facts
+close that gap: both ends are trimmed together, so what is hashed and what is checked cannot
+disagree; and no password in this system was ever chosen with an edge space, since Add User and
+Reset both GENERATE the password server-side and self-service change did not exist before
+2026-09-25. The blast radius was checked before the change, not assumed.
+**Consequence:** spaces INSIDE a password are untouched — a passphrase stays valid, which matters
+because the length floor actively encourages one. If a password setter is ever added, it trims, or
+this decision breaks; the two schemas point at each other in comments for that reason.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |
