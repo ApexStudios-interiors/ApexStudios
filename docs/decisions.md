@@ -1812,6 +1812,37 @@ User dialog and the Users page now say where client logins come from.
 
 ---
 
+### D63 — A package's status has nothing to do with whether it can be billed, and the UI now says so
+
+**Question:** "When I'm trying to mark a package as completed, I'm not seeing that in the create bill
+section and everything is confusing and nothing is clear."
+**Answered:** 2026-09-28.
+**Diagnosis:** the report is correct and the cause is a genuine design gap, not a defect.
+`packages.status` has a `completed` value, and **billing never reads it.** `v_billable_now` reads
+phases (all tasks at 100%, or `manual_complete_at` set) and delivered stock requests. So a package
+can read "completed" on every screen while nothing about it is billable. The owner's mental model —
+package done, therefore billable — is the reasonable one; the app silently disagreed and explained
+itself nowhere.
+**Answer:** three changes, all explanatory or convenience. **No billing rule changed.**
+1. The package Billing tab now states the actual rule where the button is, naming that marking the
+   *package* completed does not do this, and shows how many phases and how much value are waiting.
+2. A **Mark all N complete** action, because a package of 14 task-less phases otherwise needed 14
+   clicks. It is a loop over the SAME `rpc_mark_phase_complete`, re-reading eligibility server-side;
+   each phase keeps its own guard and writes its own audit row with a name against it. Nothing it can
+   do differs from clicking each button.
+3. Billable Now's empty state names the route instead of restating the condition. The old wording
+   ("Items appear here when materials are delivered or milestones complete") was true and left the
+   reader nowhere to go.
+**Why not cascade package → phases automatically:** `rpc_mark_phase_complete` exists because a
+task-less phase has nothing to prove it is done, so a human has to assert it and be named for it
+(D-level reasoning in 02-lld.md §5.7). A package status flip is one click asserting up to 14 of
+those, with one audit row. The bulk button keeps one audit row per phase, which is the property
+worth keeping.
+**Related:** D62 (a disabled control states its reason in plain sight) is the same failure one layer
+up — the Create Bill button was correct and silent.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |

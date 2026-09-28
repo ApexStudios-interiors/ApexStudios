@@ -1,5 +1,6 @@
 import { forbidden, notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
 import { env } from "@/lib/env";
 import { getPhaseBillingStatus, getMaterialAtSite } from "@/features/billing/queries";
 import { MilestoneTable } from "@/features/billing/components/MilestoneTable";
@@ -16,9 +17,23 @@ export default async function PackageBillingTab({ params }: { params: Promise<{ 
   const effectiveRole = session.impersonating?.role ?? session.role;
   if (effectiveRole !== "owner" && effectiveRole !== "admin") forbidden();
 
-  const [phases, materials] = await Promise.all([
+  const supabase = await createClient();
+  const [phases, materials, pkg] = await Promise.all([
     getPhaseBillingStatus(moduleId),
     getMaterialAtSite(moduleId),
+    // Only `status`, and only so the tab can say that a package marked
+    // "completed" is still not billable on that account — billing reads
+    // phases, never packages.status.
+    supabase.from("packages").select("status").eq("id", moduleId).single(),
   ]);
-  return <MilestoneTable phases={phases} materials={materials} />;
+  if (pkg.error) throw new Error(pkg.error.message);
+
+  return (
+    <MilestoneTable
+      phases={phases}
+      materials={materials}
+      packageId={moduleId}
+      packageStatus={pkg.data.status}
+    />
+  );
 }

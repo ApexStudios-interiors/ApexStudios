@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useApp } from "@/context/AppContext";
-import { markPhaseComplete } from "@/features/billing/actions";
+import { markPackagePhasesComplete, markPhaseComplete } from "@/features/billing/actions";
 import type { PhaseBillingRow, MaterialAtSiteRow } from "@/features/billing/queries";
 import { PhaseStatusBadge } from "@/components/shared/StatusBadges";
 import type { PhaseStatus } from "@/lib/logic";
@@ -34,13 +35,40 @@ const BILLING_STATUS_LABEL: Record<PhaseBillingRow["billingStatus"], PhaseStatus
 export function MilestoneTable({
   phases,
   materials,
+  packageId,
+  packageStatus,
 }: {
   phases: PhaseBillingRow[];
   materials: MaterialAtSiteRow[];
+  packageId: string;
+  /** `packages.status`. Billing never reads it — that is the whole point of
+   *  the note below, which exists because testing found someone marking a
+   *  package "completed" and then looking for it in Create Bill. */
+  packageStatus: "not_started" | "design" | "in_progress" | "completed";
 }) {
   const { toast } = useApp();
   const router = useRouter();
+  const [bulkPending, setBulkPending] = useState(false);
   const total = phases.reduce((a, p) => a + p.allocatedAmount, 0);
+  const markable = phases.filter((p) => p.canMarkComplete);
+  const markableValue = markable.reduce((a, p) => a + p.allocatedAmount, 0);
+
+  async function onMarkAll() {
+    setBulkPending(true);
+    const result = await markPackagePhasesComplete({ packageId });
+    setBulkPending(false);
+    if (!result?.data) {
+      toast(result?.serverError ?? "Could not mark these phases complete");
+      return;
+    }
+    const { marked, failed } = result.data;
+    router.refresh();
+    toast(
+      failed
+        ? `${marked} phase${marked === 1 ? "" : "s"} marked complete, ${failed} could not be`
+        : `${marked} phase${marked === 1 ? "" : "s"} marked complete — now billable`
+    );
+  }
 
   async function onMarkComplete(phaseId: string) {
     const result = await markPhaseComplete({ phaseId });
@@ -54,6 +82,33 @@ export function MilestoneTable({
 
   return (
     <>
+      {markable.length > 0 && (
+        // The explainer testing asked for. Marking a PACKAGE completed does
+        // nothing for billing — only a phase becomes billable, and a phase
+        // with no tasks has nothing to prove it, so it needs a person to say
+        // so. Saying that once, here, where the button is, beats leaving it
+        // to be rediscovered.
+        <Card className="mb-4">
+          <div className="px-4 py-3.5">
+            <p className="text-[13.5px] font-medium text-foreground">
+              {markable.length} phase{markable.length === 1 ? "" : "s"} worth {formatINR(markableValue)}{" "}
+              {markable.length === 1 ? "is" : "are"} waiting to be marked complete.
+            </p>
+            <p className="mt-1 text-[12.5px] text-muted-foreground">
+              A phase becomes billable when all its tasks reach 100%, or — when it has no tasks at all — when
+              an admin marks it complete here. Marking the <strong className="font-medium">package</strong> as{" "}
+              {packageStatus === "completed" ? '"completed"' : "complete"} does not do this on its own. Until
+              then nothing from this package appears under Billable Now, so Create Bill has nothing to bill.
+            </p>
+            <Button className="mt-2.5" size="sm" disabled={bulkPending} onClick={onMarkAll}>
+              {bulkPending
+                ? "Marking…"
+                : `Mark all ${markable.length} complete${markable.length === 1 ? "" : " "}`}
+            </Button>
+          </div>
+        </Card>
+      )}
+
       <Card>
         {phases.length ? (
           <TableWrap>

@@ -258,6 +258,66 @@ export async function getBillPaymentsSummaryForDialog(billId: string) {
  * only for a zero-task phase — the RPC itself enforces both; this is guard,
  * parse, delegate, revalidate.
  */
+/**
+ * Marks EVERY phase of one package that is eligible, in one action.
+ *
+ * Why this exists: testing found an owner marking a PACKAGE "completed" and
+ * then looking for it in Create Bill. Billing never reads `packages.status` —
+ * it reads phases (all tasks at 100%, or `manual_complete_at` set) and
+ * delivered materials. So a package can read "completed" on every screen while
+ * nothing about it is billable, which is the confusion this closes. A package
+ * of 14 phases otherwise needs 14 separate clicks to reach the same place.
+ *
+ * It is a loop over the SAME `rpc_mark_phase_complete`, not a new rule: each
+ * phase keeps its own guard (admin only, zero tasks, not already billed) and
+ * writes its own audit row with a name against it. Nothing here can mark a
+ * phase the single-phase button could not.
+ *
+ * Failures are counted, not thrown. A phase that became ineligible between the
+ * page render and the click (someone else billed it, a task was added) must not
+ * abandon the other thirteen — the result reports what actually happened so the
+ * UI can say so.
+ */
+export const markPackagePhasesComplete = adminAction
+  .inputSchema(z.object({ packageId: z.uuid() }))
+  .action(async ({ parsedInput }) => {
+    assertBillingEnabled();
+    const supabase = await createClient();
+
+    // Re-read eligibility server-side rather than trusting a list of ids from
+    // the client: the page may be minutes stale, and this decides billability.
+    const { data: phases, error } = await supabase
+      .from("v_phase_billing")
+      .select("phase_id, project_id, task_count, is_complete, billing_status")
+      .eq("package_id", parsedInput.packageId);
+    if (error) throw new Error(error.message);
+
+    const eligible = phases.filter(
+      (p) =>
+        p.task_count === 0 &&
+        !p.is_complete &&
+        (p.billing_status === "unresolved" || p.billing_status === "billable")
+    );
+
+    let marked = 0;
+    let failed = 0;
+    for (const phase of eligible) {
+      if (!phase.phase_id) continue;
+      const { error: rpcErr } = await supabase.rpc("rpc_mark_phase_complete", {
+        p_phase_id: phase.phase_id,
+      });
+      if (rpcErr) failed++;
+      else marked++;
+    }
+
+    const projectId = phases[0]?.project_id;
+    if (projectId) {
+      updateTag(`project:${projectId}`);
+      revalidatePath(`/projects/${projectId}`, "layout");
+    }
+    return { marked, failed, eligible: eligible.length };
+  });
+
 export const markPhaseComplete = adminAction
   .inputSchema(z.object({ phaseId: z.uuid() }))
   .action(async ({ parsedInput }) => {

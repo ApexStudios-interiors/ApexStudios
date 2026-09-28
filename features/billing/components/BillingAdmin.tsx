@@ -109,7 +109,7 @@ export function BillingAdmin({
     pending || items === null
       ? null
       : items.length === 0
-        ? "Nothing is billable yet. Items appear here when materials are delivered or milestones complete."
+        ? "Nothing is billable yet. A phase becomes billable when all its tasks reach 100%, or when an admin marks a task-less phase complete on the package's Billing tab. Delivered materials appear here on their own."
         : selItems.length === 0
           ? "Select at least one item to bill."
           : null;
@@ -261,8 +261,10 @@ export function BillingAdmin({
               <tr>
                 <td className={td} colSpan={6}>
                   <Empty>
-                    Nothing billable yet. Items appear here when materials are delivered or milestones
-                    complete.
+                    Nothing billable yet. Open a package&apos;s{" "}
+                    <strong className="font-medium">Billing</strong> tab to mark a finished phase complete,
+                    take a phase&apos;s last task to 100%, or mark a stock request delivered — each of those
+                    puts a line here.
                   </Empty>
                 </td>
               </tr>
