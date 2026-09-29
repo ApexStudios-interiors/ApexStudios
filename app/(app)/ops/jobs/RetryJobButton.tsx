@@ -11,7 +11,7 @@ export function RetryJobButton({ id }: { id: string }) {
   const { toast } = useApp();
   const action = useAction(retryJob, {
     onSuccess: () => {
-      toast("Job queued for retry");
+      toast("Retry initiated. The job is queued and will be picked up by the runner.");
       router.refresh();
     },
     onError: ({ error }) => toast(error.serverError ?? "Could not retry this job"),
