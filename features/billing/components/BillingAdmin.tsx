@@ -185,28 +185,13 @@ export function BillingAdmin({
         <CardHeader>
           <h3>Billable Now</h3>
           <div className="ml-auto flex gap-2 items-center">
-            {/* The reason is stated in PLAIN SIGHT, not only in the tooltip
-                below. A tooltip cannot be the only explanation for a disabled
-                control: it needs a hover, so it does not exist on a phone or
-                tablet — which is what a site supervisor and a travelling
-                owner actually use — and a user who never hovers is simply
-                told nothing. Testing found exactly that: the button read as
-                broken rather than as waiting for something. The tooltip stays
-                as the keyboard/pointer affordance; this is the one everybody
-                gets. */}
-            {disabledReason ? (
-              <span
-                id="create-bill-reason"
-                className="max-w-[340px] self-center text-right text-[12.5px] font-normal normal-case tracking-normal text-muted-foreground"
-              >
-                {disabledReason}
-              </span>
-            ) : (
-              <span className="text-muted-foreground text-sm self-center">
-                {selItems.length} selected · {formatINR(preview.grossAmount)} · margin{" "}
-                {formatINR(preview.marginAmount)}
-              </span>
-            )}
+            {/* Owner decision, 2026-09-29: the reason belongs in the tooltip
+                below, not beside the button. The selection summary keeps this
+                spot in every state. */}
+            <span className="text-muted-foreground text-sm self-center">
+              {selItems.length} selected · {formatINR(preview.grossAmount)} · margin{" "}
+              {formatINR(preview.marginAmount)}
+            </span>
             <Tooltip>
               {/* A disabled button fires no pointer events, so the tooltip
                   hangs off a focusable wrapper instead — the same shape as
@@ -220,10 +205,11 @@ export function BillingAdmin({
                   variant="primary"
                   size="sm"
                   disabled={!selItems.length || pending}
-                  // Ties the visible sentence to the control for a screen
-                  // reader, so the reason is announced with the button rather
-                  // than read as unrelated text somewhere beside it.
-                  aria-describedby={disabledReason ? "create-bill-reason" : undefined}
+                  // `title` as well as the tooltip: a disabled button fires no
+                  // pointer events of its own, and this is the one explanation
+                  // that still reaches a screen reader and a browser's native
+                  // hover when the tooltip's own trigger is not used.
+                  title={disabledReason ?? undefined}
                   onClick={handleCreate}
                 >
                   <Icon name="plus" className="w-[15px] h-[15px]" />
