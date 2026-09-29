@@ -10,6 +10,13 @@ import { fetchPage, type Page, type PageRequest } from "@/lib/pagination";
 export type FailedJob = {
   id: string;
   name: string;
+  /**
+   * `failed`, or `pending`/`running` for a job that failed before and is
+   * being retried now. Retrying used to make the row disappear from this page
+   * the instant the button was pressed, with nothing to say whether it had
+   * worked; the list now follows the job until it succeeds or fails again.
+   */
+  status: "pending" | "running" | "failed";
   payload: unknown;
   attempts: number;
   maxAttempts: number;
@@ -27,9 +34,16 @@ export async function getFailedJobs(req: PageRequest): Promise<Page<FailedJob>> 
     (from, to) =>
       supabase
         .from("jobs")
-        .select("id, name, payload, attempts, max_attempts, last_error, finished_at", { count: "exact" })
-        .eq("status", "failed")
-        .order("finished_at", { ascending: false })
+        .select("id, name, status, payload, attempts, max_attempts, last_error, finished_at", {
+          count: "exact",
+        })
+        // Failed jobs, plus the ones being retried right now. A pending or
+        // running job that still carries `last_error` is one that failed
+        // before: rpc_retry_job deliberately keeps that error (migration
+        // 20260929090001) precisely so this page can tell the two apart — a
+        // job that has never run has no error to carry.
+        .or("status.eq.failed,and(status.in.(pending,running),last_error.not.is.null)")
+        .order("finished_at", { ascending: false, nullsFirst: true })
         .order("id", { ascending: false })
         .range(from, to),
     req
@@ -37,6 +51,7 @@ export async function getFailedJobs(req: PageRequest): Promise<Page<FailedJob>> 
   const rows = page.rows.map((r) => ({
     id: r.id,
     name: r.name,
+    status: r.status as FailedJob["status"],
     payload: r.payload,
     attempts: r.attempts,
     maxAttempts: r.max_attempts,
