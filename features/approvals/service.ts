@@ -40,10 +40,21 @@ export function canDecide(status: ApprovalStatus): boolean {
   return status === "pending";
 }
 
-/** A rejected approval, and only a rejected one, may be superseded by a
- *  revised request (rpc_create_approval's own check, 01-hld.md §8.2). */
-export function canSupersede(status: ApprovalStatus): boolean {
-  return status === "rejected";
+/**
+ * A rejected approval may be superseded by a revised request — but only ONCE.
+ *
+ * `rpc_create_approval` enforces both halves (01-hld.md §8.2): it refuses a
+ * supersession of anything not rejected, AND refuses a second one. This
+ * function used to check only the status, so after a revision was raised the
+ * original still offered "Raise revised approval"; filling that form in and
+ * sending it failed with ILLEGAL_TRANSITION from the database, which is what
+ * "raising a revised approval isn't working" turned out to be.
+ *
+ * `alreadySuperseded` is whether any live approval already points at this one
+ * — the same fact the row's "superseded by" reference is built from.
+ */
+export function canSupersede(status: ApprovalStatus, alreadySuperseded: boolean): boolean {
+  return status === "rejected" && !alreadySuperseded;
 }
 
 const AGED_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
