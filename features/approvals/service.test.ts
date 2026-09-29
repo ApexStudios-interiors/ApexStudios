@@ -39,8 +39,19 @@ describe("canSupersede", () => {
     ["pending", false],
     ["approved", false],
     ["rejected", true],
-  ] as const)("status=%s -> %s", (status, expected) => {
-    expect(canSupersede(status)).toBe(expected);
+  ] as const)("status=%s, not yet superseded -> %s", (status, expected) => {
+    expect(canSupersede(status, false)).toBe(expected);
+  });
+
+  it("is false once a revision already supersedes it", () => {
+    // rpc_create_approval refuses a second supersession. Offering the button
+    // anyway is what made "Raise revised approval" fail on the second press.
+    expect(canSupersede("rejected", true)).toBe(false);
+  });
+
+  it.each(["pending", "approved"] as const)("stays false for %s whether superseded or not", (status) => {
+    expect(canSupersede(status, true)).toBe(false);
+    expect(canSupersede(status, false)).toBe(false);
   });
 });
 

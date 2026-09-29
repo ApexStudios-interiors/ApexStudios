@@ -306,7 +306,7 @@ async function toApprovalDTOs(
       supersededByRefNo: supersededBy?.refNo ?? null,
       canAddPhotos: canAddPhotos(r.status),
       canDecide: canDecide(r.status),
-      canSupersede: canSupersede(r.status),
+      canSupersede: canSupersede(r.status, supersededBy !== null),
       attachments: attachmentDtosByApproval.get(r.id) ?? [],
     };
   });
