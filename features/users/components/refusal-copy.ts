@@ -8,7 +8,7 @@ import type { UserAdminRefusal } from "@/features/users/service";
  */
 export const USER_ADMIN_REFUSAL_TITLE: Record<UserAdminRefusal, string> = {
   not_found: "This user no longer exists.",
-  self: "You can't change your own role or deactivate yourself.",
+  self: "This is you — you can't change your own role. Every other row can be changed.",
   forbidden_role: "Only the owner can change an owner's or an admin's role, or deactivate them.",
   unassignable_role: "That role can't be assigned here.",
   no_change: "Nothing to change.",
