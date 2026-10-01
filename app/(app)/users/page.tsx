@@ -5,7 +5,6 @@ import { UserRoleSelect } from "@/features/users/components/UserRoleSelect";
 import { DeactivateUserButton } from "@/features/users/components/DeactivateUserButton";
 import { ResetPasswordButton } from "@/features/users/components/ResetPasswordButton";
 import { ChangeMyPasswordButton } from "@/features/users/components/ChangeMyPasswordButton";
-import { USER_ADMIN_REFUSAL_TITLE } from "@/features/users/components/refusal-copy";
 import { activeChangeRefusal, passwordResetRefusal, roleControlRefusal } from "@/features/users/service";
 import { initials } from "@/lib/logic";
 import { parsePageRequest } from "@/lib/pagination";
@@ -94,29 +93,12 @@ export default async function UsersPage({
                   </td>
                   <td className={td + " text-muted-foreground"}>{u.contact ?? "—"}</td>
                   <td className={td}>
-                    {(() => {
-                      const refusal = roleControlRefusal(actor, target, { activeOwners });
-                      return (
-                        <>
-                          <UserRoleSelect
-                            userId={u.id}
-                            fullName={u.fullName}
-                            role={u.role}
-                            refusal={refusal}
-                          />
-                          {/* D62: a disabled control states its reason in plain
-                              sight. It was previously only the select's `title`,
-                              which needs a hover — so a greyed dropdown with no
-                              visible explanation read as "there is no option to
-                              change roles" rather than "not on this row". */}
-                          {refusal && (
-                            <span className="mt-1 block max-w-56 text-[11.5px] leading-snug text-muted-foreground">
-                              {USER_ADMIN_REFUSAL_TITLE[refusal]}
-                            </span>
-                          )}
-                        </>
-                      );
-                    })()}
+                    <UserRoleSelect
+                      userId={u.id}
+                      fullName={u.fullName}
+                      role={u.role}
+                      refusal={roleControlRefusal(actor, target, { activeOwners })}
+                    />
                   </td>
                   <td className={td} style={{ textAlign: "right" }}>
                     <div className="flex justify-end gap-1">

@@ -84,7 +84,13 @@ function LoginForm() {
             autoCapitalize="none"
             spellCheck={false}
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            // Whitespace is stripped as it is typed or pasted, so the field
+            // never SHOWS a leading or trailing space. loginSchema trims both
+            // fields too (D61) — that is the boundary; this is so the box
+            // matches what will actually be sent, rather than displaying a
+            // space that is silently discarded a moment later. A username has
+            // no legitimate internal space either, so all of it goes.
+            onChange={(e) => setUsername(e.target.value.replace(/\s/g, ""))}
             aria-invalid={!!usernameError}
             aria-describedby={usernameError ? "login-username-error" : undefined}
             autoFocus
@@ -120,7 +126,13 @@ function LoginForm() {
             type={showPassword ? "text" : "password"}
             autoComplete="current-password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            // LEADING whitespace only, and deliberately not trailing: a
+            // passphrase may contain spaces, and stripping the end on every
+            // keystroke would delete each space as it was typed, making a
+            // passphrase impossible to enter. Trailing whitespace is handled
+            // where it is safe to handle it — loginSchema trims both ends at
+            // submit (D61).
+            onChange={(e) => setPassword(e.target.value.replace(/^\s+/, ""))}
             aria-invalid={!!passwordError}
             aria-describedby={passwordError ? "login-password-error" : undefined}
           />
