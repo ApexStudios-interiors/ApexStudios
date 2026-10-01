@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -71,34 +72,57 @@ export function UserRoleSelect({
         ...ASSIGNABLE_ROLES.map((r) => ({ value: r, label: ROLE_LABEL[r] })),
       ];
 
+  // The reason pops up on hover rather than being printed in the Role column,
+  // where it crowded the cell and read as stray text next to the dropdown.
+  const control = (
+    <Select
+      items={items}
+      value={role}
+      disabled={refusal !== null}
+      onValueChange={(next) => {
+        if (next !== role) setPicked(next as AssignableRole);
+      }}
+    >
+      <SelectTrigger
+        size="sm"
+        className="min-w-36 text-[13px]"
+        // Kept alongside the tooltip below: it is what a screen reader and
+        // the browser's own hover read, and it survives if the tooltip's
+        // trigger is never pointed at.
+        title={refusal ? USER_ADMIN_REFUSAL_TITLE[refusal] : undefined}
+        aria-label="Role"
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          {items.map((r) => (
+            <SelectItem key={r.value} value={r.value} disabled={r.value === role}>
+              {r.label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
+  );
+
   return (
     <>
-      <Select
-        items={items}
-        value={role}
-        disabled={refusal !== null}
-        onValueChange={(next) => {
-          if (next !== role) setPicked(next as AssignableRole);
-        }}
-      >
-        <SelectTrigger
-          size="sm"
-          className="min-w-36 text-[13px]"
-          title={refusal ? USER_ADMIN_REFUSAL_TITLE[refusal] : undefined}
-          aria-label="Role"
-        >
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            {items.map((r) => (
-              <SelectItem key={r.value} value={r.value} disabled={r.value === role}>
-                {r.label}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
+      {refusal ? (
+        <Tooltip>
+          {/* A span, not the trigger itself: the Select owns its own trigger,
+              and Base UI will not accept two. `inline-flex` keeps the wrapper
+              the same size as the control it holds. */}
+          <TooltipTrigger render={<span />} tabIndex={0} className="inline-flex rounded-md">
+            {control}
+          </TooltipTrigger>
+          <TooltipContent className="max-w-[260px] text-left font-normal normal-case tracking-normal">
+            {USER_ADMIN_REFUSAL_TITLE[refusal]}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        control
+      )}
 
       <Dialog
         open={picked !== null}
