@@ -25,7 +25,7 @@ function pattern(query: string): string {
 
 export async function searchAll(session: Session, query: string): Promise<SearchResultDTO[]> {
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
   const isClient = effectiveRole === "client";
   const isSite = effectiveRole === "site";
   const supabase = await createClient();

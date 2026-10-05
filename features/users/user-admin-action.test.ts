@@ -72,6 +72,7 @@ vi.mock("@/features/projects/members", () => ({ insertProjectMember: vi.fn() }))
 const { setUserActive, setUserRole } = await import("./actions");
 
 const ORG = "00000000-0000-4000-8000-0000000000a0";
+// d1 — an admin like any other since D66.
 const OWNER_ID = "00000000-0000-4000-8000-0000000000d1";
 const ADMIN_ID = "00000000-0000-4000-8000-0000000000d2";
 const OTHER_ADMIN_ID = "00000000-0000-4000-8000-0000000000d3";
@@ -95,9 +96,12 @@ beforeEach(() => {
 });
 
 describe("setUserRole", () => {
-  it("owner previewing as client is still owner: may demote an admin, and ends their sessions", async () => {
-    sessionAs("owner", OWNER_ID, PREVIEW_AS_CLIENT);
+  it("an admin previewing as client still acts as admin: may demote a peer, and ends their sessions", async () => {
+    sessionAs("admin", OWNER_ID, PREVIEW_AS_CLIENT);
     h.target = profile(OTHER_ADMIN_ID, "admin");
+    // Two active admins, so demoting one does not trip the last-admin guard
+    // (D66) — that invariant has its own case below.
+    h.activeOwners = 2;
     const result = await setUserRole({ userId: OTHER_ADMIN_ID, role: "site" });
 
     expect(result.serverError).toBeUndefined();
@@ -111,11 +115,13 @@ describe("setUserRole", () => {
     expect(h.setAuthUserBanned).not.toHaveBeenCalled();
   });
 
-  it("refuses admin → owner before the RPC or the revocation", async () => {
+  it("refuses SELF before the RPC or the revocation", async () => {
+    // The only target rule left since D66 — and the case that pins "refused
+    // before anything is changed", which admin → owner used to provide.
     sessionAs("admin", ADMIN_ID, PREVIEW_AS_CLIENT);
-    h.target = profile(OWNER_ID, "owner");
+    h.target = profile(ADMIN_ID, "admin");
     h.activeOwners = 2;
-    const result = await setUserRole({ userId: OWNER_ID, role: "site" });
+    const result = await setUserRole({ userId: ADMIN_ID, role: "site" });
 
     expect(result.serverError).toBe("You don't have permission to do that.");
     expect(h.rpc).not.toHaveBeenCalled();
@@ -141,7 +147,7 @@ describe("setUserRole", () => {
   });
 
   it("refuses a user the RLS-scoped read cannot see (another org)", async () => {
-    sessionAs("owner", OWNER_ID);
+    sessionAs("admin", OWNER_ID);
     h.target = null;
     const result = await setUserRole({ userId: SITE_ID, role: "admin" });
 
@@ -150,7 +156,7 @@ describe("setUserRole", () => {
   });
 
   it("refuses a soft-deleted user", async () => {
-    sessionAs("owner", OWNER_ID);
+    sessionAs("admin", OWNER_ID);
     h.target = profile(SITE_ID, "site", { deleted_at: "2026-09-01T00:00:00Z" });
     const result = await setUserRole({ userId: SITE_ID, role: "admin" });
 
@@ -158,11 +164,11 @@ describe("setUserRole", () => {
     expect(h.rpc).not.toHaveBeenCalled();
   });
 
-  it("refuses demoting the last active owner", async () => {
-    sessionAs("owner", OWNER_ID);
-    h.target = profile("00000000-0000-4000-8000-0000000000dd", "owner");
+  it("refuses demoting the last active admin", async () => {
+    sessionAs("admin", OWNER_ID);
+    h.target = profile("00000000-0000-4000-8000-0000000000dd", "admin");
     h.activeOwners = 1;
-    const result = await setUserRole({ userId: "00000000-0000-4000-8000-0000000000dd", role: "admin" });
+    const result = await setUserRole({ userId: "00000000-0000-4000-8000-0000000000dd", role: "site" });
 
     expect(result.serverError).toBe("You don't have permission to do that.");
     expect(h.rpc).not.toHaveBeenCalled();
@@ -178,9 +184,9 @@ describe("setUserRole", () => {
   });
 
   it("rejects `owner` as a requested role before any of this runs", async () => {
-    sessionAs("owner", OWNER_ID);
+    sessionAs("admin", OWNER_ID);
     h.target = profile(SITE_ID, "site");
-    const result = await setUserRole({ userId: SITE_ID, role: "owner" as "admin" });
+    const result = await setUserRole({ userId: SITE_ID, role: "owner" as never });
 
     expect(result.validationErrors).toBeDefined();
     expect(h.rpc).not.toHaveBeenCalled();
@@ -221,11 +227,11 @@ describe("setUserActive", () => {
     expect(h.revokeUserSessions).not.toHaveBeenCalled();
   });
 
-  it("refuses deactivating the owner as an admin, and bans nobody", async () => {
+  it("refuses deactivating YOURSELF, and bans nobody", async () => {
     sessionAs("admin", ADMIN_ID);
-    h.target = profile(OWNER_ID, "owner");
+    h.target = profile(ADMIN_ID, "admin");
     h.activeOwners = 2;
-    const result = await setUserActive({ userId: OWNER_ID, isActive: false });
+    const result = await setUserActive({ userId: ADMIN_ID, isActive: false });
 
     expect(result.serverError).toBe("You don't have permission to do that.");
     expect(h.setAuthUserBanned).not.toHaveBeenCalled();
@@ -233,8 +239,8 @@ describe("setUserActive", () => {
   });
 
   it("refuses deactivating yourself", async () => {
-    sessionAs("owner", OWNER_ID);
-    h.target = profile(OWNER_ID, "owner");
+    sessionAs("admin", OWNER_ID);
+    h.target = profile(OWNER_ID, "admin");
     h.activeOwners = 2;
     const result = await setUserActive({ userId: OWNER_ID, isActive: false });
 
@@ -243,8 +249,8 @@ describe("setUserActive", () => {
   });
 
   it("refuses deactivating the last active owner", async () => {
-    sessionAs("owner", OWNER_ID);
-    h.target = profile("00000000-0000-4000-8000-0000000000dd", "owner");
+    sessionAs("admin", OWNER_ID);
+    h.target = profile("00000000-0000-4000-8000-0000000000dd", "admin");
     h.activeOwners = 1;
     const result = await setUserActive({ userId: "00000000-0000-4000-8000-0000000000dd", isActive: false });
 
@@ -263,7 +269,7 @@ describe("setUserActive", () => {
   });
 
   it("refuses a soft-deleted user", async () => {
-    sessionAs("owner", OWNER_ID);
+    sessionAs("admin", OWNER_ID);
     h.target = profile(SITE_ID, "site", { deleted_at: "2026-09-01T00:00:00Z" });
     const result = await setUserActive({ userId: SITE_ID, isActive: false });
 

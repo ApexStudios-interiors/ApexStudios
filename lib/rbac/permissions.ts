@@ -5,9 +5,9 @@ import type { Role } from "./roles";
  * else — the sidebar, route guards, action guards — reads this table rather
  * than re-deriving the rule.
  *
- * `owner` is not a column in the HLD's own matrix (it predates D8). It carries
- * every `admin` capability plus the owner-only actions build/03-auth-and-rbac.md
- * §2.10 adds: setUserRole, deactivateUser, editBillingConstants.
+ * Three roles since 2026-10-05 (D66). `owner` is retired, and every capability
+ * that was owner-only — setUserRole, deactivateUser, editBillingConstants —
+ * is now an ordinary admin capability. There is no rank above admin.
  *
  * A test (lib/rbac/permissions.test.ts) ties this table to the HLD matrix row
  * for row. When the matrix changes, the doc and the code change together or
@@ -15,69 +15,69 @@ import type { Role } from "./roles";
  */
 export const CAN = {
   // ── Reads ────────────────────────────────────────────────────────────────
-  viewDashboard: ["owner", "admin", "site", "client"],
-  viewPackages: ["owner", "admin", "site", "client"],
-  viewSchedule: ["owner", "admin", "site", "client"],
-  viewDailyUpdates: ["owner", "admin", "site", "client"],
-  viewInventory: ["owner", "admin", "site"],
-  viewStockRequests: ["owner", "admin", "site"],
-  viewApprovals: ["owner", "admin", "site", "client"],
-  viewBilling: ["owner", "admin", "client"],
-  viewUsers: ["owner", "admin"],
-  seeInternalCost: ["owner", "admin"],
+  viewDashboard: ["admin", "site", "client"],
+  viewPackages: ["admin", "site", "client"],
+  viewSchedule: ["admin", "site", "client"],
+  viewDailyUpdates: ["admin", "site", "client"],
+  viewInventory: ["admin", "site"],
+  viewStockRequests: ["admin", "site"],
+  viewApprovals: ["admin", "site", "client"],
+  viewBilling: ["admin", "client"],
+  viewUsers: ["admin"],
+  seeInternalCost: ["admin"],
   // Site sees no money at all, not even the client-facing figure — this row is
   // deliberately narrower than viewBilling. See v_package_site (migration 0014).
-  seeContractValue: ["owner", "admin", "client"],
+  seeContractValue: ["admin", "client"],
 
   // ── Projects, packages, phases, tasks ────────────────────────────────────
-  createEditProject: ["owner", "admin"],
-  createEditPackage: ["owner", "admin"],
-  createEditPhase: ["owner", "admin"],
-  createEditTask: ["owner", "admin", "site"],
-  setTaskProgress: ["owner", "admin", "site"],
-  postDailyUpdate: ["owner", "admin", "site"],
+  createEditProject: ["admin"],
+  createEditPackage: ["admin"],
+  createEditPhase: ["admin"],
+  createEditTask: ["admin", "site"],
+  setTaskProgress: ["admin", "site"],
+  postDailyUpdate: ["admin", "site"],
 
   // ── Stock ────────────────────────────────────────────────────────────────
-  raiseStockRequest: ["owner", "admin", "site"],
-  approveStockRequest: ["owner", "admin"],
-  markStockOrdered: ["owner", "admin"],
-  markStockDelivered: ["owner", "admin", "site"],
+  raiseStockRequest: ["admin", "site"],
+  approveStockRequest: ["admin"],
+  markStockOrdered: ["admin"],
+  markStockDelivered: ["admin", "site"],
 
   // ── Approvals ────────────────────────────────────────────────────────────
-  requestApproval: ["owner", "admin", "site"],
+  requestApproval: ["admin", "site"],
   // Not in 01-hld.md §7.1's own matrix — build/08-approvals.md §2.4's own
   // row, same roles as requestApproval, "Pending approvals only" enforced by
   // status (features/approvals/service.ts's canAddPhotos), not by role.
-  addSamplePhotos: ["owner", "admin", "site"],
+  addSamplePhotos: ["admin", "site"],
   // Admin is excluded deliberately. 01-hld.md §7.1 — an Admin self-certifying
   // destroys the audit value of the whole chain. Do not add an Admin bypass,
   // including for testing.
   decideApproval: ["client"],
 
   // ── Billing ──────────────────────────────────────────────────────────────
-  createBill: ["owner", "admin"],
-  submitBill: ["owner", "admin"],
+  createBill: ["admin"],
+  submitBill: ["admin"],
   // Admin is excluded deliberately, for the same reason as decideApproval.
   certifyBill: ["client"],
-  recordPayment: ["owner", "admin"],
-  editBillingConstants: ["owner"],
+  recordPayment: ["admin"],
+  editBillingConstants: ["admin"],
 
   // ── Users (build/03-auth-and-rbac.md §2.10) ─────────────────────────────
-  inviteUser: ["owner", "admin"],
-  // D54 widened these from owner-only (D8): an admin may change the role of,
-  // or deactivate, a SITE or CLIENT user — never the owner, never another
-  // admin, never themselves. That second half is a property of the TARGET, so
+  inviteUser: ["admin"],
+  // D66: an admin may change the role of, or deactivate, ANY user in the org
+  // except themselves — admins are equal, so there is no target they outrank
+  // or are outranked by. The self-exception is a property of the TARGET, so
   // this table (which maps an action to caller roles) cannot express it. The
   // real gate is `userAdminRefusal` in features/users/service.ts, re-checked
   // by rpc_set_user_role / rpc_set_user_active and, underneath both, by
-  // trg_profiles_privilege_guard — which is what actually stopped the
-  // privilege escalation this table never could.
-  setUserRole: ["owner", "admin"],
-  deactivateUser: ["owner", "admin"],
-  manageProjectMembers: ["owner", "admin"],
+  // trg_profiles_privilege_guard — which also keeps the org from losing its
+  // last admin.
+  setUserRole: ["admin"],
+  deactivateUser: ["admin"],
+  manageProjectMembers: ["admin"],
 
   // ── Impersonation (D20) ──────────────────────────────────────────────────
-  startImpersonation: ["owner", "admin"],
+  startImpersonation: ["admin"],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Capability = keyof typeof CAN;

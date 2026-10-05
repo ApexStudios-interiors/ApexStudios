@@ -496,7 +496,7 @@ type BillLineRow = {
  *  resolution for both. */
 export async function getBillDetail(session: Session, billId: string): Promise<BillDetail | null> {
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
   const supabase = await createClient();
 
   let bill: BillDTO | null = null;

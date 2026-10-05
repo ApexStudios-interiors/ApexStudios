@@ -16,10 +16,10 @@ import { CR, GST, L, MAS, RET } from "./data";
 // D8: owner sees everything admin sees, plus user/billing-constant management
 // handled separately in lib/rbac/permissions.ts. Every "admin" check below is
 // paired with owner for that reason.
-export const isMoney = (role: Role) => role === "admin" || role === "owner";
+export const isMoney = (role: Role) => role === "admin";
 export const isClientRole = (role: Role) => role === "client";
 export const isSiteRole = (role: Role) => role === "site";
-export const canApprove = (role: Role) => role === "admin" || role === "owner";
+export const canApprove = (role: Role) => role === "admin";
 
 export function fmt(n?: number | null): string {
   if (n == null) return "–";

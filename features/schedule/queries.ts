@@ -205,7 +205,7 @@ function buildPackageSchedule(
 
 export async function getScheduleForProject(session: Session, projectId: string): Promise<ProjectSchedule> {
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
   const supabase = await createClient();
 
   const { data: project, error: projErr } = await supabase
@@ -267,7 +267,7 @@ export async function getScheduleForPackage(
   packageId: string
 ): Promise<PackageSchedule | null> {
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
   const supabase = await createClient();
 
   const { data: project, error: projErr } = await supabase

@@ -157,12 +157,12 @@ export const updatePhase = adminAction.inputSchema(updatePhaseSchema).action(asy
 
 export async function getStaffOptions(): Promise<{ id: string; name: string }[]> {
   "use server";
-  await requireRole(["owner", "admin"]);
+  await requireRole(["admin"]);
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("profiles")
     .select("id, full_name")
-    .in("role", ["owner", "admin", "site"])
+    .in("role", ["admin", "site"])
     .is("deleted_at", null)
     .order("full_name", { ascending: true });
   if (error) throw new Error(error.message);
@@ -181,7 +181,7 @@ export type PackageForEdit = {
 
 export async function getPackageForEdit(packageId: string): Promise<PackageForEdit | null> {
   "use server";
-  await requireRole(["owner", "admin"]);
+  await requireRole(["admin"]);
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("packages")

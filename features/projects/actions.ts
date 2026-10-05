@@ -204,7 +204,7 @@ export async function getProjectRateVisibility(projectId: string): Promise<RateV
  */
 export async function findProjectWithName(name: string): Promise<{ id: string; name: string } | null> {
   "use server";
-  await requireRole(["owner", "admin"]);
+  await requireRole(["admin"]);
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("projects")
@@ -246,7 +246,7 @@ export const addProjectMember = adminAction
  */
 export async function getClientOptions(): Promise<{ id: string; name: string }[]> {
   "use server";
-  await requireRole(["owner", "admin"]);
+  await requireRole(["admin"]);
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("clients")

@@ -89,7 +89,7 @@ select is(
 -- ── owner (d1) ───────────────────────────────────────────────────────────────
 select set_config('request.jwt.claims', json_build_object(
   'sub', '00000000-0000-4000-8000-0000000000d1',
-  'app_metadata', json_build_object('app_role', 'owner', 'org_id', '00000000-0000-4000-8000-0000000000a0')
+  'app_metadata', json_build_object('app_role', 'admin', 'org_id', '00000000-0000-4000-8000-0000000000a0')
 )::text, true);
 
 select lives_ok(
@@ -106,7 +106,7 @@ select throws_like(
 -- ── another org ──────────────────────────────────────────────────────────────
 select set_config('request.jwt.claims', json_build_object(
   'sub', '00000000-0000-4000-8000-0000000000d1',
-  'app_metadata', json_build_object('app_role', 'owner', 'org_id', '00000000-0000-4000-8000-00000000ffff')
+  'app_metadata', json_build_object('app_role', 'admin', 'org_id', '00000000-0000-4000-8000-00000000ffff')
 )::text, true);
 
 select throws_like(
@@ -134,7 +134,7 @@ update public.profiles set deleted_at = now() where id = '00000000-0000-4000-800
 set local role authenticated;
 select set_config('request.jwt.claims', json_build_object(
   'sub', '00000000-0000-4000-8000-0000000000d1',
-  'app_metadata', json_build_object('app_role', 'owner', 'org_id', '00000000-0000-4000-8000-0000000000a0')
+  'app_metadata', json_build_object('app_role', 'admin', 'org_id', '00000000-0000-4000-8000-0000000000a0')
 )::text, true);
 
 select throws_like(

@@ -241,7 +241,7 @@ export async function getBillableNowForAdmin(projectId: string): Promise<Billabl
  *  client" assumption `getBillDetail` itself makes. */
 export async function getBillDetailForDialog(billId: string): Promise<BillDetail | null> {
   assertBillingEnabled();
-  const session = await requireRole(["owner", "admin", "client"]);
+  const session = await requireRole(["admin", "client"]);
   return getBillDetail(session, billId);
 }
 

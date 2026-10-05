@@ -63,9 +63,9 @@ vi.mock("@/features/projects/members", () => ({ insertProjectMember: vi.fn() }))
 const { resetUserPassword } = await import("./actions");
 
 const ORG = "00000000-0000-4000-8000-0000000000a0";
+// d1 — an admin like any other since D66.
 const OWNER_ID = "00000000-0000-4000-8000-0000000000d1";
 const ADMIN_ID = "00000000-0000-4000-8000-0000000000d2";
-const OTHER_ADMIN_ID = "00000000-0000-4000-8000-0000000000d3";
 const SITE_ID = "00000000-0000-4000-8000-0000000000d5";
 
 function sessionAs(role: Session["role"], userId: string, impersonating: Session["impersonating"] = null) {
@@ -85,7 +85,7 @@ beforeEach(() => {
 
 describe("resetUserPassword", () => {
   it("owner previewing as client is still owner: may reset an admin", async () => {
-    sessionAs("owner", OWNER_ID, PREVIEW_AS_CLIENT);
+    sessionAs("admin", OWNER_ID, PREVIEW_AS_CLIENT);
     h.target = profile(ADMIN_ID, "admin");
     const result = await resetUserPassword({ userId: ADMIN_ID });
 
@@ -97,13 +97,13 @@ describe("resetUserPassword", () => {
     expect(result.data?.password).toBe(password);
   });
 
-  it("D65: admin → owner is allowed, and a preview does not change that", async () => {
-    // Until 2026-09-28 this was refused as privilege escalation. It is now
-    // permitted by owner decision (a forgotten owner password was otherwise
-    // unrecoverable). The preview cookie is still irrelevant either way: the
-    // REAL role decides, which is the property this case exists to pin.
+  it("an admin may reset another admin, and a preview does not change that", async () => {
+    // Refused as privilege escalation until 2026-09-28 (D65), then allowed
+    // against the owner only; D66 retired the owner and made admins equal, so
+    // any admin may reset any other. The preview cookie is irrelevant either
+    // way: the REAL role decides, which is the property this case pins.
     sessionAs("admin", ADMIN_ID, PREVIEW_AS_CLIENT);
-    h.target = profile(OWNER_ID, "owner");
+    h.target = profile(OWNER_ID, "admin");
     const result = await resetUserPassword({ userId: OWNER_ID });
 
     expect(result.serverError).toBeUndefined();
@@ -111,13 +111,13 @@ describe("resetUserPassword", () => {
     expect(h.setAuthPassword).toHaveBeenCalled();
   });
 
-  it("refuses admin → another admin before the audit call or GoTrue", async () => {
-    // D65 is asymmetric: widening THIS was offered and declined. Keeps the
-    // "refused before anything is written or changed" coverage the
-    // admin → owner case used to provide.
-    sessionAs("admin", ADMIN_ID, PREVIEW_AS_CLIENT);
-    h.target = profile(OTHER_ADMIN_ID, "admin");
-    const result = await resetUserPassword({ userId: OTHER_ADMIN_ID });
+  it("refuses SELF before the audit call or GoTrue", async () => {
+    // The only target rule left since D66, and the case that pins "refused
+    // before anything is written or changed" — which the admin → admin case
+    // used to provide.
+    sessionAs("admin", OWNER_ID, PREVIEW_AS_CLIENT);
+    h.target = profile(OWNER_ID, "admin");
+    const result = await resetUserPassword({ userId: OWNER_ID });
 
     expect(result.serverError).toBe("You don't have permission to do that.");
     expect(result.data).toBeUndefined();
@@ -125,26 +125,8 @@ describe("resetUserPassword", () => {
     expect(h.setAuthPassword).not.toHaveBeenCalled();
   });
 
-  it("refuses admin → admin", async () => {
-    sessionAs("admin", ADMIN_ID);
-    h.target = profile(OTHER_ADMIN_ID, "admin");
-    const result = await resetUserPassword({ userId: OTHER_ADMIN_ID });
-
-    expect(result.serverError).toBe("You don't have permission to do that.");
-    expect(h.setAuthPassword).not.toHaveBeenCalled();
-  });
-
-  it("refuses self", async () => {
-    sessionAs("owner", OWNER_ID);
-    h.target = profile(OWNER_ID, "owner");
-    const result = await resetUserPassword({ userId: OWNER_ID });
-
-    expect(result.serverError).toBe("You don't have permission to do that.");
-    expect(h.setAuthPassword).not.toHaveBeenCalled();
-  });
-
   it("refuses a user the RLS-scoped read cannot see (another org)", async () => {
-    sessionAs("owner", OWNER_ID);
+    sessionAs("admin", OWNER_ID);
     h.target = null;
     const result = await resetUserPassword({ userId: SITE_ID });
 
@@ -154,7 +136,7 @@ describe("resetUserPassword", () => {
   });
 
   it("refuses a soft-deleted user", async () => {
-    sessionAs("owner", OWNER_ID);
+    sessionAs("admin", OWNER_ID);
     h.target = profile(SITE_ID, "site", { deleted_at: "2026-09-01T00:00:00Z" });
     const result = await resetUserPassword({ userId: SITE_ID });
 
@@ -163,7 +145,7 @@ describe("resetUserPassword", () => {
   });
 
   it("refuses a deactivated user", async () => {
-    sessionAs("owner", OWNER_ID);
+    sessionAs("admin", OWNER_ID);
     h.target = profile(SITE_ID, "site", { is_active: false });
     const result = await resetUserPassword({ userId: SITE_ID });
 

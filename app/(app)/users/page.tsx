@@ -34,7 +34,7 @@ export default async function UsersPage({
 }: {
   searchParams: Promise<{ page?: string; pageSize?: string }>;
 }) {
-  const session = await requireRole(["owner", "admin"]);
+  const session = await requireRole(["admin"]);
   // The REAL role, as the actions use: a preview never changes who may do what.
   const actor = { userId: session.userId, role: session.role };
   const [users, activeOwners] = await Promise.all([

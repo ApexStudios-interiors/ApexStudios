@@ -139,7 +139,7 @@ export type ResetRefusal =
  * exactly what a user in another org looks like.
  */
 export function passwordResetRefusal(actor: ResetActor, target: ResetTarget | null): ResetRefusal | null {
-  if (actor.role !== "owner" && actor.role !== "admin") return "forbidden_role";
+  if (actor.role !== "admin") return "forbidden_role";
   if (!target || target.deletedAt !== null) return "not_found";
   if (target.id === actor.userId) return "self";
   // D65: an admin may also reset the OWNER. Widened by owner decision on
@@ -160,16 +160,10 @@ export function passwordResetRefusal(actor: ResetActor, target: ResetTarget | nu
   // (migration 20260928100001). Change one and you must change both, or the
   // page offers a button the database refuses.
   //
-  // NOTE this is the PASSWORD rule. The role-change/deactivation rule further
-  // down keeps D54 unchanged: an admin still may not act on the owner there.
-  if (
-    actor.role === "admin" &&
-    target.role !== "site" &&
-    target.role !== "client" &&
-    target.role !== "owner"
-  ) {
-    return "forbidden_role";
-  }
+  // D66: no target-role restriction at all. Admins are equal, so there is no
+  // colleague an admin outranks or is outranked by — the only refusal left is
+  // resetting your OWN password, handled above as "self" (D64 gives you Change
+  // my password instead). rpc_record_password_reset enforces the same.
   if (!target.isActive) return "inactive";
   if (!target.email) return "no_email";
   return null;
@@ -268,10 +262,12 @@ export function userAdminRefusal(
   actor: UserAdminActor,
   target: UserAdminTarget | null
 ): UserAdminRefusal | null {
-  if (actor.role !== "owner" && actor.role !== "admin") return "forbidden_role";
+  if (actor.role !== "admin") return "forbidden_role";
   if (!target || target.deletedAt !== null) return "not_found";
   if (target.id === actor.userId) return "self";
-  if (actor.role === "admin" && target.role !== "site" && target.role !== "client") return "forbidden_role";
+  // D66: no target-role rule. Admins are equal, so there is no colleague an
+  // admin outranks or is outranked by. What stops an org locking itself out is
+  // the last-active-admin invariant below, not a hierarchy.
   return null;
 }
 
@@ -298,20 +294,24 @@ export function isAssignableRole(role: Role): role is AssignableRole {
  */
 export type OwnerCount = { activeOwners: number };
 
-/** Only worth a query when the target is the kind of row that could be the last owner. */
+/** Only worth a query when the target is the kind of row that could be the last admin. */
 function needsOwnerCount(target: UserAdminTarget | null): boolean {
-  return target?.role === "owner" && target.isActive;
+  return target?.role === "admin" && target.isActive;
 }
 
 /**
- * The target is the org's only active owner today, and the change being asked
+ * The target is the org's only active ADMIN today, and the change being asked
  * for would stop them being one — by taking the role away, or by deactivating
- * the account that holds it. Both callers below have already established that
- * the change does exactly that (no caller may assign `owner`, and only a
- * deactivation reaches this from the other one).
+ * the account that holds it.
+ *
+ * D66 translated this from the last OWNER to the last admin. The invariant is
+ * the same one it always was — an organisation must not be left with nobody
+ * who can administer it — and it does not make any admin outrank another.
+ * `trg_profiles_privilege_guard` enforces it again inside the statement that
+ * performs the change, under a row lock; this is the courtesy copy.
  */
 function wouldStrandOrg(target: UserAdminTarget, ctx: OwnerCount): boolean {
-  return target.role === "owner" && target.isActive && ctx.activeOwners <= 1;
+  return target.role === "admin" && target.isActive && ctx.activeOwners <= 1;
 }
 
 export function roleChangeRefusal(

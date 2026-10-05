@@ -82,7 +82,7 @@ export async function getPackageOptions(projectId: string): Promise<{ id: string
   const session = await requireSession();
   const supabase = await createClient();
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
 
   if (isAdmin) {
     const { data, error } = await supabase

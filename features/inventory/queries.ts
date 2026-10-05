@@ -163,7 +163,7 @@ export async function getProjectInventory(
   req: PageRequest
 ): Promise<{ items: Page<InventoryItemDTO>; stats: InventoryStats }> {
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
   if (effectiveRole === "client") return { items: emptyPage(req), stats: EMPTY_STATS };
 
   const page = await fetchRows(isAdmin, { projectId }, req);
@@ -186,7 +186,7 @@ export async function getBusinessInventory(
   req: PageRequest
 ): Promise<{ items: Page<InventoryItemDTO>; stats: InventoryStats }> {
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
   if (effectiveRole === "client") return { items: emptyPage(req), stats: EMPTY_STATS };
 
   const page = await fetchRows(isAdmin, opts, req);

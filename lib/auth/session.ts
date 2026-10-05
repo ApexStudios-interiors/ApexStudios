@@ -3,7 +3,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { decodePreviewCookie, PREVIEW_COOKIE_NAME } from "@/lib/auth/impersonation";
-import type { Role } from "@/lib/rbac/roles";
+import { toRole, type Role } from "@/lib/rbac/roles";
 
 export type Session = {
   userId: string;
@@ -88,19 +88,22 @@ export const getSession = cache(async (): Promise<Session | null> => {
 
   if (profileError || !profile || !profile.is_active) return null;
 
-  const role = claimRole ?? profile.role;
+  // toRole, not a cast: the JWT claim and profiles.role are both typed by the
+  // database enum, which still carries the retired 'owner' value for
+  // audit_log's history (D66). A JWT minted before the change could still name
+  // it until it expires.
+  const role = toRole(claimRole ?? profile.role);
   const orgId = claimOrgId ?? profile.org_id;
 
   let impersonating: Session["impersonating"] = null;
-  if (role === "owner" || role === "admin") {
+  if (role === "admin") {
     const cookieStore = await cookies();
     const preview = decodePreviewCookie(cookieStore.get(PREVIEW_COOKIE_NAME)?.value);
-    // Previewing as Admin is the owner's alone (D20). startPreview refuses it
-    // for anyone else, so a cookie should never exist here — but a cookie
-    // outlives the session that minted it (15 minutes), and an owner demoted
-    // to admin mid-preview would otherwise keep an admin-shaped view of their
-    // own reads. Ignoring it costs nothing and closes that window.
-    const previewAllowed = preview && (preview.role !== "admin" || role === "owner");
+    // D66: there is no Admin preview any more. startPreview refuses it, so a
+    // cookie naming it should never exist — but a cookie outlives the session
+    // that minted it by up to 15 minutes, so one issued before this change
+    // could still arrive. Ignoring it costs nothing and closes that window.
+    const previewAllowed = preview && preview.role !== "admin";
     if (preview && previewAllowed) impersonating = { role: preview.role, projectId: preview.projectId };
   }
 
@@ -144,7 +147,7 @@ export async function requireRole(roles: Role[]): Promise<Session> {
  * implicitly via RLS on project_members itself.
  */
 export async function requireProjectAccess(session: Session, projectId: string): Promise<void> {
-  if (session.role === "owner" || session.role === "admin") return;
+  if (session.role === "admin") return;
 
   const supabase = await createClient();
   const { data, error } = await supabase

@@ -40,7 +40,7 @@ export default async function ProjectDashboardPage({ params }: { params: Promise
   const packages = await getPackagesForProject(session, projectId);
   const { items: latestUpdates } = await getUpdatesForProject(session, projectId);
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const isMoney = effectiveRole === "owner" || effectiveRole === "admin";
+  const isMoney = effectiveRole === "admin";
   const isClient = effectiveRole === "client";
   // 01-hld.md §7.1: Client has no stock visibility at all — the query itself
   // isn't even worth running for that role.

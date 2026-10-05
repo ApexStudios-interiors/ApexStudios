@@ -11,7 +11,7 @@ import { packageStatusLabel } from "./service";
  * `.internal` off a site row fails to compile, not just fails to render.
  */
 
-function effectiveRoleOf(session: Session): "owner" | "admin" | "site" | "client" {
+function effectiveRoleOf(session: Session): "admin" | "site" | "client" {
   return session.impersonating?.role ?? session.role;
 }
 
@@ -74,7 +74,7 @@ export async function getPackagesForProject(
   projectId: string
 ): Promise<PackagesForProject> {
   const effectiveRole = effectiveRoleOf(session);
-  if (effectiveRole === "owner" || effectiveRole === "admin") return getPackagesForProjectAdmin(projectId);
+  if (effectiveRole === "admin") return getPackagesForProjectAdmin(projectId);
   if (effectiveRole === "client") return getPackagesForProjectClient(projectId);
   return getPackagesForProjectSite(projectId);
 }
@@ -228,7 +228,7 @@ export async function getPackageNavLists(
   const supabase = await createClient();
 
   const { data, error } =
-    effectiveRole === "owner" || effectiveRole === "admin"
+    effectiveRole === "admin"
       ? await supabase
           .from("packages")
           .select("id, project_id, name")
@@ -286,7 +286,7 @@ export async function getPackageDetail(
   packageId: string
 ): Promise<PackageDetailDTO | null> {
   const effectiveRole = effectiveRoleOf(session);
-  if (effectiveRole === "owner" || effectiveRole === "admin") return getPackageDetailAdmin(packageId);
+  if (effectiveRole === "admin") return getPackageDetailAdmin(packageId);
   if (effectiveRole === "client") return getPackageDetailClient(projectId, packageId);
   return getPackageDetailSite(projectId, packageId);
 }
@@ -403,7 +403,7 @@ export async function getPhasesForPackage(
   packageId: string
 ): Promise<PhasesForPackage> {
   const effectiveRole = effectiveRoleOf(session);
-  if (effectiveRole === "owner" || effectiveRole === "admin") return getPhasesForPackageAdmin(packageId);
+  if (effectiveRole === "admin") return getPhasesForPackageAdmin(packageId);
   if (effectiveRole === "client") return getPhasesForPackageClient(projectId, packageId);
   return getPhasesForPackageSite(projectId, packageId);
 }

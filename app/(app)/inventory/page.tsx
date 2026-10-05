@@ -35,7 +35,7 @@ export default async function BusinessInventoryPage({
   const search = normalizeInventorySearch(q);
 
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
 
   const [{ items, stats }, portfolio] = await Promise.all([
     getBusinessInventory(session, { projectId, search }, parsePageRequest(paging)),

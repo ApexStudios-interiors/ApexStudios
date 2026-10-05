@@ -55,7 +55,7 @@ export default async function StockPage({
     getPackageOptions(projectId),
   ]);
 
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
   const basePath = `/projects/${projectId}/stock`;
 
   return (

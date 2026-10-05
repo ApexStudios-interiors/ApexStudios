@@ -73,9 +73,8 @@ function roleGuarded(roles: Role[]) {
   });
 }
 
-export const ownerAction = roleGuarded(["owner"]);
-export const adminAction = roleGuarded(["owner", "admin"]);
-export const siteAction = roleGuarded(["owner", "admin", "site"]);
+export const adminAction = roleGuarded(["admin"]);
+export const siteAction = roleGuarded(["admin", "site"]);
 export const clientAction = roleGuarded(["client"]);
 
 export type ActionCtx = { session: Session };

@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { Role } from "@/lib/rbac/roles";
 import { fetchPage, type Page, type PageRequest } from "@/lib/pagination";
+import { toRole } from "@/lib/rbac/roles";
 
 export type UserRow = {
   id: string;
@@ -39,7 +40,7 @@ export async function listUsers(req: PageRequest): Promise<Page<UserRow>> {
     id: p.id,
     fullName: p.full_name,
     contact: p.email ?? p.phone,
-    role: p.role,
+    role: toRole(p.role),
     email: p.email,
     isActive: p.is_active,
   }));
@@ -62,7 +63,7 @@ export async function countActiveOwners(): Promise<number> {
   const { count, error } = await supabase
     .from("profiles")
     .select("id", { count: "exact", head: true })
-    .eq("role", "owner")
+    .eq("role", "admin")
     .eq("is_active", true)
     .is("deleted_at", null);
   if (error) throw new Error(error.message);

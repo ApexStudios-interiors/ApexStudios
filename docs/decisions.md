@@ -1995,6 +1995,45 @@ needed different answers.
 
 ---
 
+### D66 — Three roles: Admin, Site Supervisor, Client. The owner role is retired
+
+**Question:** "I only want three roles — admin, supervisor, client. Remove all the other roles,
+don't make it look complicated."
+**Answered:** 2026-10-05 by Voola, after being shown what is lost and confirming.
+
+**Answer:** every owner-only capability becomes an admin capability, and the single owner account
+(John Israel Voola) became an admin. There are four admins now, and they are equal.
+
+**What is lost, stated plainly because it cannot be undone by redeploying:** any admin may change
+any other admin's role, deactivate them, and reset their password — then sign in as them. The rules
+that prevented that (D8, D54, D65) existed only because one account outranked the others. There is
+no longer anyone to outrank.
+
+**What is kept:**
+- nobody may change their own role, deactivate themselves, or reset their own password (D64's
+  Change my password is the self-service route);
+- the organisation cannot be left with nobody in charge. The "last active owner" invariant is
+  translated to "last active **admin**" — it protects the org without making any admin outrank
+  another, and is enforced inside the statement that performs the change, under a row lock.
+
+**The enum value `'owner'` is NOT dropped**, and this is the decision inside the decision.
+`audit_log.actor_role` is typed `app_role` and holds 9 historical rows recording what an owner did;
+`audit_log` is append-only (AGENTS.md database rule 6), so dropping the value would either rewrite
+or break that history. It survives as a record of the past while nothing can produce it: no profile
+carries it, no check accepts it, and `fn_guard_profile_privilege_change` still refuses to assign it.
+The application's own `Role` type is the narrow three, and `toRole()` in `lib/rbac/roles.ts` is the
+one boundary that maps a stray database value back — it maps rather than throws, because `owner`
+meant "everything an admin can do" and a stray row must not take a page down.
+
+**Also retired:** previewing as Admin. Only an admin can reach the preview menu, so it would be
+previewing as yourself — refused server-side as well as absent from the menu.
+
+**Order matters in the migration:** the data change runs LAST. The OLD trigger refuses to demote the
+last active owner, correctly for the world it was written for, so running it first aborts the
+migration on its own first statement.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |

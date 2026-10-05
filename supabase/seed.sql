@@ -81,7 +81,7 @@ on conflict (id) do nothing;
 -- Ravi's contact in the prototype was a masked phone, not an email, which is why
 -- profiles_contact_ck accepts either.
 insert into public.profiles (id, org_id, full_name, email, phone, role) values
-  ('00000000-0000-4000-8000-0000000000d1', '00000000-0000-4000-8000-0000000000a0', 'John Israel Voola', 'hello@beapex.in',   null, 'owner'),
+  ('00000000-0000-4000-8000-0000000000d1', '00000000-0000-4000-8000-0000000000a0', 'John Israel Voola', 'hello@beapex.in',   null, 'admin'),
   ('00000000-0000-4000-8000-0000000000d2', '00000000-0000-4000-8000-0000000000a0', 'Suresh K',          'suresh@beapex.in',  null, 'admin'),
   ('00000000-0000-4000-8000-0000000000d3', '00000000-0000-4000-8000-0000000000a0', 'Prakash R',         'prakash@beapex.in', null, 'admin'),
   ('00000000-0000-4000-8000-0000000000d4', '00000000-0000-4000-8000-0000000000a0', 'Meena D',           'meena@beapex.in',   null, 'admin'),

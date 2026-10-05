@@ -117,7 +117,7 @@ export async function countStockRequests(
   opts: StockRequestFilter
 ): Promise<number> {
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
   if (effectiveRole === "client") return 0;
 
   const supabase = await createClient();
@@ -164,7 +164,7 @@ export async function countPendingRequestsByProject(
 ): Promise<Record<string, number>> {
   const effectiveRole = session.impersonating?.role ?? session.role;
   if (effectiveRole === "client" || projectIds.length === 0) return {};
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
 
   const supabase = await createClient();
   const { data, error } = isAdmin
@@ -198,7 +198,7 @@ async function loadStockRequests(
   req?: PageRequest
 ): Promise<Page<StockRequestDTO>> {
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
   // 01-hld.md §7.1: no route at all
   if (effectiveRole === "client") return { rows: [], total: 0, page: 1, pageSize: req?.pageSize ?? 0 };
 

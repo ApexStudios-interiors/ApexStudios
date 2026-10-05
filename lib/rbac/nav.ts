@@ -38,7 +38,6 @@ function sectionsFor(role: Role): Section[] {
 }
 
 export const ALLOWED_SECTIONS: Record<Role, Section[]> = {
-  owner: sectionsFor("owner"),
   admin: sectionsFor("admin"),
   site: sectionsFor("site"),
   client: sectionsFor("client"),

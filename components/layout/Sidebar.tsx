@@ -37,8 +37,9 @@ const NAV_ITEMS: { key: Section; label: string; icon: IconName; href: (id: strin
  * refuses `admin` from a non-owner REAL session, and getSession ignores an
  * admin preview cookie held by anyone but the owner.
  */
-const PREVIEW_OPTIONS: { value: PreviewRole; label: string; ownerOnly?: boolean }[] = [
-  { value: "admin", label: "Admin", ownerOnly: true },
+// D66: no Admin entry. Only an admin sees this menu, so previewing as Admin
+// would be previewing as yourself; startPreview refuses it server-side too.
+const PREVIEW_OPTIONS: { value: PreviewRole; label: string }[] = [
   { value: "site", label: "Site Supervisor" },
   { value: "client", label: "Client" },
 ];
@@ -75,12 +76,12 @@ export function Sidebar({
   const project = params?.projectId ? (projects.find((p) => p.id === params.projectId) ?? null) : null;
   const allowed = ALLOWED_SECTIONS[role];
 
-  const canPreview = session.role === "owner" || session.role === "admin";
+  const canPreview = session.role === "admin";
   /** The Studio group — Users and Failed Jobs — is owner/admin only. Docs sits
    *  directly below it and is help content every role may read, so it renders
    *  outside that gate; when the group is hidden, Docs takes over the group
    *  label's own top spacing so the link lands in the same place for everyone. */
-  const showStudio = role === "admin" || role === "owner";
+  const showStudio = role === "admin";
 
   return (
     <aside className="bg-sidebar border-r border-border flex flex-col sticky top-0 self-start h-screen overflow-auto p-3">
@@ -306,7 +307,7 @@ export function Sidebar({
                 <div className="px-3 pt-1.5 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                   Preview as
                 </div>
-                {PREVIEW_OPTIONS.filter((opt) => !opt.ownerOnly || session.role === "owner").map((opt) => (
+                {PREVIEW_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
                     disabled={preview.isPending}

@@ -119,7 +119,7 @@ describe("stock queries filter soft-deleted rows (AGENTS.md database rule 7)", (
   });
 
   it("owner is the same admin path", async () => {
-    await getStockRequestsForProject(sessionAs("owner"), PROJECT);
+    await getStockRequestsForProject(sessionAs("admin"), PROJECT);
     expectEveryBaseTableReadFiltersDeletedAt();
   });
 

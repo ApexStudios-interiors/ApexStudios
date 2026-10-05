@@ -125,7 +125,7 @@ export async function getOwnerOptions(): Promise<{ id: string; name: string }[]>
   const { data, error } = await supabase
     .from("profiles")
     .select("id, full_name")
-    .in("role", ["owner", "admin", "site"])
+    .in("role", ["admin", "site"])
     .is("deleted_at", null)
     .order("full_name", { ascending: true });
   if (error) throw new Error(error.message);

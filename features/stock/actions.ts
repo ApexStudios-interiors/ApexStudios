@@ -29,7 +29,7 @@ export const createStockRequest = siteAction
     // admin previewing as site is still really an admin; a site session that
     // somehow crafted a `rate` in its POST body must not have it stored
     // regardless — this check has to be the real role either way.
-    const isAdmin = ctx.session.role === "owner" || ctx.session.role === "admin";
+    const isAdmin = ctx.session.role === "admin";
     // D55: a site supervisor may set a rate only where THIS project is
     // explicitly set to 'editable'. 'hidden' and 'readonly' both discard it,
     // so a crafted POST body cannot set one just because the field was not
@@ -110,7 +110,7 @@ export async function hasDeliveredDuplicate(input: unknown): Promise<boolean> {
   const effectiveRole = session.impersonating?.role ?? session.role;
   // 01-hld.md §7.1: a client has no stock surface at all.
   if (effectiveRole === "client") return false;
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
 
   const supabase = await createClient();
   const columns = "id, inventory_item_id, material_name, qty, needed_by";

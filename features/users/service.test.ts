@@ -206,7 +206,7 @@ describe("usernameForEmail", () => {
 });
 
 // D52. Seeded ids: owner d1, admins d2/d3, site d5, client d6.
-const OWNER: ResetActor = { userId: "d1", role: "owner" };
+const OTHER_ADMIN: ResetActor = { userId: "d1", role: "admin" };
 const ADMIN: ResetActor = { userId: "d2", role: "admin" };
 
 function target(overrides: Partial<ResetTarget> = {}): ResetTarget {
@@ -221,8 +221,8 @@ function target(overrides: Partial<ResetTarget> = {}): ResetTarget {
 }
 
 describe("passwordResetRefusal — who may reset whom", () => {
-  it.each(["owner", "admin", "site", "client"] as const)("owner may reset another %s", (role) => {
-    expect(passwordResetRefusal(OWNER, target({ id: "x", role }))).toBeNull();
+  it.each(["admin", "site", "client"] as const)("an admin may reset any %s", (role) => {
+    expect(passwordResetRefusal(OTHER_ADMIN, target({ id: "x", role }))).toBeNull();
   });
 
   it.each(["site", "client"] as const)("admin may reset a %s", (role) => {
@@ -236,33 +236,35 @@ describe("passwordResetRefusal — who may reset whom", () => {
     // reset it, the owner could not reset themselves (D52), and a second owner
     // can never be created (fn_guard_profile_privilege_change). The audit row
     // records the attempt; it does not prevent it.
-    expect(passwordResetRefusal(ADMIN, target({ id: "d1", role: "owner" }))).toBeNull();
+    expect(passwordResetRefusal(ADMIN, target({ id: "d1", role: "admin" }))).toBeNull();
   });
 
-  it("D65 is asymmetric: admin still may NOT reset another admin", () => {
-    // Widening this too was offered and declined. If it is ever widened, it
-    // is a decision, not a tidy-up.
-    expect(passwordResetRefusal(ADMIN, target({ id: "d3", role: "admin" }))).toBe("forbidden_role");
+  it("D66: an admin MAY reset a peer admin", () => {
+    // D65 refused this while the owner outranked admins. With three equal
+    // roles there is no colleague left to protect from a peer.
+    expect(passwordResetRefusal(ADMIN, target({ id: "d3", role: "admin" }))).toBeNull();
   });
 
-  it.each([OWNER, ADMIN])("refuses a reset of your own password ($role)", (actor) => {
+  it.each([OTHER_ADMIN, ADMIN])("refuses a reset of your own password ($userId)", (actor) => {
     expect(passwordResetRefusal(actor, target({ id: actor.userId, role: actor.role }))).toBe("self");
   });
 
   it("refuses a target the RLS-scoped read did not return (another org, or no such user)", () => {
-    expect(passwordResetRefusal(OWNER, null)).toBe("not_found");
+    expect(passwordResetRefusal(OTHER_ADMIN, null)).toBe("not_found");
   });
 
   it("refuses a soft-deleted target", () => {
-    expect(passwordResetRefusal(OWNER, target({ deletedAt: "2026-09-01T00:00:00Z" }))).toBe("not_found");
+    expect(passwordResetRefusal(OTHER_ADMIN, target({ deletedAt: "2026-09-01T00:00:00Z" }))).toBe(
+      "not_found"
+    );
   });
 
   it("refuses a deactivated target", () => {
-    expect(passwordResetRefusal(OWNER, target({ isActive: false }))).toBe("inactive");
+    expect(passwordResetRefusal(OTHER_ADMIN, target({ isActive: false }))).toBe("inactive");
   });
 
   it("refuses a target with no email to sign in with", () => {
-    expect(passwordResetRefusal(OWNER, target({ email: null }))).toBe("no_email");
+    expect(passwordResetRefusal(OTHER_ADMIN, target({ email: null }))).toBe("no_email");
   });
 
   it.each(["site", "client"] as const)("refuses a %s caller outright", (role) => {
@@ -273,9 +275,10 @@ describe("passwordResetRefusal — who may reset whom", () => {
 
   it("canResetPassword agrees with the refusal", () => {
     expect(canResetPassword(ADMIN, target())).toBe(true);
-    // D65: the owner is now allowed; a peer admin is still not.
-    expect(canResetPassword(ADMIN, target({ id: "d1", role: "owner" }))).toBe(true);
-    expect(canResetPassword(ADMIN, target({ id: "d3", role: "admin" }))).toBe(false);
+    // D66: any admin, any target but yourself.
+    expect(canResetPassword(ADMIN, target({ id: "d1", role: "admin" }))).toBe(true);
+    expect(canResetPassword(ADMIN, target({ id: "d3", role: "admin" }))).toBe(true);
+    expect(canResetPassword(ADMIN, target({ id: ADMIN.userId, role: "admin" }))).toBe(false);
   });
 });
 
@@ -315,16 +318,10 @@ describe("resetAccountPassword", () => {
   });
 
   it.each([
-    [
-      "admin → admin",
-      ADMIN,
-      target({ id: "d3", role: "admin", email: "prakash@beapex.in" }),
-      "forbidden_role",
-    ],
     ["self", ADMIN, target({ id: "d2", role: "admin", email: "suresh@beapex.in" }), "self"],
-    ["other org / not found", OWNER, null, "not_found"],
-    ["deleted", OWNER, target({ deletedAt: "2026-09-01T00:00:00Z" }), "not_found"],
-    ["deactivated", OWNER, target({ isActive: false }), "inactive"],
+    ["other org / not found", OTHER_ADMIN, null, "not_found"],
+    ["deleted", OTHER_ADMIN, target({ deletedAt: "2026-09-01T00:00:00Z" }), "not_found"],
+    ["deactivated", OTHER_ADMIN, target({ isActive: false }), "inactive"],
   ] as const)(
     "refuses %s without auditing or touching the password",
     async (_label, actor, found, reason) => {
@@ -361,7 +358,7 @@ describe("resetAccountPassword", () => {
         throw new Error("setAuthPassword: weak_password: Password is known to be weak");
       },
     });
-    const error = await resetAccountPassword(steps, OWNER, "d5").catch((e: unknown) => e);
+    const error = await resetAccountPassword(steps, OTHER_ADMIN, "d5").catch((e: unknown) => e);
     expect(password).toHaveLength(GENERATED_PASSWORD_LENGTH);
     expect(String(error)).not.toContain(password);
     expect(JSON.stringify(recorded)).not.toContain(password);

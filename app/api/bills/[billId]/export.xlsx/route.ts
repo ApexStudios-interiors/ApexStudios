@@ -23,7 +23,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ bil
   if (!env.BILLING_ENABLED) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
   try {
-    await requireRole(["owner", "admin"]);
+    await requireRole(["admin"]);
   } catch (e) {
     if (e instanceof UnauthenticatedError)
       return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
