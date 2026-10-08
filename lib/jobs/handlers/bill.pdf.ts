@@ -56,7 +56,7 @@ export async function generateBillPdf(payload: unknown): Promise<void> {
   // should not leave two PDF attachments behind. Scoped to THIS revision's
   // own file name — the previous revision's document stays on the bill as
   // the record of what the client was shown before, and `getBillPdfUrl`
-  // serves the newest.
+  // serves the one named for the bill's current revision.
   const { data: existing, error: existingErr } = await supabase
     .from("attachments")
     .select("id")

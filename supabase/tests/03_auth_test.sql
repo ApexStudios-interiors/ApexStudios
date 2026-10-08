@@ -49,7 +49,7 @@ select ok(
 
 select set_config(
   'request.jwt.claims',
-  json_build_object('app_metadata', json_build_object('app_role', 'owner', 'org_id', '00000000-0000-4000-8000-0000000000a0'))::text,
+  json_build_object('app_metadata', json_build_object('app_role', 'admin', 'org_id', '00000000-0000-4000-8000-0000000000a0'))::text,
   true
 );
 select ok(public.is_admin(), 'is_admin() is true for an owner claim too (D8: owner is a superset of admin)');

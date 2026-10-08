@@ -12,7 +12,7 @@ import {
   setAuthUserBanned,
 } from "@/lib/auth/admin";
 import { ForbiddenError } from "@/lib/auth/session";
-import type { Role } from "@/lib/rbac/roles";
+import { toRole, type Role } from "@/lib/rbac/roles";
 import { insertProjectMember } from "@/features/projects/members";
 import { countActiveOwners } from "./queries";
 import {
@@ -192,7 +192,7 @@ export const resetUserPassword = adminAction
           return data
             ? {
                 id: data.id,
-                role: data.role,
+                role: toRole(data.role),
                 isActive: data.is_active,
                 deletedAt: data.deleted_at,
                 email: data.email,
@@ -259,7 +259,7 @@ function userAdminSteps(supabase: Awaited<ReturnType<typeof createClient>>): Use
         .maybeSingle();
       if (error) throw new Error(error.message);
       return data
-        ? { id: data.id, role: data.role, isActive: data.is_active, deletedAt: data.deleted_at }
+        ? { id: data.id, role: toRole(data.role), isActive: data.is_active, deletedAt: data.deleted_at }
         : null;
     },
     countActiveOwners,

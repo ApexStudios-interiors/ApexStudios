@@ -6,14 +6,11 @@ import { useAction } from "next-safe-action/hooks";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
 import { changeMyPasswordAction } from "@/features/users/actions";
 import { changeMyPasswordSchema, PASSWORD_MIN_LENGTH } from "@/features/users/schema";
-import type { ChangeMyPasswordRefusal } from "@/features/users/service";
+import { CHANGE_MY_PASSWORD_REFUSAL_MESSAGES } from "@/features/users/service";
 
-/** What each server refusal reads as. None of them echoes a password. */
-const REFUSAL_MESSAGE: Record<ChangeMyPasswordRefusal, string> = {
-  no_email: "This account has no username to sign in with. Ask an admin for help.",
-  same_as_current: "Choose a password different from your current one",
-  wrong_password: "That isn't your current password",
-};
+/** What each server refusal reads as (shared with the mobile API). None of
+ *  them echoes a password. */
+const REFUSAL_MESSAGE = CHANGE_MY_PASSWORD_REFUSAL_MESSAGES;
 
 /**
  * Change my password — opened from the user menu at the foot of the sidebar,

@@ -158,7 +158,12 @@ export const config = {
      * - /api/backup/report — same Bearer CRON_SECRET auth, called by the
      *   backup.nightly GitHub workflow; without this it was redirected to
      *   /login and the backup outcome was never recorded
+     * - /api/mobile/* — authenticates with Authorization: Bearer <user access
+     *   token>, not cookies. A cookie-less request would otherwise be 307'd to
+     *   the /login page instead of getting a JSON 401. Each route guards itself
+     *   with requireSession()/requireRole(), and the mobile app refreshes its
+     *   own token, so the session-refresh dance has nothing to do here either
      */
-    "/((?!_next/static|_next/image|favicon\\.ico|api/cron|api/backup/report).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico|api/cron|api/backup/report|api/mobile/).*)",
   ],
 };

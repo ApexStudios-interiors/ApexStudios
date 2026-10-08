@@ -5,8 +5,9 @@ import { revalidatePath, updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { siteAction, clientAction } from "@/lib/safe-action";
 import { requireSession } from "@/lib/auth/session";
-import { canAddPhotos } from "./service";
 import { addSamplePhotosSchema, decideApprovalSchema, requestApprovalSchema } from "./schema";
+import { requestApprovalFor } from "./create";
+import { approvalForPhotos } from "./photos";
 
 /**
  * build/08-approvals.md §2.4. `rpc_create_approval` and `rpc_decide_approval`
@@ -18,51 +19,13 @@ import { addSamplePhotosSchema, decideApprovalSchema, requestApprovalSchema } fr
 export const requestApproval = siteAction
   .inputSchema(requestApprovalSchema)
   .action(async ({ parsedInput, ctx }) => {
-    const { id, projectId, packageId, phaseId, type, item, note, neededBy, attachmentIds, supersedesId } =
-      parsedInput;
-    const supabase = await createClient();
+    // The photo re-check and the RPC call live in ./create.ts, shared with
+    // the mobile API so both write paths behave identically.
+    const created = await requestApprovalFor(ctx.session, parsedInput);
 
-    // The re-check `postDailyUpdate` (features/updates/actions.ts) already
-    // established: `FileUploader`'s uploads are confirmed BEFORE this ever
-    // runs, tagged with this dialog's own client-generated id — confirm each
-    // one really is one of this session's own uploads for this exact
-    // project and (not-yet-existing) approval, not a stray id.
-    if (attachmentIds.length > 0) {
-      const { data: owned, error: attErr } = await supabase
-        .from("attachments")
-        .select("id")
-        .in("id", attachmentIds)
-        .eq("entity_type", "approval")
-        .eq("entity_id", id)
-        .eq("project_id", projectId)
-        .eq("uploaded_by", ctx.session.userId)
-        .is("deleted_at", null);
-      if (attErr) throw new Error(attErr.message);
-      if ((owned?.length ?? 0) !== attachmentIds.length) {
-        throw new Error("NOT_FOUND: one or more photos did not upload correctly — please retry them");
-      }
-    }
-
-    const { data, error } = await supabase.rpc("rpc_create_approval", {
-      p_id: id,
-      p_project_id: projectId,
-      p_package_id: packageId,
-      p_type: type,
-      p_item: item,
-      p_phase_id: phaseId,
-      p_note: note,
-      p_needed_by: neededBy,
-      p_supersedes_id: supersedesId,
-    });
-    if (error) throw new Error(error.message);
-    // The generated type for a `returns public.approvals` RPC is `unknown`
-    // (scripts/gen-types.mjs only maps scalar Postgres types) — same cast
-    // `createStockRequest` already needed for its own composite-row RPC.
-    const row = data as { id: string; ref_no: string };
-
-    updateTag(`project:${projectId}`);
-    revalidatePath(`/projects/${projectId}`, "layout");
-    return { id: row.id, refNo: row.ref_no };
+    updateTag(`project:${parsedInput.projectId}`);
+    revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
+    return { id: created.id, refNo: created.refNo };
   });
 
 /**
@@ -75,22 +38,10 @@ export const addSamplePhotos = siteAction
   .inputSchema(addSamplePhotosSchema)
   .action(async ({ parsedInput, ctx }) => {
     const { approvalId, attachmentIds } = parsedInput;
+    // Exists for this session and still pending — shared with the mobile
+    // photo routes (./photos.ts).
+    const approval = await approvalForPhotos(approvalId);
     const supabase = await createClient();
-
-    const { data: approval, error: apErr } = await supabase
-      .from("approvals")
-      .select("id, project_id, status")
-      .eq("id", approvalId)
-      .is("deleted_at", null)
-      .maybeSingle();
-    if (apErr) throw new Error(apErr.message);
-    // ap_select's own membership scoping simply excludes a row this session
-    // cannot see, rather than raising — a clean error here, same as
-    // `editDailyUpdate`'s own not-found-after-update handling.
-    if (!approval) throw new Error("NOT_FOUND: this approval no longer exists");
-    if (!canAddPhotos(approval.status)) {
-      throw new Error("ILLEGAL_TRANSITION: photos can only be added to a pending approval");
-    }
 
     const { data: owned, error: attErr } = await supabase
       .from("attachments")
@@ -98,7 +49,7 @@ export const addSamplePhotos = siteAction
       .in("id", attachmentIds)
       .eq("entity_type", "approval")
       .eq("entity_id", approvalId)
-      .eq("project_id", approval.project_id)
+      .eq("project_id", approval.projectId)
       .eq("uploaded_by", ctx.session.userId)
       .is("deleted_at", null);
     if (attErr) throw new Error(attErr.message);
@@ -106,8 +57,8 @@ export const addSamplePhotos = siteAction
       throw new Error("NOT_FOUND: one or more photos did not upload correctly — please retry them");
     }
 
-    updateTag(`project:${approval.project_id}`);
-    revalidatePath(`/projects/${approval.project_id}`, "layout");
+    updateTag(`project:${approval.projectId}`);
+    revalidatePath(`/projects/${approval.projectId}`, "layout");
     return { id: approval.id };
   });
 

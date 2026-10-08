@@ -19,46 +19,46 @@ import { setUserActiveSchema, setUserRoleSchema } from "./schema";
  * (supabase/tests/13_user_role_and_deactivation_test.sql); this is the copy the
  * page and the action share.
  *
- * Seeded ids, as elsewhere: owner d1, admins d2/d3, site d5, client d6.
+ * Seeded ids, as elsewhere: admins d1/d2/d3, site d5, client d6. Since D66
+ * there are three roles and admins are equal — `OTHER_ADMIN` exists to prove
+ * that an admin may now act on a peer, which used to be refused.
+ *
+ * `activeOwners` keeps its name but counts active ADMINS: the invariant it
+ * guards became "the org must not lose its last admin" (D66).
  */
-const OWNER: UserAdminActor = { userId: "d1", role: "owner" };
 const ADMIN: UserAdminActor = { userId: "d2", role: "admin" };
-const SOLE_OWNER = { activeOwners: 1 };
-const TWO_OWNERS = { activeOwners: 2 };
+const OTHER_ADMIN: UserAdminActor = { userId: "d1", role: "admin" };
+const SOLE_ADMIN = { activeOwners: 1 };
+const TWO_ADMINS = { activeOwners: 2 };
 
 function target(overrides: Partial<UserAdminTarget> = {}): UserAdminTarget {
   return { id: "d5", role: "site", isActive: true, deletedAt: null, ...overrides };
 }
 
-const ownerTarget = target({ id: "dX", role: "owner" });
+const adminTarget = target({ id: "dX", role: "admin" });
 
 describe("userAdminRefusal — who may act on whom", () => {
-  it.each(["owner", "admin", "site", "client"] as const)("owner may act on another %s", (role) => {
-    expect(userAdminRefusal(OWNER, target({ id: "x", role }))).toBeNull();
-  });
-
-  it.each(["site", "client"] as const)("admin may act on a %s", (role) => {
+  it.each(["admin", "site", "client"] as const)("an admin may act on any %s", (role) => {
     expect(userAdminRefusal(ADMIN, target({ id: "x", role }))).toBeNull();
   });
 
-  it("refuses admin → owner: an admin who could demote the owner could lock them out", () => {
-    expect(userAdminRefusal(ADMIN, target({ id: "d1", role: "owner" }))).toBe("forbidden_role");
+  it("D66: an admin may act on a PEER admin, which used to be refused", () => {
+    // There is no rank above admin any more, so there is no colleague an
+    // admin is protected from. This is the capability the owner role used to
+    // hold on its own.
+    expect(userAdminRefusal(ADMIN, target({ id: "d3", role: "admin" }))).toBeNull();
   });
 
-  it("refuses admin → another admin", () => {
-    expect(userAdminRefusal(ADMIN, target({ id: "d3", role: "admin" }))).toBe("forbidden_role");
-  });
-
-  it.each([OWNER, ADMIN])("refuses acting on yourself ($role)", (actor) => {
-    expect(userAdminRefusal(actor, target({ id: actor.userId, role: actor.role }))).toBe("self");
+  it("refuses acting on yourself — the one target rule left", () => {
+    expect(userAdminRefusal(ADMIN, target({ id: ADMIN.userId, role: ADMIN.role }))).toBe("self");
   });
 
   it("refuses a target the RLS-scoped read did not return (another org, or no such user)", () => {
-    expect(userAdminRefusal(OWNER, null)).toBe("not_found");
+    expect(userAdminRefusal(ADMIN, null)).toBe("not_found");
   });
 
   it("refuses a soft-deleted target", () => {
-    expect(userAdminRefusal(OWNER, target({ deletedAt: "2026-09-01T00:00:00Z" }))).toBe("not_found");
+    expect(userAdminRefusal(ADMIN, target({ deletedAt: "2026-09-01T00:00:00Z" }))).toBe("not_found");
   });
 
   it.each(["site", "client"] as const)("refuses a %s caller outright", (role) => {
@@ -68,90 +68,89 @@ describe("userAdminRefusal — who may act on whom", () => {
   });
 
   it("does NOT refuse a deactivated target — that is the one difference from the reset rule", () => {
-    expect(userAdminRefusal(OWNER, target({ isActive: false }))).toBeNull();
-    expect(canAdministerUser(OWNER, target({ isActive: false }))).toBe(true);
+    expect(userAdminRefusal(ADMIN, target({ isActive: false }))).toBeNull();
+    expect(canAdministerUser(ADMIN, target({ isActive: false }))).toBe(true);
   });
 });
 
 describe("roleChangeRefusal", () => {
-  it("allows owner → site becomes admin", () => {
-    expect(roleChangeRefusal(OWNER, target(), "admin", SOLE_OWNER)).toBeNull();
+  it("allows a site user to become admin", () => {
+    expect(roleChangeRefusal(ADMIN, target(), "admin", TWO_ADMINS)).toBeNull();
   });
 
-  it("allows admin → site becomes admin, because Add User already creates admins", () => {
-    expect(roleChangeRefusal(ADMIN, target(), "admin", SOLE_OWNER)).toBeNull();
+  it("D66: allows an admin to demote a PEER admin", () => {
+    expect(roleChangeRefusal(ADMIN, target({ id: "d3", role: "admin" }), "site", TWO_ADMINS)).toBeNull();
   });
 
   it.each([
-    ["admin → owner", ADMIN, target({ id: "d1", role: "owner" }), "admin", "forbidden_role"],
-    ["admin → admin", ADMIN, target({ id: "d3", role: "admin" }), "site", "forbidden_role"],
     ["self", ADMIN, target({ id: "d2", role: "admin" }), "site", "self"],
-    ["other org / not found", OWNER, null, "site", "not_found"],
-    ["deleted", OWNER, target({ deletedAt: "2026-09-01T00:00:00Z" }), "admin", "not_found"],
-    ["last owner", OWNER, ownerTarget, "admin", "last_owner"],
+    ["other org / not found", ADMIN, null, "site", "not_found"],
+    ["deleted", ADMIN, target({ deletedAt: "2026-09-01T00:00:00Z" }), "admin", "not_found"],
+    ["the last active admin", OTHER_ADMIN, adminTarget, "site", "last_owner"],
   ] as const)("refuses %s", (_label, actor, found, nextRole, reason) => {
-    expect(roleChangeRefusal(actor, found, nextRole, SOLE_OWNER)).toBe(reason);
+    expect(roleChangeRefusal(actor, found, nextRole, SOLE_ADMIN)).toBe(reason);
   });
 
-  it("refuses promoting anyone to owner — D8 names the one owner", () => {
-    expect(roleChangeRefusal(OWNER, target(), "owner", TWO_OWNERS)).toBe("unassignable_role");
+  it("refuses assigning the retired owner role", () => {
+    // The enum value survives for audit_log's history; it is not a role
+    // anyone can be given (D66).
+    expect(roleChangeRefusal(ADMIN, target(), "owner" as never, TWO_ADMINS)).toBe("unassignable_role");
   });
 
   it("refuses a role the user already has rather than auditing a change that is not one", () => {
-    expect(roleChangeRefusal(OWNER, target({ role: "admin" }), "admin", SOLE_OWNER)).toBe("no_change");
+    expect(roleChangeRefusal(ADMIN, target({ id: "dZ", role: "admin" }), "admin", TWO_ADMINS)).toBe(
+      "no_change"
+    );
   });
 
-  it("allows demoting an owner once a second active owner exists", () => {
-    expect(roleChangeRefusal(OWNER, ownerTarget, "admin", TWO_OWNERS)).toBeNull();
+  it("allows demoting an admin once a second active admin exists", () => {
+    expect(roleChangeRefusal(ADMIN, adminTarget, "site", TWO_ADMINS)).toBeNull();
   });
 
-  it("does not count an already-inactive owner as the one holding the org up", () => {
+  it("does not count an already-inactive admin as the one holding the org up", () => {
     expect(
-      roleChangeRefusal(OWNER, target({ role: "owner", isActive: false }), "admin", SOLE_OWNER)
+      roleChangeRefusal(ADMIN, target({ id: "dZ", role: "admin", isActive: false }), "site", SOLE_ADMIN)
     ).toBeNull();
   });
 });
 
 describe("activeChangeRefusal", () => {
   it("allows deactivating a site user", () => {
-    expect(activeChangeRefusal(ADMIN, target(), false, SOLE_OWNER)).toBeNull();
+    expect(activeChangeRefusal(ADMIN, target(), false, SOLE_ADMIN)).toBeNull();
   });
 
   it("allows reactivating one — deactivation is reversible, it is not a delete", () => {
-    expect(activeChangeRefusal(ADMIN, target({ isActive: false }), true, SOLE_OWNER)).toBeNull();
+    expect(activeChangeRefusal(ADMIN, target({ isActive: false }), true, SOLE_ADMIN)).toBeNull();
   });
 
   it.each([
-    ["admin → owner", ADMIN, target({ id: "d1", role: "owner" }), "forbidden_role"],
-    ["admin → admin", ADMIN, target({ id: "d3", role: "admin" }), "forbidden_role"],
-    ["self", OWNER, target({ id: "d1", role: "owner" }), "self"],
-    ["other org / not found", OWNER, null, "not_found"],
-    ["deleted", OWNER, target({ deletedAt: "2026-09-01T00:00:00Z" }), "not_found"],
-    ["last owner", OWNER, ownerTarget, "last_owner"],
+    ["self", ADMIN, target({ id: "d2", role: "admin" }), "self"],
+    ["other org / not found", ADMIN, null, "not_found"],
+    ["deleted", ADMIN, target({ deletedAt: "2026-09-01T00:00:00Z" }), "not_found"],
+    ["the last active admin", OTHER_ADMIN, adminTarget, "last_owner"],
   ] as const)("refuses deactivating %s", (_label, actor, found, reason) => {
-    expect(activeChangeRefusal(actor, found, false, SOLE_OWNER)).toBe(reason);
+    expect(activeChangeRefusal(actor, found, false, SOLE_ADMIN)).toBe(reason);
   });
 
   it("refuses deactivating someone already deactivated", () => {
-    expect(activeChangeRefusal(OWNER, target({ isActive: false }), false, SOLE_OWNER)).toBe("no_change");
+    expect(activeChangeRefusal(ADMIN, target({ isActive: false }), false, SOLE_ADMIN)).toBe("no_change");
   });
 
-  it("never refuses a REactivation for the last-owner reason — it adds an owner, it cannot remove one", () => {
+  it("never refuses a REactivation for the last-admin reason — it adds an admin, it cannot remove one", () => {
     expect(
-      activeChangeRefusal(OWNER, target({ role: "owner", isActive: false }), true, SOLE_OWNER)
+      activeChangeRefusal(ADMIN, target({ id: "dZ", role: "admin", isActive: false }), true, SOLE_ADMIN)
     ).toBeNull();
   });
 });
 
 describe("roleControlRefusal — whether to enable the select at all", () => {
   it("is null when any role is a legal pick", () => {
-    expect(roleControlRefusal(OWNER, target(), SOLE_OWNER)).toBeNull();
+    expect(roleControlRefusal(ADMIN, target(), SOLE_ADMIN)).toBeNull();
   });
 
   it("reports the reason that applies to every pick", () => {
-    expect(roleControlRefusal(ADMIN, target({ id: "d1", role: "owner" }), TWO_OWNERS)).toBe("forbidden_role");
-    expect(roleControlRefusal(OWNER, ownerTarget, SOLE_OWNER)).toBe("last_owner");
-    expect(roleControlRefusal(OWNER, null, SOLE_OWNER)).toBe("not_found");
+    expect(roleControlRefusal(OTHER_ADMIN, adminTarget, SOLE_ADMIN)).toBe("last_owner");
+    expect(roleControlRefusal(ADMIN, null, SOLE_ADMIN)).toBe("not_found");
   });
 });
 
@@ -202,7 +201,7 @@ function fakeSteps(found: UserAdminTarget | null, activeOwners = 1) {
 describe("changeUserRole", () => {
   it("changes the role first, then ends the sessions that still carry the old one", async () => {
     const { steps, calls } = fakeSteps(target());
-    const result = await changeUserRole(steps, OWNER, "d5", "admin");
+    const result = await changeUserRole(steps, ADMIN, "d5", "admin");
 
     expect(result).toEqual({ status: "done", userId: "d5", from: "site", to: "admin" });
     expect(calls).toEqual(["loadTarget d5", "applyRole d5 admin", "revokeSessions d5"]);
@@ -210,22 +209,20 @@ describe("changeUserRole", () => {
 
   it("asks how many owners are left only when the target could be the last one", async () => {
     const { calls } = fakeSteps(target());
-    await changeUserRole(fakeSteps(target()).steps, OWNER, "d5", "admin");
+    await changeUserRole(fakeSteps(target()).steps, ADMIN, "d5", "admin");
     expect(calls).not.toContain("countActiveOwners");
 
-    const owners = fakeSteps(ownerTarget, 2);
-    await changeUserRole(owners.steps, OWNER, "dX", "admin");
+    const owners = fakeSteps(adminTarget, 2);
+    await changeUserRole(owners.steps, ADMIN, "dX", "admin");
     expect(owners.calls).toContain("countActiveOwners");
   });
 
   it.each([
-    ["admin → owner", ADMIN, target({ id: "d1", role: "owner" }), "admin", 2, "forbidden_role"],
-    ["admin → admin", ADMIN, target({ id: "d3", role: "admin" }), "site", 2, "forbidden_role"],
     ["self", ADMIN, target({ id: "d2", role: "admin" }), "site", 2, "self"],
-    ["other org / not found", OWNER, null, "site", 2, "not_found"],
-    ["deleted", OWNER, target({ deletedAt: "2026-09-01T00:00:00Z" }), "admin", 2, "not_found"],
-    ["the last owner", OWNER, ownerTarget, "admin", 1, "last_owner"],
-    ["a promotion to owner", OWNER, target(), "owner", 2, "unassignable_role"],
+    ["other org / not found", ADMIN, null, "site", 2, "not_found"],
+    ["deleted", ADMIN, target({ deletedAt: "2026-09-01T00:00:00Z" }), "admin", 2, "not_found"],
+    ["the last active admin", OTHER_ADMIN, adminTarget, "site", 1, "last_owner"],
+    ["a promotion to the retired owner role", ADMIN, target(), "owner" as never, 2, "unassignable_role"],
   ] as const)(
     "refuses %s without changing anything or revoking a session",
     async (_label, actor, found, nextRole, owners, reason) => {
@@ -271,13 +268,11 @@ describe("changeUserActive", () => {
   });
 
   it.each([
-    ["admin → owner", ADMIN, target({ id: "d1", role: "owner" }), 2, "forbidden_role"],
-    ["admin → admin", ADMIN, target({ id: "d3", role: "admin" }), 2, "forbidden_role"],
-    ["self", OWNER, target({ id: "d1", role: "owner" }), 2, "self"],
-    ["other org / not found", OWNER, null, 2, "not_found"],
-    ["deleted", OWNER, target({ deletedAt: "2026-09-01T00:00:00Z" }), 2, "not_found"],
-    ["the last owner", OWNER, ownerTarget, 1, "last_owner"],
-    ["an already deactivated user", OWNER, target({ isActive: false }), 2, "no_change"],
+    ["self", ADMIN, target({ id: "d2", role: "admin" }), 2, "self"],
+    ["other org / not found", ADMIN, null, 2, "not_found"],
+    ["deleted", ADMIN, target({ deletedAt: "2026-09-01T00:00:00Z" }), 2, "not_found"],
+    ["the last owner", ADMIN, adminTarget, 1, "last_owner"],
+    ["an already deactivated user", ADMIN, target({ isActive: false }), 2, "no_change"],
   ] as const)("refuses deactivating %s, and bans nobody", async (_label, actor, found, owners, reason) => {
     const { steps, calls } = fakeSteps(found, owners);
     expect(await changeUserActive(steps, actor, found?.id ?? "elsewhere", false)).toEqual({

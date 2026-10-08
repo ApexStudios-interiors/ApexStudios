@@ -219,7 +219,7 @@ async function toApprovalDTOs(
 ): Promise<ApprovalDTO[]> {
   const supabase = await createClient();
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
 
   const ids = typedRows.map((r) => r.id);
   const supersedesIds = typedRows.map((r) => r.supersedes_id);

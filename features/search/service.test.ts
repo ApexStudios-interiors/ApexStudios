@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { capResults, type SearchResultDTO } from "./service";
 
 function row(category: SearchResultDTO["category"], n: number): SearchResultDTO {
-  return { id: `${category}-${n}`, category, text: `${category} ${n}`, sub: "", href: "#" };
+  return { id: `${category}-${n}`, category, text: `${category} ${n}`, sub: "", href: "#", projectId: null };
 }
 
 describe("capResults", () => {

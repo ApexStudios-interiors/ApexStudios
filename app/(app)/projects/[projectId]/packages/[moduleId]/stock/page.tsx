@@ -24,7 +24,7 @@ export default async function PackageStockTab({
 
   const effectiveRole = session.impersonating?.role ?? session.role;
   if (effectiveRole === "client") forbidden();
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
 
   const requests = await getStockRequestsPage(
     session,

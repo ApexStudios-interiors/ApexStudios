@@ -44,7 +44,7 @@ export type PortfolioSite = {
 /** `effectiveRole` decides which table/view backs the package count — see
  *  getPortfolio's own doc comment for why this must be the effective role,
  *  not session.role directly, under impersonation. */
-async function fetchProjectRows(effectiveRole: "owner" | "admin" | "site" | "client") {
+async function fetchProjectRows(effectiveRole: "admin" | "site" | "client") {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("projects")
@@ -64,7 +64,7 @@ async function fetchProjectRows(effectiveRole: "owner" | "admin" | "site" | "cli
   // .from() needs a literal table name — its overloads pick the return type
   // from the string literal, so a variable collapses every branch's typing.
   const projectIds = data.map((p) => p.id);
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
 
   const clientIds = [...new Set(data.map((p) => p.client_id))];
   // `clients` itself is is_admin()-only (0003's own comment: "a client user
@@ -254,7 +254,7 @@ export type Portfolio = PortfolioAdmin | PortfolioClient | PortfolioSite;
  */
 export async function getPortfolio(session: Session): Promise<Portfolio> {
   const effectiveRole = session.impersonating?.role ?? session.role;
-  if (effectiveRole === "owner" || effectiveRole === "admin") return getPortfolioForAdmin();
+  if (effectiveRole === "admin") return getPortfolioForAdmin();
   if (effectiveRole === "client") return getPortfolioForClient();
   return getPortfolioForSite();
 }
@@ -284,7 +284,7 @@ export async function getProjectHeader(
   projectId: string
 ): Promise<ProjectHeaderDTO | null> {
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
   const supabase = await createClient();
   const { data: p, error } = await supabase
     .from("projects")

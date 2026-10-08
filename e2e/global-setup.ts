@@ -28,7 +28,9 @@ loadEnv({ path: ".env.local", quiet: true });
  */
 function refuseProductionTarget(): void {
   const { refuse, warn } = checkProductionTarget(
-    [process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.DATABASE_URL],
+    // SUPABASE_DB_URL too: the specs' own dbConnect() prefers it over
+    // DATABASE_URL, so a production SUPABASE_DB_URL must not slip past.
+    [process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_DB_URL, process.env.DATABASE_URL],
     "the Playwright e2e suite"
   );
   // A WARNING IS TREATED AS A REFUSAL HERE, unlike in the db:* scripts.

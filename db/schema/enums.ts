@@ -4,7 +4,7 @@ import { pgEnum } from "drizzle-orm/pg-core";
  * Mirrors migration 0001. Postgres enums cannot drop values, only add them, so
  * these lists are load-bearing rather than descriptive.
  */
-export const appRole = pgEnum("app_role", ["owner", "admin", "site", "client"]);
+export const appRole = pgEnum("app_role", ["admin", "site", "client"]);
 export const projectStatus = pgEnum("project_status", [
   "planning",
   "active",

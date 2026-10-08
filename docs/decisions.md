@@ -1995,6 +1995,88 @@ needed different answers.
 
 ---
 
+### D66 — Three roles: Admin, Site Supervisor, Client. The owner role is retired
+
+**Question:** "I only want three roles — admin, supervisor, client. Remove all the other roles,
+don't make it look complicated."
+**Answered:** 2026-10-05 by Voola, after being shown what is lost and confirming.
+
+**Answer:** every owner-only capability becomes an admin capability, and the single owner account
+(John Israel Voola) became an admin. There are four admins now, and they are equal.
+
+**What is lost, stated plainly because it cannot be undone by redeploying:** any admin may change
+any other admin's role, deactivate them, and reset their password — then sign in as them. The rules
+that prevented that (D8, D54, D65) existed only because one account outranked the others. There is
+no longer anyone to outrank.
+
+**What is kept:**
+- nobody may change their own role, deactivate themselves, or reset their own password (D64's
+  Change my password is the self-service route);
+- the organisation cannot be left with nobody in charge. The "last active owner" invariant is
+  translated to "last active **admin**" — it protects the org without making any admin outrank
+  another, and is enforced inside the statement that performs the change, under a row lock.
+
+**The enum value `'owner'` is NOT dropped**, and this is the decision inside the decision.
+`audit_log.actor_role` is typed `app_role` and holds 9 historical rows recording what an owner did;
+`audit_log` is append-only (AGENTS.md database rule 6), so dropping the value would either rewrite
+or break that history. It survives as a record of the past while nothing can produce it: no profile
+carries it, no check accepts it, and `fn_guard_profile_privilege_change` still refuses to assign it.
+The application's own `Role` type is the narrow three, and `toRole()` in `lib/rbac/roles.ts` is the
+one boundary that maps a stray database value back — it maps rather than throws, because `owner`
+meant "everything an admin can do" and a stray row must not take a page down.
+
+**Also retired:** previewing as Admin. Only an admin can reach the preview menu, so it would be
+previewing as yourself — refused server-side as well as absent from the menu.
+
+**Order matters in the migration:** the data change runs LAST. The OLD trigger refuses to demote the
+last active owner, correctly for the world it was written for, so running it first aborts the
+migration on its own first statement.
+
+---
+
+### D67 — The mobile app talks to a versioned `/api/mobile/v1/*` surface, not to Supabase directly
+
+**Question:** An Expo mobile app is being added for Site Supervisors and Clients. AGENTS.md says no
+REST API without discussing it first (HLD §4.2). Should mobile call Supabase tables and `rpc_*`
+functions directly, or go through Next.js route handlers?
+**Answered:** 2026-10-05 by Voola
+**Answer:** Through Next.js route handlers under `/api/mobile/v1/*`. This is the discussed exception
+to AGENTS.md's "no REST API" rule, and it covers this surface only.
+
+**Why not Supabase directly.** RLS alone is not the whole rule set. Some checks live in TypeScript
+before the database is reached: `postDailyUpdate`'s attachment-ownership re-check, the role-shaped
+DTOs in every `queries.ts` (`v_package_site` for non-admins), R2 presigning, and the domain-error
+mapping in `lib/safe-action.ts`. A second client calling tables directly would have to copy all of
+that and would drift. Route handlers call the **same** `queries.ts` / `service.ts` functions the
+web uses, so every rule exists once.
+
+**Authentication — two transports, one session.**
+- **Mobile** sends `Authorization: Bearer <Supabase access token>` and refreshes its own token.
+  `lib/supabase/server.ts` binds the RLS-scoped client to that header; `getSession()` verifies it
+  with `getClaims(token)` and keeps the profile read and `is_active` check. A bearer request never
+  reads the `apex_preview` cookie.
+- **Web** is unchanged: `@supabase/ssr` cookies, refreshed by `middleware.ts`.
+
+**Each mobile route is its own guard.** `/api/mobile/*` is excluded from the middleware's cookie
+redirect (a cookie-less request must get a JSON 401, not a 307 to `/login`). So every route calls
+`requireSession()` / `requireRole()` / `requireProjectAccess()` itself. A route without one is a
+blocking review comment.
+
+**RLS is still the final boundary.** The bearer client uses the anon key and the user's JWT, so
+PostgREST enforces every policy exactly as for the web. The service-role client is never used on
+this surface (D11 unchanged).
+
+**Versioned.** `v1` lets the contract change without breaking installed app versions, which cannot
+be force-updated the way a web page can. A breaking change ships as `v2` alongside `v1`.
+
+**Scope.** Only the Site and Client capabilities the app needs are exposed. Admin-only operations
+(projects, packages, phases, users, billing creation/payment, inventory, jobs, preview) stay
+web-only.
+
+**First endpoint:** `GET /api/mobile/v1/notifications`, which reuses `getNotifications()`.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |

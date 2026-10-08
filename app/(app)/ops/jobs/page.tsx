@@ -28,7 +28,7 @@ export default async function FailedJobsPage({
 }: {
   searchParams: Promise<{ page?: string; pageSize?: string }>;
 }) {
-  await requireRole(["owner", "admin"]);
+  await requireRole(["admin"]);
   const jobs = await getFailedJobs(parsePageRequest(await searchParams));
   // Counted on the page rather than in the query: `total` is the page's own
   // count and now spans both states, and the heading should still say how many

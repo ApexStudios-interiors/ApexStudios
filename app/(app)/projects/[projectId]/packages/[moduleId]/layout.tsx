@@ -27,7 +27,7 @@ export default async function PackageDetailLayout({
   if (!detail) notFound();
 
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const isMoney = effectiveRole === "owner" || effectiveRole === "admin";
+  const isMoney = effectiveRole === "admin";
   const isClient = effectiveRole === "client";
   const base = `/projects/${projectId}/packages/${moduleId}`;
 

@@ -4,11 +4,8 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { requireProjectAccess, requireSession } from "@/lib/auth/session";
 import { authedAction } from "@/lib/safe-action";
-import { enqueue } from "@/lib/jobs/enqueue";
-import { buildAttachmentKey, keyBelongsTo } from "@/lib/r2/keys";
-import { headObject } from "@/lib/r2/head";
-import { presignGet, presignPut } from "@/lib/r2/presign";
-import { isAllowedMime, maxBytesFor, MAX_PHOTOS_PER_ENTITY } from "@/lib/r2/constraints";
+import { presignGet } from "@/lib/r2/presign";
+import { confirmUploadFor, requestUploadFor } from "./upload";
 import {
   confirmUploadSchema,
   deleteAttachmentSchema,
@@ -22,87 +19,18 @@ import {
  * (a client viewing an approval's photos, for one) needs `getDownloadUrl` at
  * least, and narrowing who may upload is `requireProjectAccess` plus each
  * entity's own RLS, not a blanket role check here.
+ *
+ * The upload pair's work — checks, signing, the HeadObject re-check, the row,
+ * the thumbnail job — lives in ./upload.ts, shared with the mobile API.
  */
 
 export const requestUploadUrl = authedAction
   .inputSchema(requestUploadUrlSchema)
-  .action(async ({ parsedInput, ctx }) => {
-    const { projectId, entityType, entityId, fileName, mimeType, sizeBytes } = parsedInput;
-
-    await requireProjectAccess(ctx.session, projectId);
-
-    // Server-side, not the client's `accept` attribute (build's own warning:
-    // "a convenience, not a control").
-    if (!isAllowedMime(mimeType)) {
-      throw new Error(`REASON_REQUIRED: ${mimeType} is not an allowed file type`);
-    }
-    const maxBytes = maxBytesFor(mimeType);
-    if (sizeBytes > maxBytes) {
-      throw new Error(`REASON_REQUIRED: file exceeds the ${Math.round(maxBytes / (1024 * 1024))} MB limit`);
-    }
-
-    const supabase = await createClient();
-    const { count, error: countError } = await supabase
-      .from("attachments")
-      .select("id", { count: "exact", head: true })
-      .eq("entity_type", entityType)
-      .eq("entity_id", entityId)
-      .is("deleted_at", null);
-    if (countError) throw new Error(countError.message);
-    if ((count ?? 0) >= MAX_PHOTOS_PER_ENTITY) {
-      throw new Error(`REASON_REQUIRED: this ${entityType} already has ${MAX_PHOTOS_PER_ENTITY} attachments`);
-    }
-
-    const key = buildAttachmentKey({ orgId: ctx.session.orgId, projectId, entityType, entityId, fileName });
-    const url = await presignPut(key, mimeType);
-
-    // No `attachments` row yet — build §2.2's own reason for the two-step flow:
-    // "we record only what we can verify", and nothing has been verified yet.
-    return { url, key };
-  });
+  .action(async ({ parsedInput, ctx }) => requestUploadFor(ctx.session, parsedInput));
 
 export const confirmUpload = authedAction
   .inputSchema(confirmUploadSchema)
-  .action(async ({ parsedInput, ctx }) => {
-    const { key, projectId, entityType, entityId, fileName, mimeType, sizeBytes } = parsedInput;
-
-    await requireProjectAccess(ctx.session, projectId);
-
-    // A key is user-supplied input — re-derive and re-check it, never trust it.
-    if (!keyBelongsTo(key, ctx.session.orgId, projectId)) {
-      throw new Error("FORBIDDEN: that key does not belong to this project");
-    }
-
-    const head = await headObject(key);
-    if (!head.exists) {
-      throw new Error("NOT_FOUND: that upload never completed");
-    }
-    if (head.sizeBytes !== sizeBytes) {
-      throw new Error("REASON_REQUIRED: the uploaded file size does not match what was declared");
-    }
-
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("attachments")
-      .insert({
-        org_id: ctx.session.orgId,
-        project_id: projectId,
-        entity_type: entityType,
-        entity_id: entityId,
-        r2_key: key,
-        file_name: fileName,
-        mime_type: mimeType,
-        size_bytes: sizeBytes,
-        uploaded_by: ctx.session.userId,
-      })
-      .select("id")
-      .single();
-    if (error) throw new Error(error.message);
-
-    await enqueue("attachment.thumbnail", { attachmentId: data.id }, { idempotencyKey: data.id });
-
-    return { id: data.id };
-  });
+  .action(async ({ parsedInput, ctx }) => confirmUploadFor(ctx.session, parsedInput));
 
 export const getDownloadUrl = authedAction
   .inputSchema(getDownloadUrlSchema)

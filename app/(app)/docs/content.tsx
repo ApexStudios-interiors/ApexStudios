@@ -95,12 +95,12 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "Committed",
         definition:
-          "The money already spoken for in a package: quantity × rate of every stock request that is Approved, Ordered or Delivered. Visible to owner and admin only.",
+          "The money already spoken for in a package: quantity × rate of every stock request that is Approved, Ordered or Delivered. Visible to admins only.",
       },
       {
         term: "Rate",
         definition:
-          "The per-unit price on a stock request. Owner and admin always see and edit it. For Site Supervisors it depends on the project's Rate visibility setting on the project dashboard: Hidden (the default), Visible, not editable, or Visible and editable. Even when editable, a supervisor can type a rate but never read one back.",
+          "The per-unit price on a stock request. Admins always see and edit it. For Site Supervisors it depends on the project's Rate visibility setting on the project dashboard: Hidden (the default), Visible, not editable, or Visible and editable. Even when editable, a supervisor can type a rate but never read one back.",
       },
     ],
   },
@@ -208,14 +208,9 @@ export const GLOSSARY: GlossaryGroup[] = [
     title: "Users & access",
     entries: [
       {
-        term: "Owner",
-        definition:
-          "The one role above admin. Does everything an admin does, and alone may edit the project's billing constants and change or deactivate an admin.",
-      },
-      {
         term: "Admin",
         definition:
-          "Apex Studios office staff. Sees everything, including internal cost and margin; creates projects and bills, approves stock requests, manages users.",
+          "Apex Studios office staff, and the top role — there is nothing above it. Sees everything, including internal cost and margin; creates projects and bills, approves stock requests, edits a project's billing constants, and manages users. Admins are equal: any admin may change or deactivate any other, but not themselves, and the last remaining admin cannot be removed.",
       },
       {
         term: "Site Supervisor",
@@ -235,7 +230,7 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "Change my password",
         definition:
-          "On the Users page, on your own row. Owner and admin only — the Users page is not open to anyone else, which is the point: a site supervisor or client asks an owner or admin to reset theirs. You must type your current password, and the new one must be at least 12 characters. You stay signed in on this device; every other device is signed out",
+          "On the Users page, on your own row. Admins only — the Users page is not open to anyone else, which is the point: a site supervisor or client asks an admin to reset theirs. You must type your current password, and the new one must be at least 12 characters. You stay signed in on this device; every other device is signed out",
       },
       {
         term: "Client login",
@@ -245,7 +240,7 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "Preview as (impersonation)",
         definition:
-          "An owner or admin viewing a project as a Site Supervisor or Client would, to check what they see. It is read-only, lasts 15 minutes, shows a banner the whole time, and is written to the audit log. The owner can also preview as Admin; an admin cannot. Previewing only changes what you SEE — every action still checks your real role.",
+          "An admin viewing a project as a Site Supervisor or Client would, to check what they see. It is read-only, lasts 15 minutes, shows a banner the whole time, and is written to the audit log. There is no Admin preview — you are an admin. Previewing only changes what you SEE — every action still checks your real role.",
       },
     ],
   },
@@ -261,7 +256,7 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "Failed Jobs",
         definition:
-          "The owner/admin page listing background jobs that gave up after five attempts, with the last error and a Retry button.",
+          "The admin page listing background jobs that gave up after five attempts, with the last error and a Retry button.",
       },
       {
         term: "Idempotency",
@@ -288,20 +283,6 @@ export type RoleStory = { id: string; role: string; can: string[]; cannot: strin
 
 export const ROLE_STORIES: RoleStory[] = [
   {
-    id: "role-owner",
-    role: "Owner",
-    can: [
-      "do everything an Admin can",
-      "edit a project's billing constants (GST, retention, material-at-site and TDS percentages)",
-      "change the role of, deactivate or reset the password of any user except myself — including an Admin or another Owner",
-    ],
-    cannot: [
-      "decide an approval or certify a bill — those are the Client's acts",
-      "act on my own account: change my own role, deactivate myself or reset my own password",
-      "edit or delete an audit log entry or a stock movement",
-    ],
-  },
-  {
     id: "role-admin",
     role: "Admin",
     can: [
@@ -312,14 +293,15 @@ export const ROLE_STORIES: RoleStory[] = [
       "request an approval from the client and add sample photos while it is pending",
       "create a bill from Billable Now, submit it, and record payments once the client has certified it",
       "add staff users (Admin or Site Supervisor), create client logins per project and grant an existing client access to another project",
-      "change the role of, deactivate or reset the password of a Site Supervisor or Client user",
+      "edit a project's billing constants (GST, retention, material-at-site and TDS percentages)",
+      "change the role of, deactivate or reset the password of ANY user except myself — including another Admin",
       "preview a project as a Site Supervisor or Client",
       "see Failed Jobs and retry one",
     ],
     cannot: [
       "decide an approval or certify a bill — the Approve/Reject buttons are the Client's alone",
-      "change the Owner's role or password, or another Admin's, or deactivate either",
-      "change my own role or deactivate myself",
+      "change my own role, deactivate myself or reset my own password — use Change my password instead",
+      "demote, deactivate or delete the last remaining Admin, which would leave nobody able to administer the organisation",
       "edit a bill after it has been submitted — a correction is a credit note or an adjustment on the next bill",
       "change anything while previewing as another role",
     ],
@@ -334,7 +316,7 @@ export const ROLE_STORIES: RoleStory[] = [
       "raise a stock request, and mark an ordered request Delivered when it arrives",
       "request an approval and add sample photos while it is pending",
       "see the business-wide Inventory (ALL) view",
-      "type a Rate on a new stock request, but only on a project where the owner/admin has set Rate visibility to editable",
+      "type a Rate on a new stock request, but only on a project where an admin has set Rate visibility to editable",
     ],
     cannot: [
       "see any money: no budgets, no contract value, no rates on existing requests, no Value column, no bills",
@@ -384,15 +366,15 @@ export const FLOWS: Flow[] = [
     purpose: "Getting material bought and onto site, with an admin's sign-off before anything is ordered.",
     chain: [
       { badge: <StockRequestStatusBadge status="pending" />, who: "Site Supervisor or admin raises it" },
-      { badge: <StockRequestStatusBadge status="approved" />, who: "Owner/admin approves" },
-      { badge: <StockRequestStatusBadge status="ordered" />, who: "Owner/admin marks Ordered" },
+      { badge: <StockRequestStatusBadge status="approved" />, who: "An admin approves" },
+      { badge: <StockRequestStatusBadge status="ordered" />, who: "An admin marks Ordered" },
       { badge: <StockRequestStatusBadge status="delivered" />, who: "Site Supervisor or admin marks Delivered" },
     ],
-    exits: [{ badge: <StockRequestStatusBadge status="rejected" />, who: "Owner/admin rejects a pending request, with a reason" }],
+    exits: [{ badge: <StockRequestStatusBadge status="rejected" />, who: "An admin rejects a pending request, with a reason" }],
     steps: [
       "Open the project's Stock Requests page and click + New Request. Pick the package, material, quantity, unit and Needed By date. Phase is optional — leave it as None, and if the package has no phases the field simply reads \"No phases in this package\". If an identical order (same material, quantity and Needed By) has already been delivered, the form warns: \"This order has already been delivered with the mentioned quantity and deadline date.\"",
-      "An owner or admin opens the pending request and clicks Approve or Reject. Rejecting requires a reason. Approving adds the request's value to the package's Committed figure.",
-      "Once the material is ordered, the owner/admin clicks Mark Ordered.",
+      "An admin opens the pending request and clicks Approve or Reject. Rejecting requires a reason. Approving adds the request's value to the package's Committed figure.",
+      "Once the material is ordered, an admin clicks Mark Ordered.",
       "When it arrives, the Site Supervisor (or admin) clicks Mark Delivered. Inventory goes up by that quantity and the material appears in Billable Now.",
     ],
     notes: [
@@ -432,8 +414,8 @@ export const FLOWS: Flow[] = [
     title: "Billing",
     purpose: "Raising an RA bill for finished work and delivered material, getting the client to certify it, and recording the money as it comes in.",
     chain: [
-      { badge: <BillStatusBadge status="draft" />, who: "Owner/admin creates it from Billable Now" },
-      { badge: <BillStatusBadge status="submitted" />, who: "Owner/admin submits" },
+      { badge: <BillStatusBadge status="draft" />, who: "An admin creates it from Billable Now" },
+      { badge: <BillStatusBadge status="submitted" />, who: "An admin submits" },
       { badge: <BillStatusBadge status="certified" />, who: "Client approves (certifies) — status certified, shown as Payment Pending" },
       { badge: <BillStatusBadge status="paid" />, who: "Automatic once recorded payments cover the net payable" },
     ],
@@ -445,7 +427,7 @@ export const FLOWS: Flow[] = [
       "On the project's Billing page tick the items in Billable Now and click + Create Bill. The bill is a Draft with the project's GST, retention and material-at-site rates copied onto it.",
       "Click Submit. The bill is locked from here on and a PDF is rendered in the background. If the client rejects it, fix the draft and submit again — a fresh PDF is rendered for the new revision.",
       "The client opens Bills, views the bill and clicks Approve. The status becomes certified, which the app labels Payment Pending.",
-      "As money arrives, the owner/admin clicks Record Payment and enters the amount, date, mode and reference. Partial payments are fine; the moment they add up to the net payable the bill turns Paid on its own, and its phases are marked Paid too.",
+      "As money arrives, an admin clicks Record Payment and enters the amount, date, mode and reference. Partial payments are fine; the moment they add up to the net payable the bill turns Paid on its own, and its phases are marked Paid too.",
     ],
     notes: [
       "The phases on a bill move with it: Billable → Billed when the bill is created, and → Paid when it is paid.",
@@ -456,15 +438,15 @@ export const FLOWS: Flow[] = [
     title: "Users",
     purpose: "Giving people a login, keeping their access right, and taking it away when they leave.",
     chain: [
-      { badge: <Badge variant="default">Active</Badge>, who: "Created by owner/admin" },
-      { badge: <Badge variant="secondary">Deactivated</Badge>, who: "Owner/admin deactivates; reactivating is one click" },
+      { badge: <Badge variant="default">Active</Badge>, who: "Created by an admin" },
+      { badge: <Badge variant="secondary">Deactivated</Badge>, who: "An admin deactivates; reactivating is one click" },
     ],
     steps: [
       "Staff: on the Users page click Add User, enter a username, name and role (Admin or Site Supervisor). The username and a generated password are shown once, each with a Copy button — share them now, because the password cannot be viewed again.",
       "Clients: on the project's dashboard, use the Client access card. Create client login makes a new client account for this project (credentials shown once, as above); Add existing client gives a client who already has a login access to this project.",
-      "Reset password: on the Users page click Reset password next to the user. A new password is shown once, and the user is signed out everywhere. An owner may reset anyone but themselves; an admin may reset only Site Supervisors and Clients — never the owner, another admin or themselves.",
-      "Change your OWN password on the Users page, on your own row — the Change my password button sits where Reset sits for everyone else. It asks for your current password first, needs at least 12 characters, and signs you out of every other device while keeping you signed in here. Site supervisors and clients have no self-service route: they ask an owner or admin to Reset theirs, and are given the new password once.",
-      "Change role, deactivate or reactivate from the same row. The same who-may-act-on-whom rule applies: an admin may act on Site Supervisors and Clients only, the owner on anyone but themselves, and nobody on themselves. Deactivating signs the person out and blocks their login until it is reversed; nothing is deleted.",
+      "Reset password: on the Users page click Reset password next to the user. A new password is shown once, and the user is signed out everywhere. An admin may reset anyone but themselves — including another admin.",
+      "Change your OWN password on the Users page, on your own row — the Change my password button sits where Reset sits for everyone else. It asks for your current password first, needs at least 12 characters, and signs you out of every other device while keeping you signed in here. Site supervisors and clients have no self-service route: they ask an admin to Reset theirs, and are given the new password once.",
+      "Change role, deactivate or reactivate from the same row. An admin may act on anyone but themselves, and the last remaining admin cannot be demoted or deactivated — that would leave nobody able to administer the organisation. Deactivating signs the person out and blocks their login until it is reversed; nothing is deleted.",
     ],
   },
   {
@@ -479,7 +461,7 @@ export const FLOWS: Flow[] = [
     exits: [{ badge: <Badge variant="destructive">Failed</Badge>, who: "After 5 attempts — lands on the Failed Jobs page" }],
     steps: [
       "Nothing to do for a normal job: uploading a photo queues a thumbnail, submitting a bill queues its PDF, and the queue is drained every five minutes.",
-      "If a job errors it is retried with a growing delay, up to five attempts in all. After the fifth failure it stops and appears on Failed Jobs (owner/admin, under Studio) with its last error.",
+      "If a job errors it is retried with a growing delay, up to five attempts in all. After the fifth failure it stops and appears on Failed Jobs (admins, under Studio) with its last error.",
       "Fix the cause if there is one, then click Retry on the row. The job is queued again from the start.",
     ],
   },
@@ -502,21 +484,21 @@ export const JOB_SCHEDULE: { job: string; when: string; what: string }[] = [
 
 export const WHERE: { item: string; roles: string; what: string }[] = [
   { item: "All Projects", roles: "Everyone", what: "The portfolio: one card per project you can see. The button at the top of the sidebar opens a list to jump between projects." },
-  { item: "Inventory (ALL)", roles: "Owner, Admin, Site", what: "Every project's stock in one table, with a project filter." },
-  { item: "Dashboard", roles: "Everyone", what: "A project's stats, its packages, and cards for pending approvals, pending requests and the latest updates. Owner/admin also find the Client access and Rate visibility cards here." },
-  { item: "Packages", roles: "Everyone", what: "The project's packages; expand in the sidebar to jump to one. A package page has its budget and phases, schedule, updates, stock requests and (owner/admin) billing." },
+  { item: "Inventory (ALL)", roles: "Admin, Site", what: "Every project's stock in one table, with a project filter." },
+  { item: "Dashboard", roles: "Everyone", what: "A project's stats, its packages, and cards for pending approvals, pending requests and the latest updates. Admins also find the Client access and Rate visibility cards here." },
+  { item: "Packages", roles: "Everyone", what: "The project's packages; expand in the sidebar to jump to one. A package page has its budget and phases, schedule, updates, stock requests and (admins) billing." },
   { item: "Schedule", roles: "Everyone", what: "The Gantt chart per package; click a task bar to edit progress and dates (clients see a read-only summary)." },
   { item: "Daily Updates", roles: "Everyone", what: "The site timeline with photos; + Post Update for staff." },
-  { item: "Inventory", roles: "Owner, Admin, Site", what: "This project's stock on hand, minimum stock levels and Low/Critical status." },
-  { item: "Stock Requests", roles: "Owner, Admin, Site", what: "Raise and progress material requests. The sidebar badge counts pending ones." },
+  { item: "Inventory", roles: "Admin, Site", what: "This project's stock on hand, minimum stock levels and Low/Critical status." },
+  { item: "Stock Requests", roles: "Admin, Site", what: "Raise and progress material requests. The sidebar badge counts pending ones." },
   { item: "Approvals", roles: "Everyone", what: "Client sign-offs on samples and drawings. The sidebar badge (clients only) counts those awaiting a decision." },
-  { item: "Billing / Bills", roles: "Owner, Admin, Client", what: "Billable Now and the RA bills (owner/admin); the bills to approve and pay (client, where the badge counts submitted bills)." },
-  { item: "Users", roles: "Owner, Admin", what: "Add staff, change roles, reset passwords, deactivate and reactivate." },
-  { item: "Failed Jobs", roles: "Owner, Admin", what: "Background jobs that gave up, with their last error and a Retry button." },
+  { item: "Billing / Bills", roles: "Admin, Client", what: "Billable Now and the RA bills (admins); the bills to approve and pay (client, where the badge counts submitted bills)." },
+  { item: "Users", roles: "Admin", what: "Add staff, change roles, reset passwords, deactivate and reactivate." },
+  { item: "Failed Jobs", roles: "Admin", what: "Background jobs that gave up, with their last error and a Retry button." },
   { item: "Docs", roles: "Everyone", what: "This page." },
   { item: "Bell (header)", roles: "Everyone", what: "Open items across all your projects, scoped to your role. Each entry links to the page it concerns." },
   { item: "Sun/moon (header)", roles: "Everyone", what: "Switch between light and dark themes." },
-  { item: "Your name (bottom of sidebar)", roles: "Everyone", what: "Sign out; owner/admin inside a project can also Preview as Site Supervisor or Client." },
+  { item: "Your name (bottom of sidebar)", roles: "Everyone", what: "Sign out; an admin inside a project can also Preview as Site Supervisor or Client." },
 ];
 
 /** The example status chain for phases and stock levels, shown in the glossary
@@ -551,6 +533,6 @@ export const LEGEND: { label: string; badges: ReactNode; meaning: string }[] = [
         <Badge variant="secondary">Archived</Badge>
       </>
     ),
-    meaning: "Set by owner/admin. Archived happens automatically 12 months after completion.",
+    meaning: "Set by an admin. Archived happens automatically 12 months after completion.",
   },
 ];

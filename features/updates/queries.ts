@@ -60,6 +60,23 @@ function decodeCursor(raw: string): Cursor | null {
   }
 }
 
+const CURSOR_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const CURSOR_TIMESTAMP = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}(:?\d{2})?)$/;
+const CURSOR_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Whether `raw` has the shape of a cursor this query issued (`nextCursor`):
+ *  the same decode the query applies, plus each field in the exact format
+ *  the row it came from has — the fields are written into the `or` filter
+ *  below, so nothing else may reach it. For a caller that must refuse a bad
+ *  cursor rather than silently start again at the first page (the mobile
+ *  API); the query itself is unchanged. */
+export function isValidUpdatesCursor(raw: string): boolean {
+  const c = decodeCursor(raw);
+  return (
+    c !== null && CURSOR_DATE.test(c.updateDate) && CURSOR_TIMESTAMP.test(c.createdAt) && CURSOR_ID.test(c.id)
+  );
+}
+
 type PackageInfo = { name: string; seqNo: number };
 
 /** `mno()`'s own "01 Swimming Pool" convention (lib/logic.ts) — the
@@ -123,11 +140,14 @@ async function fetchAttachments(updateIds: string[]): Promise<AttachmentRow[]> {
 export async function getUpdatesForProject(
   session: Session,
   projectId: string,
-  opts: { packageId?: string; cursor?: string } = {}
+  // `limit`: a smaller page than the default, for a caller that shows only a
+  // few (Package Details' latest five) — fewer rows, names and photo links.
+  opts: { packageId?: string; cursor?: string; limit?: number } = {}
 ): Promise<UpdatesPage> {
+  const pageSize = opts.limit && opts.limit > 0 ? Math.min(opts.limit, PAGE_SIZE) : PAGE_SIZE;
   const supabase = await createClient();
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
 
   let query = supabase
     .from("daily_updates")
@@ -137,7 +157,7 @@ export async function getUpdatesForProject(
     .order("update_date", { ascending: false })
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
-    .limit(PAGE_SIZE + 1);
+    .limit(pageSize + 1);
 
   if (opts.packageId) query = query.eq("package_id", opts.packageId);
 
@@ -158,8 +178,8 @@ export async function getUpdatesForProject(
   const { data: rows, error } = await query;
   if (error) throw new Error(error.message);
 
-  const hasMore = rows.length > PAGE_SIZE;
-  const pageRows = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
+  const hasMore = rows.length > pageSize;
+  const pageRows = hasMore ? rows.slice(0, pageSize) : rows;
 
   const authorIds = [...new Set(pageRows.map((r) => r.author_id))];
   const updateIds = pageRows.map((r) => r.id);

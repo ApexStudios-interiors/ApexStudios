@@ -30,7 +30,7 @@ export default async function InventoryPage({
   if (!header) notFound();
 
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const isAdmin = effectiveRole === "owner" || effectiveRole === "admin";
+  const isAdmin = effectiveRole === "admin";
 
   const { items, stats } = await getProjectInventory(
     session,

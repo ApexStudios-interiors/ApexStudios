@@ -23,16 +23,15 @@ const startSchema = z.object({
   projectId: z.string().min(1),
 });
 
-export const startPreview = adminAction.inputSchema(startSchema).action(async ({ parsedInput, ctx }) => {
-  // Previewing as Admin is the OWNER's alone. Checked here, against the REAL
-  // session role (adminAction's requireRole ignores the preview cookie), not
-  // merely by which entries the sidebar renders — an admin previewing as admin
-  // gains nothing but would put an admin-shaped view behind a preview banner
-  // that says a write will be refused, and no lesser role may reach it at all.
-  // For the owner this is a narrowing: CAN (lib/rbac/permissions.ts) gives
-  // `admin` no capability `owner` lacks, so the previewed reads are a subset.
-  if (parsedInput.role === "admin" && ctx.session.role !== "owner") {
-    throw new ForbiddenError("startPreview: previewing as admin is owner-only");
+export const startPreview = adminAction.inputSchema(startSchema).action(async ({ parsedInput }) => {
+  // D66: only an admin can reach this action at all, so previewing as Admin
+  // would be previewing as yourself — it shapes no read differently and would
+  // put an ordinary view behind a banner warning that writes are refused. It
+  // is refused here against the REAL session role (adminAction's requireRole
+  // ignores the preview cookie), not merely by which entries the sidebar
+  // renders.
+  if (parsedInput.role === "admin") {
+    throw new ForbiddenError("startPreview: there is no Admin preview — you are an admin");
   }
 
   const supabase = await createClient();

@@ -24,6 +24,9 @@ export type SearchResultDTO = {
   text: string;
   sub: string;
   href: string;
+  /** The project the result belongs to — null for a user or a central-store
+   *  item. The web navigates by `href`; the mobile app by this and `id`. */
+  projectId: string | null;
 };
 
 const PER_CATEGORY_CAP = 5;

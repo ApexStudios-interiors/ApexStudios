@@ -13,7 +13,7 @@ export type StockRequestStatus = "pending" | "approved" | "ordered" | "delivered
 
 export type StockTransition = { to: Exclude<StockRequestStatus, "pending">; label: string };
 
-const isAdminRole = (role: Role) => role === "owner" || role === "admin";
+const isAdminRole = (role: Role) => role === "admin";
 
 export function availableTransitions(status: StockRequestStatus, role: Role): StockTransition[] {
   switch (status) {

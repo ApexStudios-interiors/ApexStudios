@@ -15,7 +15,7 @@ export default async function PackageBillingTab({ params }: { params: Promise<{ 
   const { moduleId } = await params;
   const session = await requireSession();
   const effectiveRole = session.impersonating?.role ?? session.role;
-  if (effectiveRole !== "owner" && effectiveRole !== "admin") forbidden();
+  if (effectiveRole !== "admin") forbidden();
 
   const supabase = await createClient();
   const [phases, materials, pkg] = await Promise.all([

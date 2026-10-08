@@ -68,15 +68,24 @@ beforeEach(() => {
 });
 
 describe("startPreview", () => {
-  it("lets the owner preview as admin, and audits the previewed role (D20)", async () => {
-    sessionAs("owner", OWNER_ID);
+  it("D66: refuses previewing as Admin — only an admin can reach this, so it is yourself", async () => {
+    sessionAs("admin", OWNER_ID);
     const result = await startPreview({ role: "admin", projectId: PROJECT });
+
+    expect(result.serverError).toBeDefined();
+    expect(h.rpc).not.toHaveBeenCalled();
+    expect(h.setCookie).not.toHaveBeenCalled();
+  });
+
+  it("audits the previewed role (D20)", async () => {
+    sessionAs("admin", OWNER_ID);
+    const result = await startPreview({ role: "site", projectId: PROJECT });
 
     expect(result.serverError).toBeUndefined();
     expect(result.data).toEqual({ ok: true });
     expect(h.rpc).toHaveBeenCalledWith("rpc_log_impersonation", {
       p_action: "start",
-      p_previewed_role: "admin",
+      p_previewed_role: "site",
       p_project_ref: PROJECT,
     });
     expect(h.setCookie).toHaveBeenCalled();
@@ -121,9 +130,9 @@ describe("startPreview", () => {
     expect(h.rpc).not.toHaveBeenCalled();
   });
 
-  it("rejects `owner` as a previewed role", async () => {
-    sessionAs("owner", OWNER_ID);
-    const result = await startPreview({ role: "owner" as "admin", projectId: PROJECT });
+  it("rejects a role the schema does not allow", async () => {
+    sessionAs("admin", OWNER_ID);
+    const result = await startPreview({ role: "owner" as never, projectId: PROJECT });
 
     expect(result.validationErrors).toBeDefined();
     expect(h.rpc).not.toHaveBeenCalled();

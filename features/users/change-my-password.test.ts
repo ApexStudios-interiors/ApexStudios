@@ -77,11 +77,11 @@ beforeEach(() => {
     password === h.correctPassword ? { error: null } : { error: { message: "invalid credentials" } }
   );
   h.updateUser.mockClear();
-  sessionAs("owner");
+  sessionAs("admin");
 });
 
 describe("changeMyPasswordAction", () => {
-  it.each([["owner"], ["admin"], ["site"], ["client"]] as const)(
+  it.each([["admin"], ["site"], ["client"]] as const)(
     "lets %s change their own password after re-authenticating",
     async (role) => {
       sessionAs(role);

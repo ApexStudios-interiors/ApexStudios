@@ -49,7 +49,7 @@ function Row({
 export function BillViewDialog({ billId }: { billId: string }) {
   const { role, closeDialog, openDialog, toast } = useApp();
   const [detail, setDetail] = useState<BillDetail | null | undefined>(undefined);
-  const isAdmin = role === "owner" || role === "admin";
+  const isAdmin = role === "admin";
 
   useEffect(() => {
     getBillDetailForDialog(billId)

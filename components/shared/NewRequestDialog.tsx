@@ -59,7 +59,7 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
   // exactly that, computed server-side in app/(app)/layout.tsx — restored
   // after review found this used the REAL role instead, contradicting this
   // file's own comment above and the app's own impersonation-preview rule).
-  const isAdmin = role === "owner" || role === "admin";
+  const isAdmin = role === "admin";
   const router = useRouter();
 
   const [packages, setPackages] = useState<{ id: string; name: string }[] | null>(null);

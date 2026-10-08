@@ -18,7 +18,7 @@ export default async function PackagesPage({ params }: { params: Promise<{ proje
 
   const packages = await getPackagesForProject(session, projectId);
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const isMoney = effectiveRole === "owner" || effectiveRole === "admin";
+  const isMoney = effectiveRole === "admin";
 
   return (
     <div>

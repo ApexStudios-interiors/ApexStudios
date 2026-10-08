@@ -74,10 +74,10 @@ select ok(
   'the stock_requests select policy is admin-only — client never reaches the base table'
 );
 select ok(
-  (select pg_get_expr(p.polqual, p.polrelid) like '%owner%admin%site%' or pg_get_expr(p.polqual, p.polrelid) like '%site%admin%owner%'
+  (select pg_get_expr(p.polqual, p.polrelid) like '%admin%site%' or pg_get_expr(p.polqual, p.polrelid) like '%site%admin%'
      from pg_policy p join pg_class c on c.oid = p.polrelid
     where c.relname = 'inventory_items' and p.polcmd = 'r'),
-  'the inventory_items select policy is scoped to owner/admin/site — client is excluded'
+  'the inventory_items select policy is scoped to admin/site — client is excluded'
 );
 
 -- ── D18: the ref_no counter exists ───────────────────────────────────────────
