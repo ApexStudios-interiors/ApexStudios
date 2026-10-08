@@ -17,3 +17,4 @@ export const markNotificationReadSchema = z.object({
   kind: notificationKindSchema,
   entityId: z.uuid(),
 });
+export type MarkNotificationReadInput = z.infer<typeof markNotificationReadSchema>;

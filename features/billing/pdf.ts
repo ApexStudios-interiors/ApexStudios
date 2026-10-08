@@ -44,8 +44,9 @@ export function billPdfJobKey(billId: string, revision: number): string {
  * idempotency check. Revision 1 keeps the plain `RA-<code>-<seq>.pdf` name
  * the client already downloads today; a later revision gets its own name so
  * the earlier document is superseded rather than silently overwritten —
- * `getBillPdfUrl` serves the newest, and the superseded one stays on the
- * bill as the record of what the client was actually shown before.
+ * `getBillPdfUrl` serves the one named for the bill's current revision
+ * (getCurrentBillPdfKey), and the superseded one stays on the bill as the
+ * record of what the client was actually shown before.
  */
 export function billPdfFileName(billNo: string, revision: number): string {
   return revision > FIRST_REVISION ? `${billNo}-R${revision}.pdf` : `${billNo}.pdf`;

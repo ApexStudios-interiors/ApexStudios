@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession, type Session } from "@/lib/auth/session";
 import { presignGet } from "@/lib/r2/presign";
 import { fetchPage, type Page, type PageRequest } from "@/lib/pagination";
+import { billPdfFileName } from "./pdf";
 
 /**
  * build/09-billing.md §4.4. `v_billable_now` and `v_bill_client` both
@@ -503,10 +504,14 @@ export async function getBillDetail(session: Session, billId: string): Promise<B
   let lineRows: BillLineRow[] = [];
 
   if (isAdmin) {
+    // A soft-deleted bill is gone for an admin too, as in every other admin
+    // bill read (the Bills list, its page, the Excel export) — and as
+    // `v_bill_client` already hides it from a client below.
     const { data: billRow, error } = await supabase
       .from("bills")
       .select(ADMIN_BILL_COLUMNS)
       .eq("id", billId)
+      .is("deleted_at", null)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!billRow) return null;
@@ -550,6 +555,56 @@ export async function getBillDetail(session: Session, billId: string): Promise<B
 
   const billCopyUrls = await fetchBillCopyUrls(billId);
   return { bill, lines, billCopyUrls };
+}
+
+/**
+ * The storage key of a bill's invoice PDF — the one the `bill.pdf` job
+ * generated for the bill's CURRENT revision, or null when there is none yet.
+ *
+ * A bill's attachments mix two things with the same entity_type, entity id
+ * and mime type: the generated invoice(s) and any copies uploaded as PDFs
+ * (uploadBillCopy). What tells the invoice apart is the name the job gives it
+ * — `billPdfFileName(bill_no, revision)` (./pdf.ts), the same name the job's
+ * own "already generated?" check matches on. Matching it here means:
+ *   - an uploaded scan (any other name) is never served as the invoice;
+ *   - after a rejection and resubmission, the previous revision's document
+ *     is not served while the new one is still being rendered — "not ready
+ *     yet" instead of the stale PDF the client could certify against.
+ * The newest row wins only between rows of that exact name.
+ *
+ * The bill itself is read as the role may see it — admin: `bills` without
+ * soft-deleted rows; anyone else: `v_bill_client` — so a deleted bill, or
+ * one the caller cannot see, has no PDF.
+ */
+export async function getCurrentBillPdfKey(session: Session, billId: string): Promise<string | null> {
+  const effectiveRole = session.impersonating?.role ?? session.role;
+  const supabase = await createClient();
+
+  const { data: bill, error: billErr } =
+    effectiveRole === "admin"
+      ? await supabase
+          .from("bills")
+          .select("bill_no, revision")
+          .eq("id", billId)
+          .is("deleted_at", null)
+          .maybeSingle()
+      : await supabase.from("v_bill_client").select("bill_no, revision").eq("id", billId).maybeSingle();
+  if (billErr) throw new Error(billErr.message);
+  if (!bill?.bill_no || bill.revision == null) return null;
+
+  const { data, error } = await supabase
+    .from("attachments")
+    .select("r2_key")
+    .eq("entity_type", "bill")
+    .eq("entity_id", billId)
+    .eq("mime_type", "application/pdf")
+    .eq("file_name", billPdfFileName(bill.bill_no, bill.revision))
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data?.r2_key ?? null;
 }
 
 export type AdminBillingStats = {

@@ -28,7 +28,18 @@ const { refuse, warn } = checkProductionTarget(
   [url, process.env.NEXT_PUBLIC_SUPABASE_URL],
   "the integration tests"
 );
-if (warn) console.warn(warn);
-if (refuse) throw new Error(refuse);
+// A WARNING IS A REFUSAL HERE, as in e2e/global-setup.ts: this suite writes,
+// and `checkProductionTarget` only warns on an interactive run when
+// SUPABASE_PROD_PROJECT_REF is unset — the exact case where it cannot prove
+// the target is not production. Test-created rows already left in production
+// by such runs (E2E phases, bills, approvals) are why an unprovable target
+// is not good enough for a suite that inserts, updates and deletes.
+const problem = refuse ?? warn;
+if (problem) {
+  throw new Error(
+    `${problem}\n\n  Set SUPABASE_PROD_PROJECT_REF in .env.local, and point this suite at a\n` +
+      "  non-production database before running it."
+  );
+}
 
 export const DB_URL = url;

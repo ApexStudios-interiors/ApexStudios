@@ -457,6 +457,14 @@ export type ChangeMyPasswordRefusal =
   /** Re-authentication with the current password failed. */
   | "wrong_password";
 
+/** What each refusal reads as — the web dialog's and the mobile API's copy.
+ *  None of them echoes a password. */
+export const CHANGE_MY_PASSWORD_REFUSAL_MESSAGES: Record<ChangeMyPasswordRefusal, string> = {
+  no_email: "This account has no username to sign in with. Ask an admin for help.",
+  same_as_current: "Choose a password different from your current one",
+  wrong_password: "That isn't your current password",
+};
+
 /**
  * The steps of a self-service change, injected so the ordering is testable
  * without GoTrue. The real ones are in features/users/actions.ts and both go

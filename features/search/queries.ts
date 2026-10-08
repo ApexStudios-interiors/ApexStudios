@@ -67,6 +67,7 @@ async function searchProjects(supabase: Supa, q: string): Promise<SearchResultDT
     text: p.name,
     sub: p.location ?? "",
     href: `/projects/${p.id}`,
+    projectId: p.id,
   }));
 }
 
@@ -124,6 +125,7 @@ async function searchPackages(
     text: r.name,
     sub: names.get(r.project_id) ?? "",
     href: `/projects/${r.project_id}/packages/${r.id}`,
+    projectId: r.project_id,
   }));
 }
 
@@ -152,6 +154,7 @@ async function searchStockRequests(supabase: Supa, q: string, isAdmin: boolean):
     text: r.material_name,
     sub: `${r.ref_no} · ${names.get(r.project_id) ?? ""}`,
     href: `/projects/${r.project_id}/stock`,
+    projectId: r.project_id,
   }));
 }
 
@@ -172,6 +175,7 @@ async function searchApprovals(supabase: Supa, q: string): Promise<SearchResultD
     text: a.item,
     sub: names.get(a.project_id) ?? "",
     href: `/projects/${a.project_id}/approvals`,
+    projectId: a.project_id,
   }));
 }
 
@@ -179,7 +183,15 @@ async function searchBills(supabase: Supa, q: string, isAdmin: boolean): Promise
   type Row = { id: string; bill_no: string; project_id: string };
   const { data, error } = isAdmin
     ? await supabase.from("bills").select("id, bill_no, project_id").ilike("bill_no", q).limit(5)
-    : await supabase.from("v_bill_client").select("id, bill_no, project_id").ilike("bill_no", q).limit(5);
+    : // A client never sees a draft: the same filter as their Bills list
+      // (getBillsPageForClient) and bill detail, so search finds only bills
+      // the client can open.
+      await supabase
+        .from("v_bill_client")
+        .select("id, bill_no, project_id")
+        .ilike("bill_no", q)
+        .neq("status", "draft")
+        .limit(5);
   if (error) throw new Error(error.message);
   const rows = data as Row[];
   const names = await projectNames(
@@ -192,6 +204,7 @@ async function searchBills(supabase: Supa, q: string, isAdmin: boolean): Promise
     text: r.bill_no,
     sub: names.get(r.project_id) ?? "",
     href: `/projects/${r.project_id}/billing`,
+    projectId: r.project_id,
   }));
 }
 
@@ -212,6 +225,7 @@ async function searchInventory(supabase: Supa, q: string, isAdmin: boolean): Pro
     text: r.name,
     sub: r.project_id ? (names.get(r.project_id) ?? "") : "Central store",
     href: r.project_id ? `/projects/${r.project_id}/inventory` : "/inventory",
+    projectId: r.project_id,
   }));
 }
 
@@ -228,5 +242,6 @@ async function searchUsers(supabase: Supa, q: string): Promise<SearchResultDTO[]
     text: u.full_name,
     sub: u.role,
     href: "/users",
+    projectId: null,
   }));
 }

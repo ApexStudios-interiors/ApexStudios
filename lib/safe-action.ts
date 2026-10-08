@@ -29,8 +29,10 @@ const ERROR_MESSAGES = {
 
 /** Postgres RAISE EXCEPTION messages the RPCs use are prefixed with their code
  *  (e.g. "FORBIDDEN: certifyBill is client-only" — see migration comments),
- *  because Postgres has no first-class typed-error channel to the client. */
-function codeFromPostgresMessage(message: string): keyof typeof ERROR_MESSAGES | null {
+ *  because Postgres has no first-class typed-error channel to the client.
+ *  Exported so a mobile route can pick its HTTP status from the same code
+ *  mapDomainError picks its message from. */
+export function codeFromPostgresMessage(message: string): keyof typeof ERROR_MESSAGES | null {
   const prefix = message.split(":")[0]?.trim();
   return prefix && prefix in ERROR_MESSAGES ? (prefix as keyof typeof ERROR_MESSAGES) : null;
 }

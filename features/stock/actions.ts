@@ -5,8 +5,8 @@ import { revalidatePath, updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { siteAction } from "@/lib/safe-action";
 import { requireSession } from "@/lib/auth/session";
-import { getProjectRateVisibility } from "@/features/projects/actions";
-import { siteMayEnterRate } from "@/features/projects/service";
+import { createStockRequestFor } from "./create";
+import { transitionStockRequestFor } from "./transition";
 import {
   createStockRequestSchema,
   duplicateRequestCheckSchema,
@@ -24,65 +24,26 @@ import { isDuplicateOfDelivered } from "./service";
 export const createStockRequest = siteAction
   .inputSchema(createStockRequestSchema)
   .action(async ({ parsedInput, ctx }) => {
-    // The REAL role, never the impersonated one (lib/auth/session.ts's own
-    // rule, established in Build 05: impersonation only ever shapes reads). An
-    // admin previewing as site is still really an admin; a site session that
-    // somehow crafted a `rate` in its POST body must not have it stored
-    // regardless — this check has to be the real role either way.
-    const isAdmin = ctx.session.role === "admin";
-    // D55: a site supervisor may set a rate only where THIS project is
-    // explicitly set to 'editable'. 'hidden' and 'readonly' both discard it,
-    // so a crafted POST body cannot set one just because the field was not
-    // rendered. Read server-side, from the project row, never taken from the
-    // form. Skipped for an admin, whose answer does not depend on it.
-    const mayEnterRate = isAdmin || siteMayEnterRate(await getProjectRateVisibility(parsedInput.projectId));
-    const supabase = await createClient();
-
-    const { data, error } = await supabase.rpc("rpc_create_stock_request", {
-      p_project_id: parsedInput.projectId,
-      p_package_id: parsedInput.packageId,
-      p_material_name: parsedInput.materialName,
-      p_qty: parsedInput.qty,
-      p_unit: parsedInput.unit,
-      p_phase_id: parsedInput.phaseId,
-      p_inventory_item_id: parsedInput.inventoryItemId,
-      // Stripped here, before the RPC is ever called — not "ignored in the
-      // form". The RPC applies the same rule again (owner/admin always; site
-      // only where the project is 'editable'), as a second, harder boundary:
-      // a security definer function is the real write path regardless of what
-      // called it.
-      p_rate: mayEnterRate ? parsedInput.rate : undefined,
-      p_needed_by: parsedInput.neededBy,
-      p_note: parsedInput.note,
-    });
-    if (error) throw new Error(error.message);
-    // The generated type for a `returns public.stock_requests` RPC is
-    // `unknown` (scripts/gen-types.mjs only maps scalar Postgres types, not
-    // composite/row ones) — same shape rpc_claim_jobs already needed a local
-    // cast for in lib/jobs/runner.ts.
-    const row = data as { id: string; ref_no: string };
+    // The D55 rate rule and the RPC call live in ./create.ts, shared with
+    // the mobile API so both write paths behave identically.
+    const created = await createStockRequestFor(ctx.session, parsedInput);
 
     updateTag(`project:${parsedInput.projectId}`);
     revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
-    return { id: row.id, refNo: row.ref_no };
+    return created;
   });
 
 export const transitionStockRequest = siteAction
   .inputSchema(transitionStockRequestSchema)
-  .action(async ({ parsedInput }) => {
-    const supabase = await createClient();
-    const { data, error } = await supabase.rpc("rpc_transition_stock_request", {
-      p_request_id: parsedInput.requestId,
-      p_to_status: parsedInput.toStatus,
-      p_note: parsedInput.note,
-    });
-    if (error) throw new Error(error.message);
-    const row = data as { id: string; project_id: string; status: string };
+  .action(async ({ parsedInput, ctx }) => {
+    // The RPC call lives in ./transition.ts, shared with the mobile API so
+    // both write paths behave identically.
+    const moved = await transitionStockRequestFor(ctx.session, parsedInput);
 
-    updateTag(`project:${row.project_id}`);
-    revalidatePath(`/projects/${row.project_id}`, "layout");
+    updateTag(`project:${moved.projectId}`);
+    revalidatePath(`/projects/${moved.projectId}`, "layout");
     revalidatePath("/inventory");
-    return { id: row.id, status: row.status };
+    return { id: moved.id, status: moved.status };
   });
 
 /**

@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { siteAction } from "@/lib/safe-action";
 import { requireSession } from "@/lib/auth/session";
 import { createTaskSchema, updateTaskSchema, setTaskProgressSchema } from "./schema";
+import { setTaskProgressFor } from "./progress";
+import { createTaskFor, updateTaskFor } from "./tasks";
 
 /**
  * build/05-schedule-and-progress.md §3.2: createTask, updateTask,
@@ -20,93 +22,37 @@ import { createTaskSchema, updateTaskSchema, setTaskProgressSchema } from "./sch
  */
 
 export const createTask = siteAction.inputSchema(createTaskSchema).action(async ({ parsedInput, ctx }) => {
-  const supabase = await createClient();
+  // The phase lookup and the insert live in ./tasks.ts, shared with the
+  // mobile API so both write paths behave identically.
+  const task = await createTaskFor(ctx.session, parsedInput);
 
-  // v_phase_site, not the base `phases` table: phases is admin-only on
-  // select, but this action is siteAction (owner/admin/site) — a site caller
-  // would get a null row here and crash. Found live, not in review. The view
-  // carries no money and is exactly the ids this lookup needs, so it is the
-  // right read for every role this action allows, not just a site-only branch.
-  const { data: phase, error: phaseErr } = await supabase
-    .from("v_phase_site")
-    .select("project_id, package_id")
-    .eq("id", parsedInput.phaseId)
-    .single();
-  if (phaseErr) throw new Error(phaseErr.message);
-  if (!phase.project_id || !phase.package_id) {
-    throw new Error("NOT_FOUND: that phase no longer exists");
-  }
-
-  const { data, error } = await supabase
-    .from("tasks")
-    .insert({
-      org_id: ctx.session.orgId,
-      project_id: phase.project_id,
-      package_id: phase.package_id,
-      phase_id: parsedInput.phaseId,
-      name: parsedInput.name,
-      owner_profile_id: parsedInput.ownerProfileId ?? null,
-      start_date: parsedInput.startDate,
-      duration_weeks: parsedInput.durationWeeks,
-    })
-    .select("id")
-    .single();
-  if (error) throw new Error(error.message);
-
-  updateTag(`project:${phase.project_id}`);
-  revalidatePath(`/projects/${phase.project_id}`, "layout");
-  return { id: data.id };
+  updateTag(`project:${task.projectId}`);
+  revalidatePath(`/projects/${task.projectId}`, "layout");
+  return { id: task.id };
 });
 
-export const updateTask = siteAction.inputSchema(updateTaskSchema).action(async ({ parsedInput }) => {
-  const { id, ...patch } = parsedInput;
-  const supabase = await createClient();
+export const updateTask = siteAction.inputSchema(updateTaskSchema).action(async ({ parsedInput, ctx }) => {
+  // The update lives in ./tasks.ts, shared with the mobile API.
+  const task = await updateTaskFor(ctx.session, parsedInput);
 
-  const { data, error } = await supabase
-    .from("tasks")
-    .update({
-      ...(patch.name !== undefined && { name: patch.name }),
-      ...(patch.startDate !== undefined && { start_date: patch.startDate }),
-      ...(patch.durationWeeks !== undefined && { duration_weeks: patch.durationWeeks }),
-      ...(patch.note !== undefined && { note: patch.note }),
-    })
-    .eq("id", id)
-    .select("id, project_id")
-    .single();
-  if (error) throw new Error(error.message);
-
-  updateTag(`project:${data.project_id}`);
-  revalidatePath(`/projects/${data.project_id}`, "layout");
+  updateTag(`project:${task.projectId}`);
+  revalidatePath(`/projects/${task.projectId}`, "layout");
   return { ok: true as const };
 });
 
 export const setTaskProgress = siteAction
   .inputSchema(setTaskProgressSchema)
-  .action(async ({ parsedInput }) => {
-    const supabase = await createClient();
+  .action(async ({ parsedInput, ctx }) => {
+    // The read and the RPC call live in ./progress.ts, shared with the mobile
+    // API so both write paths behave identically.
+    const task = await setTaskProgressFor(ctx.session, parsedInput);
 
-    // Read project_id before the write so the RPC's own row lock is held for
-    // as short a time as possible — this value doesn't change, so there is no
-    // race to read it first.
-    const { data: task, error: taskErr } = await supabase
-      .from("tasks")
-      .select("project_id")
-      .eq("id", parsedInput.id)
-      .single();
-    if (taskErr) throw new Error(taskErr.message);
-
-    const { error } = await supabase.rpc("rpc_set_task_progress", {
-      p_task_id: parsedInput.id,
-      p_pct: parsedInput.progressPct,
-    });
-    if (error) throw new Error(error.message);
-
-    updateTag(`project:${task.project_id}`);
+    updateTag(`project:${task.projectId}`);
     // 'layout': the project's dashboard, packages table and every schedule
     // route can all show a number this progress change moved (the rollup
     // trigger updates both the package and the project's own progress_pct in
     // the same write).
-    revalidatePath(`/projects/${task.project_id}`, "layout");
+    revalidatePath(`/projects/${task.projectId}`, "layout");
     revalidatePath("/");
     return { ok: true as const };
   });

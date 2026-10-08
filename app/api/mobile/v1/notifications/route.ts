@@ -1,7 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { ForbiddenError, UnauthenticatedError, requireSession } from "@/lib/auth/session";
-import { mapDomainError } from "@/lib/safe-action";
+import { NO_STORE, mobileErrorFrom, requireBearerSession } from "@/lib/mobile/api";
 import { getNotifications } from "@/features/notifications/queries";
 
 /**
@@ -12,24 +11,23 @@ import { getNotifications } from "@/features/notifications/queries";
  * lib/supabase/server.ts and verified by getSession(). middleware.ts skips
  * /api/mobile/*, so this route is its own guard. The data comes from the same
  * getNotifications() the web bell uses, through the same RLS-scoped client.
+ *
+ * Bearer only (lib/mobile/api.ts requireBearerSession): a request without an
+ * `Authorization: Bearer` header is refused before anything else, so a
+ * browser's session cookie can never authorize it. Errors are
+ * `{ error, message }`, as on every other mobile route.
  */
 export const dynamic = "force-dynamic";
 
-const NO_STORE = { "cache-control": "no-store" };
-
 export async function GET() {
   try {
-    const session = await requireSession();
+    const session = await requireBearerSession();
     const notifications = await getNotifications(session);
     return NextResponse.json({ notifications }, { headers: NO_STORE });
   } catch (e) {
-    if (e instanceof UnauthenticatedError)
-      return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401, headers: NO_STORE });
-    if (e instanceof ForbiddenError)
-      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403, headers: NO_STORE });
-    // Same mapping as every Server Action: a raw Postgres message never leaves
-    // the server; the log gets it, tagged with the reference the caller sees.
-    const message = mapDomainError(e instanceof Error ? e : new Error(String(e)));
-    return NextResponse.json({ error: "INTERNAL", message }, { status: 500, headers: NO_STORE });
+    // { error, message } with mapDomainError's copy (lib/mobile/api.ts): a raw
+    // Postgres message never leaves the server; the log gets it, tagged with
+    // the reference the caller sees.
+    return mobileErrorFrom(e);
   }
 }

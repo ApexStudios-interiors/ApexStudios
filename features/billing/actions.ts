@@ -5,8 +5,7 @@ import { z } from "zod";
 import { revalidatePath, updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminAction, clientAction, siteAction } from "@/lib/safe-action";
-import { requireSession, requireRole } from "@/lib/auth/session";
-import { enqueue } from "@/lib/jobs/enqueue";
+import { requireSession, requireRole, type Session } from "@/lib/auth/session";
 import { presignGet } from "@/lib/r2/presign";
 import { env } from "@/lib/env";
 import {
@@ -20,10 +19,11 @@ import {
   getBillableNow,
   getBillDetail,
   getBillPaymentsSummary,
+  getCurrentBillPdfKey,
   type BillableNowLine,
   type BillDetail,
 } from "./queries";
-import { billPdfJobKey } from "./pdf";
+import { transitionBillFor, type BillTransitionStatus } from "./transition";
 
 /**
  * build/09-billing.md §4.4. `rpc_create_bill`, `rpc_transition_bill` and
@@ -78,46 +78,32 @@ export const createBill = adminAction.inputSchema(createBillSchema).action(async
  */
 export const transitionBill = adminAction
   .inputSchema(transitionBillSchema)
-  .action(async ({ parsedInput }) => transitionBillImpl(parsedInput));
+  .action(async ({ parsedInput, ctx }) => transitionBillImpl(ctx.session, parsedInput));
 
 export const certifyBill = clientAction
   .inputSchema(transitionBillSchema)
-  .action(async ({ parsedInput }) => transitionBillImpl(parsedInput));
+  .action(async ({ parsedInput, ctx }) => transitionBillImpl(ctx.session, parsedInput));
 
-export const rejectBill = clientAction.inputSchema(rejectBillSchema).action(async ({ parsedInput }) => {
-  return transitionBillImpl({ billId: parsedInput.billId, toStatus: "draft", note: parsedInput.reason });
+export const rejectBill = clientAction.inputSchema(rejectBillSchema).action(async ({ parsedInput, ctx }) => {
+  return transitionBillImpl(ctx.session, {
+    billId: parsedInput.billId,
+    toStatus: "draft",
+    note: parsedInput.reason,
+  });
 });
 
-type BillTransitionStatus = "submitted" | "cancelled" | "certified" | "draft" | "paid";
-
-async function transitionBillImpl(input: { billId: string; toStatus: BillTransitionStatus; note?: string }) {
+async function transitionBillImpl(
+  session: Session,
+  input: { billId: string; toStatus: BillTransitionStatus; note?: string }
+) {
   assertBillingEnabled();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("rpc_transition_bill", {
-    p_bill_id: input.billId,
-    p_to_status: input.toStatus,
-    p_note: input.note,
-  });
-  if (error) throw new Error(error.message);
-  const row = data as BillRow;
+  // The RPC call (and the PDF enqueue on submit) lives in ./transition.ts,
+  // shared with the mobile API so both write paths behave identically.
+  const moved = await transitionBillFor(session, input);
 
-  // draft -> submitted enqueues the PDF render, same place confirmUpload
-  // enqueues attachment.thumbnail (application layer, not inside the RPC —
-  // a security definer function has no session to enqueue as).
-  //
-  // The key is per (bill, revision), not per (bill, status): a client
-  // rejection sends the bill back to draft with `revision = revision + 1`,
-  // and the resubmission that follows must render its own document. Keyed on
-  // status alone it collided with the first submission under `jobs_idem_uq`
-  // and no second job was ever created — the client then certified against
-  // the pre-rejection PDF. See `./pdf.ts`.
-  if (row.status === "submitted") {
-    await enqueue("bill.pdf", { billId: row.id }, { idempotencyKey: billPdfJobKey(row.id, row.revision) });
-  }
-
-  updateTag(`project:${row.project_id}`);
-  revalidatePath(`/projects/${row.project_id}`, "layout");
-  return { id: row.id, status: row.status };
+  updateTag(`project:${moved.projectId}`);
+  revalidatePath(`/projects/${moved.projectId}`, "layout");
+  return { id: moved.id, status: moved.status };
 }
 
 export const recordPayment = adminAction.inputSchema(recordPaymentSchema).action(async ({ parsedInput }) => {
@@ -190,28 +176,13 @@ export const uploadBillCopy = siteAction
  */
 export async function getBillPdfUrl(billId: string): Promise<string | null> {
   assertBillingEnabled();
-  await requireSession();
-  const supabase = await createClient();
-  // `mime_type = 'application/pdf'` narrows this away from a non-PDF scan
-  // uploaded afterward via uploadBillCopy (a photo, most commonly), but a
-  // scanned copy uploaded AS a PDF would still collide — both share
-  // entity_type='bill'/entity_id=billId with no dedicated discriminator
-  // column. A full fix needs one (e.g. a `kind` column distinguishing
-  // "generated" from "uploaded"); tracked as a follow-up, not blocking this
-  // build.
-  const { data, error } = await supabase
-    .from("attachments")
-    .select("r2_key")
-    .eq("entity_type", "bill")
-    .eq("entity_id", billId)
-    .eq("mime_type", "application/pdf")
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!data) return null;
-  return presignGet(data.r2_key, "attachment");
+  const session = await requireSession();
+  // Which attachment is the invoice — the one generated for the bill's
+  // current revision, never an uploaded copy or a superseded revision — is
+  // decided in getCurrentBillPdfKey (./queries.ts).
+  const key = await getCurrentBillPdfKey(session, billId);
+  if (!key) return null;
+  return presignGet(key, "attachment");
 }
 
 /** `BillingAdmin`'s own Billable Now fetch — `queries.ts` is `server-only`

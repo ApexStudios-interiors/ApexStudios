@@ -490,3 +490,339 @@ describe("attachments freeze on decision (migrations 0036/0037)", () => {
     trackedApprovalIds.push(approvalId);
   });
 });
+
+/**
+ * Migration 20261007090001: trg_approvals_ancestry. An approval's package must
+ * belong to its project, and its phase (when set) to that package and
+ * project — on every write path, not just rpc_create_approval. Errors are the
+ * domain NOT_FOUND (P0002), which mapDomainError renders as "That record no
+ * longer exists."
+ */
+describe("approvals — project → package → phase ancestry", () => {
+  /** Seed: project c2's only package, and a phase of c1's OTHER package. */
+  const OTHER_PROJECT = "00000000-0000-4000-8000-0000000000c2";
+  const OTHER_PROJECT_PACKAGE = "00000000-0000-4000-8000-0000000000e7";
+  const OTHER_PACKAGE_PHASE = "00000000-0000-4000-8000-000000000f11"; // c1 / e2
+
+  async function createVia(
+    as: SupabaseClient,
+    packageId: string,
+    phaseId: string | null,
+    supersedesId?: string
+  ) {
+    const id = randomUUID();
+    const result = await as.rpc("rpc_create_approval", {
+      p_id: id,
+      p_project_id: SEED.project,
+      p_package_id: packageId,
+      p_phase_id: phaseId,
+      p_type: "material_sample",
+      p_item: "Ancestry test approval",
+      p_supersedes_id: supersedesId,
+    });
+    if (!result.error) trackedApprovalIds.push((result.data as ApprovalRow).id);
+    return result;
+  }
+
+  it("refuses a package from another project with NOT_FOUND", async () => {
+    const site = await client(SITE_EMAIL);
+
+    const { data, error } = await createVia(site, OTHER_PROJECT_PACKAGE, null);
+
+    expect(data).toBeNull();
+    expect(error?.code).toBe("P0002");
+    expect(error?.message).toMatch(/^NOT_FOUND: package .* does not exist in this project$/);
+  });
+
+  it("refuses a phase from another package in the same project with NOT_FOUND", async () => {
+    const site = await client(SITE_EMAIL);
+
+    const { data, error } = await createVia(site, SEED.poolPackage, OTHER_PACKAGE_PHASE);
+
+    expect(data).toBeNull();
+    expect(error?.code).toBe("P0002");
+    expect(error?.message).toMatch(/^NOT_FOUND: phase .* does not exist in this package$/);
+  });
+
+  it("refuses a phase from another project with NOT_FOUND", async () => {
+    const phase = one(
+      await sql`insert into public.phases (org_id, project_id, package_id, seq_no, name)
+                values (${SEED.org}, ${OTHER_PROJECT}, ${OTHER_PROJECT_PACKAGE}, 92, 'Ancestry fixture phase')
+                returning id`,
+      "fixture phase in another project"
+    );
+    try {
+      const site = await client(SITE_EMAIL);
+
+      const { data, error } = await createVia(site, SEED.poolPackage, phase.id);
+
+      expect(data).toBeNull();
+      expect(error?.code).toBe("P0002");
+      expect(error?.message).toMatch(/^NOT_FOUND: phase .* does not exist in this package$/);
+    } finally {
+      await sql`delete from public.phases where id = ${phase.id}`;
+    }
+  });
+
+  it("accepts a matching package and phase", async () => {
+    const site = await client(SITE_EMAIL);
+
+    const { data, error } = await createVia(site, SEED.poolPackage, SEED.phaseWaterproofing);
+
+    expect(error).toBeNull();
+    const row = one(
+      await sql`select project_id, package_id, phase_id from public.approvals where id = ${(data as ApprovalRow).id}`,
+      "created approval"
+    );
+    expect(row).toEqual({
+      project_id: SEED.project,
+      package_id: SEED.poolPackage,
+      phase_id: SEED.phaseWaterproofing,
+    });
+  });
+
+  it("accepts a matching package with no phase (the phase checks are skipped)", async () => {
+    const site = await client(SITE_EMAIL);
+
+    const { data, error } = await createVia(site, SEED.poolPackage, null);
+
+    expect(error).toBeNull();
+    const row = one(
+      await sql`select phase_id from public.approvals where id = ${(data as ApprovalRow).id}`,
+      "created approval"
+    );
+    expect(row.phase_id).toBeNull();
+  });
+
+  it("refuses a DIRECT insert with a mismatched package — the RPC is not the only guard", async () => {
+    // Straight into the table, bypassing rpc_create_approval entirely (the
+    // path ap_insert leaves open). The privileged connection skips RLS, so
+    // the only thing that can refuse this row is the trigger itself.
+    const id = randomUUID();
+    await expect(
+      sql`insert into public.approvals (id, org_id, project_id, package_id, ref_no, type, item, requested_by, created_by)
+          values (${id}, ${SEED.org}, ${SEED.project}, ${OTHER_PROJECT_PACKAGE}, ${"AP-ANCESTRY-" + id.slice(0, 8)},
+                  'material_sample', 'Direct insert', ${SEED.siteProfile}, ${SEED.siteProfile})`
+    ).rejects.toThrow(/NOT_FOUND: package .* does not exist in this project/);
+
+    const left = await sql`select id from public.approvals where id = ${id}`;
+    expect(left).toHaveLength(0);
+  });
+
+  it("refuses an update that moves an approval onto another project's package", async () => {
+    const site = await client(SITE_EMAIL);
+    const approval = await createApproval(site, { item: "Ancestry update target" });
+
+    await expect(
+      sql`update public.approvals set package_id = ${OTHER_PROJECT_PACKAGE} where id = ${approval.id}`
+    ).rejects.toThrow(/NOT_FOUND: package .* does not exist in this project/);
+
+    const row = one(
+      await sql`select package_id from public.approvals where id = ${approval.id}`,
+      "unchanged approval"
+    );
+    expect(row.package_id).toBe(SEED.poolPackage);
+  });
+
+  it("still lets a rejected approval with a phase be superseded by a revision", async () => {
+    const site = await client(SITE_EMAIL);
+    const original = await createVia(site, SEED.poolPackage, SEED.phaseWaterproofing);
+    expect(original.error).toBeNull();
+    const originalId = (original.data as ApprovalRow).id;
+
+    const clientSession = await client(CLIENT_EMAIL);
+    const { error: rejectErr } = await clientSession.rpc("rpc_decide_approval", {
+      p_approval_id: originalId,
+      p_decision: "rejected",
+      p_reason: "Wrong finish",
+    });
+    expect(rejectErr).toBeNull();
+
+    // The revision carries the original's package and phase, as the web's
+    // pre-filled "Raise revised approval" dialog sends them.
+    const revised = await createVia(site, SEED.poolPackage, SEED.phaseWaterproofing, originalId);
+
+    expect(revised.error).toBeNull();
+    const row = one(
+      await sql`select supersedes_id, phase_id from public.approvals where id = ${(revised.data as ApprovalRow).id}`,
+      "revised approval"
+    );
+    expect(row).toEqual({ supersedes_id: originalId, phase_id: SEED.phaseWaterproofing });
+  });
+});
+
+describe("approval sample photos — cap and role (20261008090002)", () => {
+  function photo(approvalId: string, n: number | string, uploadedBy: string = SEED.siteProfile) {
+    return {
+      org_id: SEED.org,
+      project_id: SEED.project,
+      entity_type: "approval",
+      entity_id: approvalId,
+      uploaded_by: uploadedBy,
+      mime_type: "image/jpeg",
+      size_bytes: 1000,
+      file_name: `sample-${n}.jpg`,
+      r2_key: `test/${approvalId}/sample-${n}-${randomUUID()}.jpg`,
+    };
+  }
+
+  async function liveCount(approvalId: string): Promise<number> {
+    const rows =
+      await sql`select count(*)::int as n from public.attachments where entity_type = 'approval' and entity_id = ${approvalId} and deleted_at is null`;
+    return Number(rows[0]?.n ?? 0);
+  }
+
+  it("four photos are accepted; a fifth is refused with the same words the upload step uses", async () => {
+    const site = await client(SITE_EMAIL);
+    const approval = await createApproval(site);
+    for (const n of [1, 2, 3, 4]) {
+      const { error } = await site.from("attachments").insert(photo(approval.id, n));
+      expect(error).toBeNull();
+    }
+
+    const fifth = await site.from("attachments").insert(photo(approval.id, 5));
+
+    expect(fifth.error?.message).toBe("REASON_REQUIRED: this approval already has 4 attachments");
+    expect(await liveCount(approval.id)).toBe(4);
+  });
+
+  it("concurrent inserts can never pass the cap together — at most four, whatever the timing", async () => {
+    const site = await client(SITE_EMAIL);
+    const approval = await createApproval(site);
+    const sessions = await Promise.all(
+      Array.from({ length: 6 }, async () => {
+        const s = await signedInAs(SITE_EMAIL);
+        openClients.push(s);
+        return s;
+      })
+    );
+
+    const results = await Promise.all(
+      sessions.map((s, i) => s.from("attachments").insert(photo(approval.id, `c${i}`)))
+    );
+
+    expect(results.filter((r) => !r.error)).toHaveLength(4);
+    for (const r of results.filter((x) => x.error)) {
+      expect(r.error?.message).toBe("REASON_REQUIRED: this approval already has 4 attachments");
+    }
+    expect(await liveCount(approval.id)).toBe(4);
+  });
+
+  it("the cap applies before the approval exists too (the create flow's photos-first upload)", async () => {
+    const site = await client(SITE_EMAIL);
+    const draftId = randomUUID();
+    trackedApprovalIds.push(draftId);
+    for (const n of [1, 2, 3, 4]) {
+      const { error } = await site.from("attachments").insert(photo(draftId, n));
+      expect(error).toBeNull();
+    }
+
+    const fifth = await site.from("attachments").insert(photo(draftId, 5));
+
+    expect(fifth.error?.message).toMatch(/^REASON_REQUIRED/);
+  });
+
+  it("a retried record of the fourth photo (same storage key) still meets the unique key, not the cap", async () => {
+    const site = await client(SITE_EMAIL);
+    const approval = await createApproval(site);
+    const fourth = photo(approval.id, 4);
+    for (const row of [photo(approval.id, 1), photo(approval.id, 2), photo(approval.id, 3), fourth]) {
+      expect((await site.from("attachments").insert(row)).error).toBeNull();
+    }
+
+    const repeat = await site.from("attachments").insert(fourth);
+
+    // confirmUploadFor answers exactly this (23505 on attachments_r2_key_key)
+    // as "already recorded" — the retry is not mistaken for a fifth photo.
+    expect(repeat.error?.code).toBe("23505");
+    expect(repeat.error?.message).toMatch(/attachments_r2_key_key/);
+  });
+
+  it("a client cannot add a sample photo, even straight through the table", async () => {
+    const site = await client(SITE_EMAIL);
+    const approval = await createApproval(site);
+    const clientSession = await client(CLIENT_EMAIL);
+
+    const { error } = await clientSession
+      .from("attachments")
+      .insert(photo(approval.id, 1, SEED.clientProfile));
+
+    expect(error?.message).toMatch(/FORBIDDEN|row-level security/);
+    expect(await liveCount(approval.id)).toBe(0);
+  });
+
+  it("admin still adds sample photos", async () => {
+    const site = await client(SITE_EMAIL);
+    const approval = await createApproval(site);
+    const admin = await client(ADMIN_EMAIL);
+
+    const { error } = await admin.from("attachments").insert(photo(approval.id, 1, SEED.adminProfile));
+
+    expect(error).toBeNull();
+  });
+
+  it("other entity types are untouched by this cap", async () => {
+    const site = await client(SITE_EMAIL);
+    const approval = await createApproval(site);
+    for (const n of [1, 2, 3, 4]) await site.from("attachments").insert(photo(approval.id, n));
+
+    // A bill copy for some other record is not counted against the approval.
+    const bill = await sql`
+      insert into public.attachments (org_id, project_id, entity_type, entity_id, uploaded_by, mime_type, size_bytes, file_name, r2_key)
+      values (${SEED.org}, ${SEED.project}, 'bill', ${SEED.billPaid}, ${SEED.adminProfile}, 'application/pdf', 1000, 'x.pdf', ${`test/bill/${randomUUID()}.pdf`})
+      returning id`;
+    expect(bill).toHaveLength(1);
+    await sql`delete from public.attachments where id = ${bill[0]?.id}`;
+  });
+});
+
+describe("rpc_create_approval — a retried request never creates a second approval", () => {
+  it("the same id twice: the second call is refused on the primary key, and the ref sequence is not consumed", async () => {
+    const site = await client(SITE_EMAIL);
+    const id = randomUUID();
+    const args = {
+      p_id: id,
+      p_project_id: SEED.project,
+      p_package_id: SEED.poolPackage,
+      p_type: "material_sample",
+      p_item: "Retry test approval",
+    };
+
+    const first = await site.rpc("rpc_create_approval", args);
+    expect(first.error).toBeNull();
+    trackedApprovalIds.push(id);
+    const seqAfterFirst = await sql`select next_ap_seq from public.projects where id = ${SEED.project}`;
+
+    const retry = await site.rpc("rpc_create_approval", args);
+
+    expect(retry.error?.code).toBe("23505");
+    expect(retry.error?.message).toMatch(/approvals_pkey/);
+    const rows = await sql`select count(*)::int as n from public.approvals where id = ${id}`;
+    expect(rows[0]?.n).toBe(1);
+    const seqAfterRetry = await sql`select next_ap_seq from public.projects where id = ${SEED.project}`;
+    expect(seqAfterRetry[0]?.next_ap_seq).toBe(seqAfterFirst[0]?.next_ap_seq);
+  });
+
+  it("the same id concurrently: exactly one approval", async () => {
+    const [a, b] = await Promise.all([signedInAs(SITE_EMAIL), signedInAs(SITE_EMAIL)]);
+    openClients.push(a, b);
+    const id = randomUUID();
+    const args = {
+      p_id: id,
+      p_project_id: SEED.project,
+      p_package_id: SEED.poolPackage,
+      p_type: "material_sample",
+      p_item: "Concurrent retry test approval",
+    };
+
+    const results = await Promise.all([
+      a.rpc("rpc_create_approval", args),
+      b.rpc("rpc_create_approval", args),
+    ]);
+    trackedApprovalIds.push(id);
+
+    expect(results.filter((r) => !r.error)).toHaveLength(1);
+    const rows = await sql`select count(*)::int as n from public.approvals where id = ${id}`;
+    expect(rows[0]?.n).toBe(1);
+  });
+});

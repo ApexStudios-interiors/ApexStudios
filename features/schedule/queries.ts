@@ -75,42 +75,57 @@ type TaskRow = {
 type PackageIdRow = { id: string; name: string; seq_no: number };
 type PhaseIdRow = { id: string; name: string; seq_no: number; package_id: string };
 
-async function fetchPackagesForSchedule(isAdmin: boolean, projectId: string): Promise<PackageIdRow[]> {
+/** `packageId` (the one-package schedule) narrows the read to that package in
+ *  the query — the same rows its caller used to find in the whole list. */
+async function fetchPackagesForSchedule(
+  isAdmin: boolean,
+  projectId: string,
+  packageId?: string
+): Promise<PackageIdRow[]> {
   const supabase = await createClient();
   if (isAdmin) {
-    const { data, error } = await supabase
+    let query = supabase
       .from("packages")
       .select("id, seq_no, name")
       .eq("project_id", projectId)
-      .is("deleted_at", null)
-      .order("seq_no", { ascending: true });
+      .is("deleted_at", null);
+    if (packageId) query = query.eq("id", packageId);
+    const { data, error } = await query.order("seq_no", { ascending: true });
     if (error) throw new Error(error.message);
     return data;
   }
-  const { data, error } = await supabase
-    .from("v_package_site")
-    .select("id, seq_no, name")
-    .eq("project_id", projectId)
-    .order("seq_no", { ascending: true });
+  let query = supabase.from("v_package_site").select("id, seq_no, name").eq("project_id", projectId);
+  if (packageId) query = query.eq("id", packageId);
+  const { data, error } = await query.order("seq_no", { ascending: true });
   if (error) throw new Error(error.message);
   return data.filter((p): p is PackageIdRow => p.id != null && p.name != null && p.seq_no != null);
 }
 
-async function fetchPhasesForSchedule(isAdmin: boolean, projectId: string): Promise<PhaseIdRow[]> {
+/** `packageId` narrows the read to that package's phases in the query — the
+ *  same rows its caller used to filter out of the whole project's. */
+async function fetchPhasesForSchedule(
+  isAdmin: boolean,
+  projectId: string,
+  packageId?: string
+): Promise<PhaseIdRow[]> {
   const supabase = await createClient();
   if (isAdmin) {
-    const { data, error } = await supabase
+    let query = supabase
       .from("phases")
       .select("id, seq_no, name, package_id")
       .eq("project_id", projectId)
       .is("deleted_at", null);
+    if (packageId) query = query.eq("package_id", packageId);
+    const { data, error } = await query;
     if (error) throw new Error(error.message);
     return data;
   }
-  const { data, error } = await supabase
+  let query = supabase
     .from("v_phase_site")
     .select("id, seq_no, name, package_id")
     .eq("project_id", projectId);
+  if (packageId) query = query.eq("package_id", packageId);
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data.filter(
     (p): p is PhaseIdRow => p.id != null && p.name != null && p.seq_no != null && p.package_id != null
@@ -279,11 +294,13 @@ export async function getScheduleForPackage(
   if (projErr) throw new Error(projErr.message);
   if (!project?.start_date) return null;
 
-  const packages = await fetchPackagesForSchedule(isAdmin, projectId);
+  // Only this package and its phases are read (narrowed in the query); the
+  // find/filter stay as the guarantee.
+  const packages = await fetchPackagesForSchedule(isAdmin, projectId, packageId);
   const pkg = packages.find((p) => p.id === packageId);
   if (!pkg) return null;
 
-  const phases = (await fetchPhasesForSchedule(isAdmin, projectId)).filter(
+  const phases = (await fetchPhasesForSchedule(isAdmin, projectId, packageId)).filter(
     (ph) => ph.package_id === packageId
   );
 
