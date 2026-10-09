@@ -1,4 +1,5 @@
 import type { Section } from "./nav";
+import { projectPath } from "@/lib/routing/paths";
 
 /**
  * One breadcrumb. `href` is where the crumb points if it points anywhere at
@@ -22,6 +23,8 @@ export function projectCrumbs({
   sectionLabel,
   packageId = null,
   packageLabel = null,
+  projectCode = null,
+  packageSegment = null,
 }: {
   pathname: string;
   projectId: string;
@@ -31,8 +34,15 @@ export function projectCrumbs({
   sectionLabel: string;
   packageId?: string | null;
   packageLabel?: string | null;
+  /** The project's code. When given, every crumb links to the canonical
+   *  `/projects/bhel-nch/…` instead of the id form, which middleware would
+   *  answer with a redirect. Optional so the id form stays the fallback when
+   *  the project is not in the role-scoped nav list and no code is to hand. */
+  projectCode?: string | null;
+  /** The package's canonical URL segment, from `packagePath`. */
+  packageSegment?: string | null;
 }): Crumb[] {
-  const projectHref = `/projects/${projectId}`;
+  const projectHref = projectCode ? projectPath({ code: projectCode }) : `/projects/${projectId}`;
   const entries: { label: string; href: string | null }[] = [
     { label: projectName, href: projectName ? projectHref : null },
     {
@@ -45,7 +55,11 @@ export function projectCrumbs({
   if (packageLabel) {
     entries.push({
       label: packageLabel,
-      href: packageId ? `${projectHref}/packages/${packageId}` : null,
+      href: packageSegment
+        ? `${projectHref}/packages/${packageSegment}`
+        : packageId
+          ? `${projectHref}/packages/${packageId}`
+          : null,
     });
   }
 

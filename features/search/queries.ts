@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
 import { capResults, type SearchResultDTO } from "./service";
+import { packagePath, projectPath } from "@/lib/routing/paths";
 
 /**
  * build/07-stock-inventory-notifications.md §2.7. Each entity goes through
@@ -57,7 +58,7 @@ type Supa = Awaited<ReturnType<typeof createClient>>;
 async function searchProjects(supabase: Supa, q: string): Promise<SearchResultDTO[]> {
   const { data, error } = await supabase
     .from("projects")
-    .select("id, name, location")
+    .select("id, name, location, code")
     .ilike("name", q)
     .limit(5);
   if (error) throw new Error(error.message);
@@ -66,17 +67,56 @@ async function searchProjects(supabase: Supa, q: string): Promise<SearchResultDT
     category: "Projects" as const,
     text: p.name,
     sub: p.location ?? "",
-    href: `/projects/${p.id}`,
+    href: p.code ? projectPath({ code: p.code }) : `/projects/${p.id}`,
     projectId: p.id,
   }));
 }
 
-async function projectNames(supabase: Supa, projectIds: string[]): Promise<Map<string, string>> {
+type ProjectRefRow = { name: string; code: string };
+
+/**
+ * Name AND code for each project in the result set. The code costs nothing
+ * extra here — one more column on a query already being made — and is what
+ * lets every href below be the canonical `/projects/bhel-nch/...` rather than
+ * a `/projects/<uuid>/...` that middleware answers with a redirect.
+ */
+async function projectRefs(supabase: Supa, projectIds: string[]): Promise<Map<string, ProjectRefRow>> {
   const ids = [...new Set(projectIds)];
   if (ids.length === 0) return new Map();
-  const { data, error } = await supabase.from("projects").select("id, name").in("id", ids);
+  const { data, error } = await supabase.from("projects").select("id, name, code").in("id", ids);
   if (error) throw new Error(error.message);
-  return new Map(data.map((p) => [p.id, p.name]));
+  return new Map(data.map((p) => [p.id, { name: p.name, code: p.code }]));
+}
+
+/**
+ * Canonical href, with a UUID fallback.
+ *
+ * The fallback is not dead code: `projectRefs` reads through the caller's own
+ * RLS-scoped client, so a row whose project the search surfaced but whose
+ * `projects` row the reader cannot select would have no code here. A UUID
+ * link still works — middleware redirects it — so the result stays clickable
+ * rather than broken. It just costs the extra request this change exists to
+ * avoid, which is the right trade for a case that should not happen.
+ */
+function sectionHref(ref: ProjectRefRow | undefined, projectId: string, rest: string): string {
+  // `ref?.code`, not just `ref`: a row can come back with the project present
+  // but its code not selectable by this reader.
+  return ref?.code ? projectPath({ code: ref.code }, rest) : `/projects/${projectId}${rest}`;
+}
+
+function packageHref(
+  ref: ProjectRefRow | undefined,
+  projectId: string,
+  packageId: string,
+  name: string,
+  seqNo: number
+): string {
+  if (!ref?.code) return `/projects/${projectId}/packages/${packageId}`;
+  // `ambiguous: true` unconditionally: this result set holds at most five
+  // packages matching a search term and cannot see the rest of the project,
+  // so it cannot know whether the name collides. The suffixed form resolves
+  // either way, which a bare name would not if a twin existed.
+  return packagePath({ code: ref.code }, { name, seqNo, ambiguous: true });
 }
 
 async function searchPackages(
@@ -85,12 +125,12 @@ async function searchPackages(
   isAdmin: boolean,
   isClient: boolean
 ): Promise<SearchResultDTO[]> {
-  type Row = { id: string; name: string; project_id: string };
+  type Row = { id: string; name: string; project_id: string; seq_no: number };
   let rows: Row[];
   if (isAdmin) {
     const { data, error } = await supabase
       .from("packages")
-      .select("id, name, project_id")
+      .select("id, name, project_id, seq_no")
       .ilike("name", q)
       .limit(5);
     if (error) throw new Error(error.message);
@@ -98,7 +138,7 @@ async function searchPackages(
   } else if (isClient) {
     const { data, error } = await supabase
       .from("v_package_client")
-      .select("id, name, project_id")
+      .select("id, name, project_id, seq_no")
       .ilike("name", q)
       .limit(5);
     if (error) throw new Error(error.message);
@@ -109,13 +149,13 @@ async function searchPackages(
   } else {
     const { data, error } = await supabase
       .from("v_package_site")
-      .select("id, name, project_id")
+      .select("id, name, project_id, seq_no")
       .ilike("name", q)
       .limit(5);
     if (error) throw new Error(error.message);
     rows = data as Row[];
   }
-  const names = await projectNames(
+  const refs = await projectRefs(
     supabase,
     rows.map((r) => r.project_id)
   );
@@ -123,8 +163,8 @@ async function searchPackages(
     id: r.id,
     category: "Packages" as const,
     text: r.name,
-    sub: names.get(r.project_id) ?? "",
-    href: `/projects/${r.project_id}/packages/${r.id}`,
+    sub: refs.get(r.project_id)?.name ?? "",
+    href: packageHref(refs.get(r.project_id), r.project_id, r.id, r.name, r.seq_no),
     projectId: r.project_id,
   }));
 }
@@ -144,7 +184,7 @@ async function searchStockRequests(supabase: Supa, q: string, isAdmin: boolean):
         .limit(5);
   if (error) throw new Error(error.message);
   const rows = data as Row[];
-  const names = await projectNames(
+  const refs = await projectRefs(
     supabase,
     rows.map((r) => r.project_id)
   );
@@ -152,8 +192,8 @@ async function searchStockRequests(supabase: Supa, q: string, isAdmin: boolean):
     id: r.id,
     category: "Stock Requests" as const,
     text: r.material_name,
-    sub: `${r.ref_no} · ${names.get(r.project_id) ?? ""}`,
-    href: `/projects/${r.project_id}/stock`,
+    sub: `${r.ref_no} · ${refs.get(r.project_id)?.name ?? ""}`,
+    href: sectionHref(refs.get(r.project_id), r.project_id, "/stock"),
     projectId: r.project_id,
   }));
 }
@@ -165,7 +205,7 @@ async function searchApprovals(supabase: Supa, q: string): Promise<SearchResultD
     .ilike("item", q)
     .limit(5);
   if (error) throw new Error(error.message);
-  const names = await projectNames(
+  const refs = await projectRefs(
     supabase,
     data.map((a) => a.project_id)
   );
@@ -173,8 +213,8 @@ async function searchApprovals(supabase: Supa, q: string): Promise<SearchResultD
     id: a.id,
     category: "Approvals" as const,
     text: a.item,
-    sub: names.get(a.project_id) ?? "",
-    href: `/projects/${a.project_id}/approvals`,
+    sub: refs.get(a.project_id)?.name ?? "",
+    href: sectionHref(refs.get(a.project_id), a.project_id, "/approvals"),
     projectId: a.project_id,
   }));
 }
@@ -194,7 +234,7 @@ async function searchBills(supabase: Supa, q: string, isAdmin: boolean): Promise
         .limit(5);
   if (error) throw new Error(error.message);
   const rows = data as Row[];
-  const names = await projectNames(
+  const refs = await projectRefs(
     supabase,
     rows.map((r) => r.project_id)
   );
@@ -202,8 +242,8 @@ async function searchBills(supabase: Supa, q: string, isAdmin: boolean): Promise
     id: r.id,
     category: "Bills" as const,
     text: r.bill_no,
-    sub: names.get(r.project_id) ?? "",
-    href: `/projects/${r.project_id}/billing`,
+    sub: refs.get(r.project_id)?.name ?? "",
+    href: sectionHref(refs.get(r.project_id), r.project_id, "/billing"),
     projectId: r.project_id,
   }));
 }
@@ -215,7 +255,7 @@ async function searchInventory(supabase: Supa, q: string, isAdmin: boolean): Pro
     : await supabase.from("v_inventory_site").select("id, name, project_id").ilike("name", q).limit(5);
   if (error) throw new Error(error.message);
   const rows = data as Row[];
-  const names = await projectNames(
+  const refs = await projectRefs(
     supabase,
     rows.map((r) => r.project_id).filter((id): id is string => id != null)
   );
@@ -223,8 +263,8 @@ async function searchInventory(supabase: Supa, q: string, isAdmin: boolean): Pro
     id: r.id,
     category: "Inventory" as const,
     text: r.name,
-    sub: r.project_id ? (names.get(r.project_id) ?? "") : "Central store",
-    href: r.project_id ? `/projects/${r.project_id}/inventory` : "/inventory",
+    sub: r.project_id ? (refs.get(r.project_id)?.name ?? "") : "Central store",
+    href: r.project_id ? sectionHref(refs.get(r.project_id), r.project_id, "/inventory") : "/inventory",
     projectId: r.project_id,
   }));
 }

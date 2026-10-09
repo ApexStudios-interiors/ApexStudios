@@ -11,6 +11,10 @@ import { parseRateVisibility, projectStatusLabel, type RateVisibility } from "./
 
 export type ProjectCardDTO = {
   id: string;
+  /** The project code, e.g. `BHEL-NCH`. Carried so a link can be built as the
+   *  canonical `/projects/bhel-nch` rather than `/projects/<uuid>`, which
+   *  middleware would have to redirect (lib/routing/paths.ts). */
+  code: string;
   name: string;
   client: string;
   location: string | null;
@@ -48,7 +52,7 @@ async function fetchProjectRows(effectiveRole: "admin" | "site" | "client") {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("projects")
-    .select("id, name, location, status, progress_pct, start_date, contract_value, client_id")
+    .select("id, code, name, location, status, progress_pct, start_date, contract_value, client_id")
     .is("deleted_at", null)
     // start_date, not created_at: every row in supabase/seed.sql's multi-row
     // INSERT gets the identical now() (Postgres evaluates it once per
@@ -136,6 +140,7 @@ export async function getPortfolioForAdmin(): Promise<PortfolioAdmin> {
     totalCommitted += agg.committed;
     return {
       id: p.id,
+      code: p.code,
       name: p.name,
       client: clientName.get(p.client_id) ?? "",
       location: p.location,
@@ -187,6 +192,7 @@ export async function getPortfolioForClient(): Promise<PortfolioClient> {
 
   const projectCards: ProjectCardDTO[] = projects.map((p) => ({
     id: p.id,
+    code: p.code,
     name: p.name,
     client: clientName.get(p.client_id) ?? "",
     location: p.location,
@@ -229,6 +235,7 @@ export async function getPortfolioForSite(): Promise<PortfolioSite> {
 
   const projectCards: ProjectCardDTO[] = projects.map((p) => ({
     id: p.id,
+    code: p.code,
     name: p.name,
     client: clientName.get(p.client_id) ?? "",
     location: p.location,
