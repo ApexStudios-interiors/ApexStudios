@@ -32,14 +32,19 @@ export default async function AppShellLayout({ children }: { children: React.Rea
   if (!session) redirect("/login");
 
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const notifications = await getNotifications(session);
 
+  // IN PARALLEL, not one after the other. Both need only `session`, and
+  // neither reads the other's result — awaiting them in sequence made every
+  // page in the app wait for a round trip it had no reason to wait for. This
+  // layout runs on EVERY page, so the saving is on every navigation, not one
+  // screen.
+  //
   // The sidebar's project menu used to map over AppContext's `lib/data.ts`
   // fixture — two hard-coded prototype projects — so a project created through
   // the app was saved correctly and then never appeared in the sidebar. It
   // reads the same portfolio the All Projects page does, through the same
   // role-scoped query, so the two can no longer disagree.
-  const portfolio = await getPortfolio(session);
+  const [notifications, portfolio] = await Promise.all([getNotifications(session), getPortfolio(session)]);
   const projectIds = portfolio.projects.map((p) => p.id);
 
   // The package sub-list and the three badge counts came off the same fixture,

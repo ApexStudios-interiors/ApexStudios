@@ -73,14 +73,23 @@ async function fetchProjectRows(effectiveRole: "admin" | "site" | "client") {
   // column-isolated view for everyone else; see its migration for why it did
   // not already exist. Getting this branch wrong renders an empty client name
   // for every site and client session, silently — it will not throw.
-  const { data: clients, error: clientErr } = isAdmin
-    ? await supabase.from("clients").select("id, name").in("id", clientIds)
-    : await supabase.from("v_client_name").select("id, name").in("id", clientIds);
+  //
+  // The two reads below go OUT TOGETHER. Each needs only the ids from the
+  // query above and neither reads the other's result, so awaiting them in
+  // sequence cost a round trip for nothing — on every page, since the app
+  // shell calls this on each render.
+  const [clientsRes, pkgCountsRes] = await Promise.all([
+    isAdmin
+      ? supabase.from("clients").select("id, name").in("id", clientIds)
+      : supabase.from("v_client_name").select("id, name").in("id", clientIds),
+    isAdmin
+      ? supabase.from("packages").select("id, project_id").in("project_id", projectIds)
+      : supabase.from("v_package_site").select("id, project_id").in("project_id", projectIds),
+  ]);
+  const { data: clients, error: clientErr } = clientsRes;
   if (clientErr) throw new Error(clientErr.message);
   const clientName = new Map(clients.map((c) => [c.id, c.name]));
-  const { data: pkgCounts, error: pkgErr } = isAdmin
-    ? await supabase.from("packages").select("id, project_id").in("project_id", projectIds)
-    : await supabase.from("v_package_site").select("id, project_id").in("project_id", projectIds);
+  const { data: pkgCounts, error: pkgErr } = pkgCountsRes;
   if (pkgErr) throw new Error(pkgErr.message);
   const packageCountByProject = new Map<string, number>();
   for (const row of pkgCounts) {
