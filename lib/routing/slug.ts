@@ -35,6 +35,11 @@ export function isUuid(value: string): boolean {
  * path with an empty segment.
  */
 export function slugify(value: string): string {
+  // Coerced rather than trusted. These run while BUILDING A LINK, often from
+  // a row read through RLS where a column the caller cannot select comes back
+  // undefined. Throwing there would take down a whole page to avoid one bad
+  // href; returning "" lets the caller see "no readable form" and fall back.
+  if (typeof value !== "string") return "";
   return value
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")

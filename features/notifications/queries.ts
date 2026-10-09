@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
 import { isUnread, receiptsByKey, type ReadReceipt } from "./service";
+import { projectPath } from "@/lib/routing/paths";
 
 /**
  * build/07-stock-inventory-notifications.md §2.6. Replaces `buildNotifications()`
@@ -64,8 +65,8 @@ export async function getNotifications(session: Session): Promise<NotificationDT
   if (error) throw new Error(error.message);
 
   const rows = data as NotificationRow[];
-  const [projectNames, reads] = await Promise.all([
-    fetchProjectNames(rows.map((r) => r.project_id).filter((id): id is string => id != null)),
+  const [projectRefs, reads] = await Promise.all([
+    fetchProjectRefs(rows.map((r) => r.project_id).filter((id): id is string => id != null)),
     // The REAL user's receipts, not the impersonated one's: read state belongs
     // to the person clicking. Matches markNotificationRead, which writes
     // against session.userId for the same reason.
@@ -77,21 +78,45 @@ export async function getNotifications(session: Session): Promise<NotificationDT
     kind: r.kind as NotificationDTO["kind"],
     entityId: r.entity_id,
     projectId: r.project_id,
-    projectName: r.project_id ? (projectNames.get(r.project_id) ?? null) : null,
+    projectName: r.project_id ? (projectRefs.get(r.project_id)?.name ?? null) : null,
     title: r.title,
-    href: r.href,
+    href: r.project_id ? canonicalHref(r.href, r.project_id, projectRefs.get(r.project_id)) : r.href,
     createdAt: r.created_at,
     unread: isUnread({ kind: r.kind, entityId: r.entity_id, createdAt: r.created_at }, readAtByKey),
   }));
 }
 
-async function fetchProjectNames(projectIds: string[]): Promise<Map<string, string>> {
+type ProjectRefRow = { name: string; code: string };
+
+/**
+ * Name AND code for each project a notification points at.
+ *
+ * The code costs nothing — one more column on a query already being made —
+ * and is what lets the href below be canonical. `v_notifications` builds its
+ * href in SQL from the project UUID (`'/projects/' || sr.project_id || …`),
+ * because a view has no business knowing about slugs; rewriting it here keeps
+ * that so, and keeps the bell's links from costing a redirect each.
+ */
+async function fetchProjectRefs(projectIds: string[]): Promise<Map<string, ProjectRefRow>> {
   const ids = [...new Set(projectIds)];
   if (ids.length === 0) return new Map();
   const supabase = await createClient();
-  const { data, error } = await supabase.from("projects").select("id, name").in("id", ids);
+  const { data, error } = await supabase.from("projects").select("id, name, code").in("id", ids);
   if (error) throw new Error(error.message);
-  return new Map(data.map((p) => [p.id, p.name]));
+  return new Map(data.map((p) => [p.id, { name: p.name, code: p.code }]));
+}
+
+/**
+ * Swaps the UUID the view emitted for the project's code, leaving the rest of
+ * the path alone. Falls back to the view's own href when the code is not to
+ * hand — a UUID link still resolves through middleware, so a notification
+ * stays clickable rather than broken.
+ */
+function canonicalHref(viewHref: string, projectId: string, ref: ProjectRefRow | undefined): string {
+  if (!ref?.code) return viewHref;
+  const prefix = `/projects/${projectId}`;
+  if (!viewHref.startsWith(prefix)) return viewHref;
+  return projectPath({ code: ref.code }, viewHref.slice(prefix.length));
 }
 
 /**

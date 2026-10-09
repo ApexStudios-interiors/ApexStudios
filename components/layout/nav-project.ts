@@ -14,6 +14,11 @@ import type { PackageNavItem } from "@/features/packages/queries";
  */
 export type NavProject = {
   id: string;
+  /** The project code. Carried so the Sidebar and Header can link to the
+   *  canonical `/projects/bhel-nch` instead of `/projects/<uuid>`, which
+   *  middleware would answer with a redirect — a whole second request,
+   *  `getUser()` and all, before the page starts. */
+  code: string;
   name: string;
   /** In `seq_no` order — the sub-list under the Sidebar's Packages item, and
    *  what the Header's `/packages/[moduleId]` crumb resolves against. */

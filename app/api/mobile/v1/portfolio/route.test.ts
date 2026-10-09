@@ -52,6 +52,7 @@ function sessionAs(role: Session["role"]): Session {
 
 const card = {
   id: "00000000-0000-4000-8000-0000000000b1",
+  code: "BHEL-NCH",
   name: "BHEL Nagnar Club House",
   client: "BHEL",
   location: "Nagnar",

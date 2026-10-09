@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { formatINRCompact } from "@/lib/money";
 import { dmy } from "@/lib/logic";
+import { projectPath } from "@/lib/routing/paths";
 
 /**
  * Props instead of `useApp()` (build/04-projects-packages-phases.md §4.4 step
@@ -14,7 +15,7 @@ export function ProjectCard({ project }: { project: ProjectCardDTO }) {
   const bud = project.budgetUsedPct;
 
   return (
-    <Link href={`/projects/${project.id}`} className="block">
+    <Link href={projectPath({ code: project.code })} className="block">
       <Card className="p-[22px] cursor-pointer flex flex-col gap-4 hover:border-foreground transition-colors">
         <div className="flex items-start gap-3">
           <div>

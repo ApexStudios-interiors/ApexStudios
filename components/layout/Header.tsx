@@ -11,6 +11,8 @@ import { NotificationsMenu } from "@/components/layout/NotificationsMenu";
 import { SearchBar } from "@/components/layout/SearchBar";
 import type { NotificationDTO } from "@/features/notifications/queries";
 import type { NavProject } from "@/components/layout/nav-project";
+import { withAmbiguityFlags } from "@/lib/routing/paths";
+import { packageSlug } from "@/lib/routing/slug";
 
 const SECTION_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
@@ -62,6 +64,15 @@ export function Header({
       sectionLabel,
       packageId: mod?.id ?? null,
       packageLabel: mod ? `${modNo} ${mod.name}` : null,
+      projectCode: project?.code ?? null,
+      // Ambiguity resolved against the WHOLE package list for this project,
+      // not just this one, so two packages sharing a name get different
+      // crumbs — the same list the sidebar builds its links from.
+      packageSegment: mod
+        ? withAmbiguityFlags(project?.packages ?? []).find((m) => m.id === mod.id)?.ambiguous
+          ? packageSlug(mod.name, mod.seqNo, true)
+          : packageSlug(mod.name, mod.seqNo, false)
+        : null,
     });
     crumb = (
       <>

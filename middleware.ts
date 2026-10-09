@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { clientEnv } from "@/lib/env.client";
 import { isUuid } from "@/lib/routing/slug";
+import { PROJECT_PATH_RE } from "@/lib/routing/decide";
 import {
   packageIdFromSlug,
   packageSlugFromId,
@@ -86,8 +87,10 @@ export async function middleware(request: NextRequest) {
   return response;
 }
 
-/** `/projects/<seg>[/packages/<seg>][/rest]` — the only paths this touches. */
-const PROJECT_PATH = /^\/projects\/([^/]+)(?:\/packages\/([^/]+))?(\/.*)?$/;
+/** `/projects/<seg>[/packages/<seg>][/rest]` — the only paths this touches.
+ *  Shared with lib/routing/decide.ts, which is what the tests assert against,
+ *  so the measured behaviour and the real behaviour cannot drift apart. */
+const PROJECT_PATH = PROJECT_PATH_RE;
 
 /**
  * Two directions, one matcher:

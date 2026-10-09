@@ -75,6 +75,7 @@ export default async function AppShellLayout({ children }: { children: React.Rea
 
   const projects: NavProject[] = portfolio.projects.map((p) => ({
     id: p.id,
+    code: p.code,
     name: p.name,
     packages: packagesByProject[p.id] ?? [],
     pendingRequests: pendingRequests[p.id] ?? 0,

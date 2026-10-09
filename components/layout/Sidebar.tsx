@@ -15,17 +15,30 @@ import type { NavProject } from "@/components/layout/nav-project";
 import { initials } from "@/lib/logic";
 import { ALLOWED_SECTIONS, type Section, sectionFromPath } from "@/lib/rbac/nav";
 import { ROLE_LABEL } from "@/lib/rbac/roles";
+import { packagePath, projectPath, withAmbiguityFlags } from "@/lib/routing/paths";
 import { useClickOutside } from "@/hooks/useClickOutside";
 
-const NAV_ITEMS: { key: Section; label: string; icon: IconName; href: (id: string) => string }[] = [
-  { key: "dashboard", label: "Dashboard", icon: "dash", href: (id) => `/projects/${id}` },
-  { key: "packages", label: "Packages", icon: "mod", href: (id) => `/projects/${id}/packages` },
-  { key: "schedule", label: "Schedule", icon: "cal", href: (id) => `/projects/${id}/schedule` },
-  { key: "updates", label: "Daily Updates", icon: "note", href: (id) => `/projects/${id}/updates` },
-  { key: "inventory", label: "Inventory", icon: "archive", href: (id) => `/projects/${id}/inventory` },
-  { key: "stock", label: "Stock Requests", icon: "box", href: (id) => `/projects/${id}/stock` },
-  { key: "approvals", label: "Approvals", icon: "check", href: (id) => `/projects/${id}/approvals` },
-  { key: "billing", label: "Billing", icon: "bill", href: (id) => `/projects/${id}/billing` },
+// `href` takes the project's CODE, not its id: a canonical link costs no
+// redirect, a UUID one costs a whole extra request (lib/routing/paths.ts).
+const NAV_ITEMS: { key: Section; label: string; icon: IconName; href: (code: string) => string }[] = [
+  { key: "dashboard", label: "Dashboard", icon: "dash", href: (c) => projectPath({ code: c }) },
+  { key: "packages", label: "Packages", icon: "mod", href: (c) => projectPath({ code: c }, "/packages") },
+  { key: "schedule", label: "Schedule", icon: "cal", href: (c) => projectPath({ code: c }, "/schedule") },
+  { key: "updates", label: "Daily Updates", icon: "note", href: (c) => projectPath({ code: c }, "/updates") },
+  {
+    key: "inventory",
+    label: "Inventory",
+    icon: "archive",
+    href: (c) => projectPath({ code: c }, "/inventory"),
+  },
+  { key: "stock", label: "Stock Requests", icon: "box", href: (c) => projectPath({ code: c }, "/stock") },
+  {
+    key: "approvals",
+    label: "Approvals",
+    icon: "check",
+    href: (c) => projectPath({ code: c }, "/approvals"),
+  },
+  { key: "billing", label: "Billing", icon: "bill", href: (c) => projectPath({ code: c }, "/billing") },
 ];
 
 /**
@@ -123,7 +136,7 @@ export function Sidebar({
             {projects.map((p) => (
               <Link
                 key={p.id}
-                href={`/projects/${p.id}`}
+                href={projectPath({ code: p.code })}
                 onClick={() => setProjectsMenuOpen(false)}
                 className={`flex flex-col px-3 py-2 text-[13px] hover:bg-accent ${params?.projectId === p.id ? "bg-accent" : ""}`}
               >
@@ -184,7 +197,7 @@ export function Sidebar({
                 return (
                   <Fragment key={it.key}>
                     <Link
-                      href={it.href(project.id)}
+                      href={it.href(project.code)}
                       className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md px-2 py-[7px] cursor-pointer text-[13.5px] ${
                         on
                           ? "bg-accent font-semibold text-foreground"
@@ -221,10 +234,10 @@ export function Sidebar({
                     </Link>
                     {it.key === "packages" &&
                       modsOpen &&
-                      project.packages.map((m, i) => (
+                      withAmbiguityFlags(project.packages).map((m, i) => (
                         <Link
                           key={m.id}
-                          href={`/projects/${project.id}/packages/${m.id}`}
+                          href={packagePath({ code: project.code }, m)}
                           className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md pl-[34px] pr-2 py-[7px] cursor-pointer text-[13.5px] ${
                             params?.moduleId === m.id
                               ? "text-foreground font-medium bg-accent"

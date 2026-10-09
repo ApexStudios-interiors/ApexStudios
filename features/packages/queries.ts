@@ -201,7 +201,14 @@ async function getPackagesForProjectSite(projectId: string): Promise<PackagesFor
 
 /** Just enough of a package to name it in the nav. No money column of any
  *  kind, for any role. */
-export type PackageNavItem = { id: string; name: string };
+export type PackageNavItem = {
+  id: string;
+  name: string;
+  /** Needed to build the canonical package URL: a package NAME is not unique
+   *  within a project, so two that slugify alike are told apart by their
+   *  sequence number (lib/routing/paths.ts). */
+  seqNo: number;
+};
 
 /**
  * The package sub-list under the Sidebar's Packages item, and the package
@@ -231,19 +238,19 @@ export async function getPackageNavLists(
     effectiveRole === "admin"
       ? await supabase
           .from("packages")
-          .select("id, project_id, name")
+          .select("id, project_id, name, seq_no")
           .in("project_id", projectIds)
           .is("deleted_at", null)
           .order("seq_no", { ascending: true })
       : effectiveRole === "client"
         ? await supabase
             .from("v_package_client")
-            .select("id, project_id, name")
+            .select("id, project_id, name, seq_no")
             .in("project_id", projectIds)
             .order("seq_no", { ascending: true })
         : await supabase
             .from("v_package_site")
-            .select("id, project_id, name")
+            .select("id, project_id, name, seq_no")
             .in("project_id", projectIds)
             .order("seq_no", { ascending: true });
   if (error) throw new Error(error.message);
@@ -251,7 +258,11 @@ export async function getPackageNavLists(
   const byProject: Record<string, PackageNavItem[]> = {};
   for (const row of data) {
     if (!row.id || !row.project_id) continue;
-    (byProject[row.project_id] ??= []).push({ id: row.id, name: row.name ?? "" });
+    (byProject[row.project_id] ??= []).push({
+      id: row.id,
+      name: row.name ?? "",
+      seqNo: row.seq_no ?? 0,
+    });
   }
   return byProject;
 }
