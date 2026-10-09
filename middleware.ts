@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { clientEnv } from "@/lib/env.client";
 import { isUuid } from "@/lib/routing/slug";
 import { PROJECT_PATH_RE } from "@/lib/routing/decide";
+import { PACKAGE_SLUG_HEADER, PROJECT_SLUG_HEADER } from "@/lib/routing/headers";
 import {
   packageIdFromSlug,
   packageSlugFromId,
@@ -132,7 +133,15 @@ async function resolveProjectPath(
     }
     const url = request.nextUrl.clone();
     url.pathname = target + rest;
-    return NextResponse.rewrite(url);
+    // Carry the slugs we just resolved through to the page. It receives the
+    // UUID in `params` because this is a rewrite, so without these it cannot
+    // build a readable link and every in-page link would cost a redirect —
+    // and a redirect also defeats prefetch, so those links never warm either.
+    const forwarded = new Headers(request.headers);
+    forwarded.set(PROJECT_SLUG_HEADER, projectSeg);
+    if (packageSeg) forwarded.set(PACKAGE_SLUG_HEADER, packageSeg);
+    else forwarded.delete(PACKAGE_SLUG_HEADER);
+    return NextResponse.rewrite(url, { request: { headers: forwarded } });
   }
 
   if (!projectIsId) return null;

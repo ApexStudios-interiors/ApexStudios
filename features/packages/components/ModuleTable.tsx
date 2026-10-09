@@ -5,6 +5,7 @@ import { ModuleStatusBadge } from "@/components/shared/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, trClick, trTotal, sub } from "@/components/ui/table";
 import { formatINR } from "@/lib/money";
+import { packageSlug } from "@/lib/routing/slug";
 
 /**
  * Props instead of `useApp()` (build/04-projects-packages-phases.md §4.4 step
@@ -13,11 +14,12 @@ import { formatINR } from "@/lib/money";
  * so this cannot compile the leak, not just avoid rendering it.
  */
 export function ModuleTable({
-  projectId,
+  base,
   data,
   projectProgressPct,
 }: {
-  projectId: string;
+  /** Canonical `/projects/<code>` for this project. */
+  base: string;
   data: PackagesForProject;
   /** `projects.progress_pct` (trigger-maintained: the allocated-weighted mean
    *  of exactly these packages, per 20260909170016_triggers_rollup.sql) — read
@@ -54,7 +56,10 @@ export function ModuleTable({
         {data.packages.map((p) => (
           <tr key={p.id} className={trClick}>
             <td className={td}>
-              <Link href={`/projects/${projectId}/packages/${p.id}`} className="font-medium hover:underline">
+              <Link
+                href={`${base}/packages/${packageSlug(p.name, p.seqNo, false)}`}
+                className="font-medium hover:underline"
+              >
                 <span className="inline-block min-w-[22px] mr-1.5 text-muted-foreground tabular-nums font-medium">
                   {String(p.seqNo).padStart(2, "0")}
                 </span>

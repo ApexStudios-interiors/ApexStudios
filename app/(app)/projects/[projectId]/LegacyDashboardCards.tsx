@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
  */
 export function LegacyDashboardCards({
   projectId,
+  base,
   isClient,
   isSite,
   isAdmin,
@@ -33,6 +34,9 @@ export function LegacyDashboardCards({
   updates,
 }: {
   projectId: string;
+  /** Canonical `/projects/<code>` for this project, from the server — a
+   *  link built from `projectId` would cost a redirect. */
+  base: string;
   isClient: boolean;
   isSite: boolean;
   isAdmin: boolean;
@@ -50,11 +54,7 @@ export function LegacyDashboardCards({
           <CardHeader>
             <h3>Pending Approvals</h3>
             <div className="ml-auto flex gap-2 items-center">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push(`/projects/${projectId}/approvals`)}
-              >
+              <Button variant="ghost" size="sm" onClick={() => router.push(`${base}/approvals`)}>
                 View all
               </Button>
             </div>
@@ -68,7 +68,7 @@ export function LegacyDashboardCards({
           <CardHeader>
             <h3>Pending Requests</h3>
             <div className="ml-auto flex gap-2 items-center">
-              <Button variant="ghost" size="sm" onClick={() => router.push(`/projects/${projectId}/stock`)}>
+              <Button variant="ghost" size="sm" onClick={() => router.push(`${base}/stock`)}>
                 View all
               </Button>
             </div>
@@ -82,7 +82,7 @@ export function LegacyDashboardCards({
           <CardHeader>
             <h3>Latest Updates</h3>
             <div className="ml-auto flex gap-2 items-center">
-              <Button variant="ghost" size="sm" onClick={() => router.push(`/projects/${projectId}/updates`)}>
+              <Button variant="ghost" size="sm" onClick={() => router.push(`${base}/updates`)}>
                 View all
               </Button>
             </div>

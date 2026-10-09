@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/shared/DatePicker";
+import { useProjectBase } from "@/hooks/useProjectBase";
 
 const selectTriggerClass = "w-full text-[13.5px] data-[size=default]:h-9";
 const typeItems = APPROVAL_TYPES.map((t) => ({ value: t, label: approvalTypeLabel(t) }));
@@ -45,6 +46,7 @@ export function NewApprovalDialog({
 }) {
   const { closeDialog, toast } = useApp();
   const router = useRouter();
+  const base = useProjectBase(projectId);
 
   const [approvalId] = useState(() => crypto.randomUUID());
   const [packages, setPackages] = useState<{ id: string; name: string }[] | null>(null);
@@ -113,7 +115,7 @@ export function NewApprovalDialog({
       return;
     }
     closeDialog();
-    router.push(`/projects/${projectId}/approvals`);
+    router.push(`${base}/approvals`);
     router.refresh();
     toast(`Approval ${result.data.refNo} sent`);
   }

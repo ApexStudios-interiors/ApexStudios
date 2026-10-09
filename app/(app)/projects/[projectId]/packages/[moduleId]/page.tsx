@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { packageBase } from "@/lib/routing/current";
 
 /**
  * 02-lld.md §8.1: package tabs are routes now, with this segment redirecting
@@ -12,5 +13,5 @@ export default async function ModuleDetailPage({
   params: Promise<{ projectId: string; moduleId: string }>;
 }) {
   const { projectId, moduleId } = await params;
-  redirect(`/projects/${projectId}/packages/${moduleId}/budget`);
+  redirect(`${await packageBase(projectId, moduleId)}/budget`);
 }

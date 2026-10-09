@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/shared/DatePicker";
+import { useProjectBase } from "@/hooks/useProjectBase";
 
 const selectTriggerClass = "w-full text-[13.5px] data-[size=default]:h-9";
 
@@ -61,6 +62,7 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
   // file's own comment above and the app's own impersonation-preview rule).
   const isAdmin = role === "admin";
   const router = useRouter();
+  const base = useProjectBase(projectId);
 
   const [packages, setPackages] = useState<{ id: string; name: string }[] | null>(null);
   const [phases, setPhases] = useState<{ id: string; name: string }[] | null>(null);
@@ -188,7 +190,7 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
     onSuccess: ({ data }) => {
       closeDialog();
       toast(`Request ${data?.refNo ?? ""} submitted`);
-      router.push(`/projects/${projectId}/stock`);
+      router.push(`${base}/stock`);
       router.refresh();
     },
   });

@@ -4,6 +4,7 @@ import { getPackageDetail } from "@/features/packages/queries";
 import { BudgetStatBar } from "@/features/billing/components/BudgetStatBar";
 import { LinkTabs } from "@/components/ui/LinkTabs";
 import { PackageDetailActions } from "./PackageDetailActions";
+import { packageBase } from "@/lib/routing/current";
 
 /**
  * The header, stat row and tab bar shared by every tab route (ui-guide.md
@@ -29,7 +30,7 @@ export default async function PackageDetailLayout({
   const effectiveRole = session.impersonating?.role ?? session.role;
   const isMoney = effectiveRole === "admin";
   const isClient = effectiveRole === "client";
-  const base = `/projects/${projectId}/packages/${moduleId}`;
+  const base = await packageBase(projectId, moduleId);
 
   const tabs = [
     { key: "budget", label: isMoney ? "Budget" : "Phases", href: `${base}/budget` },
