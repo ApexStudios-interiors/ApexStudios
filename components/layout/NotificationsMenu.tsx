@@ -68,7 +68,7 @@ export function NotificationsMenu({ items }: { items: NotificationDTO[] }) {
         )}
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-20 mt-1 w-80 bg-card border border-border rounded-lg shadow-lg py-1 max-h-96 overflow-auto">
+        <div className="absolute right-0 top-full z-20 mt-1 w-80 bg-card border border-border rounded-lg shadow-lg py-1 max-h-96 overflow-auto overscroll-contain">
           <div className="px-3 pt-1.5 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
             Notifications
           </div>

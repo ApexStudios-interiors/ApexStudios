@@ -50,7 +50,7 @@ export function DialogShell({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-background border border-border rounded-xl w-full max-w-[640px] max-h-[92vh] overflow-auto shadow-[0_20px_50px_-20px_rgba(0,0,0,0.45)]">
+      <div className="bg-background border border-border rounded-xl w-full max-w-[640px] max-h-[92vh] overflow-auto overscroll-contain shadow-[0_20px_50px_-20px_rgba(0,0,0,0.45)]">
         <div className="px-6 pt-[22px] pb-1">
           <h2 className="text-[17px] font-bold tracking-tight">{title}</h2>
           {description && <p className="mt-1 text-[13.5px] text-muted-foreground">{description}</p>}

@@ -97,7 +97,7 @@ export function Sidebar({
   const showStudio = role === "admin";
 
   return (
-    <aside className="bg-sidebar border-r border-border flex flex-col sticky top-0 self-start h-screen overflow-auto p-3">
+    <aside className="bg-sidebar border-r border-border flex flex-col sticky top-0 self-start h-screen overflow-auto overscroll-contain p-3">
       <div className="shrink-0 flex items-center gap-2.5 px-1.5 pt-1.5 pb-4">
         <div className="w-[30px] h-[30px] rounded-[7px] bg-primary text-primary-foreground grid place-items-center font-bold text-[13px]">
           A
@@ -123,7 +123,7 @@ export function Sidebar({
           />
         </button>
         {projectsMenuOpen && (
-          <div className="absolute left-0 right-0 top-full z-20 mt-1 bg-card border border-border rounded-lg shadow-lg py-1 max-h-80 overflow-auto">
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 bg-card border border-border rounded-lg shadow-lg py-1 max-h-80 overflow-auto overscroll-contain">
             <Link
               href="/"
               onClick={() => setProjectsMenuOpen(false)}

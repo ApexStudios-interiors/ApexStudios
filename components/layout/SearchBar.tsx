@@ -92,7 +92,7 @@ export function SearchBar() {
         />
       </div>
       {showDropdown && (
-        <div className="absolute left-0 right-0 top-full z-20 mt-1 bg-card border border-border rounded-lg shadow-lg py-1 max-h-96 overflow-auto">
+        <div className="absolute left-0 right-0 top-full z-20 mt-1 bg-card border border-border rounded-lg shadow-lg py-1 max-h-96 overflow-auto overscroll-contain">
           {tooShort ? (
             <div className="px-3 py-6 text-center text-muted-foreground text-[13px]">
               Type at least {MIN_CHARS} characters
