@@ -98,7 +98,7 @@ export function BillViewDialog({ billId }: { billId: string }) {
         if (tab) tab.location.href = url;
       }}
     >
-      <div className="overflow-x-auto border border-border rounded-lg">
+      <div className="overflow-x-auto overscroll-x-contain border border-border rounded-lg">
         <table className="w-full text-[13.5px]">
           <thead>
             <tr>

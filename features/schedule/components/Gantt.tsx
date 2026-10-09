@@ -102,7 +102,7 @@ export function Gantt({
   };
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto overscroll-x-contain">
       <div
         className="grid min-w-[960px]"
         style={{ gridTemplateColumns: `280px repeat(${weeks.length}, minmax(52px,1fr))` }}
