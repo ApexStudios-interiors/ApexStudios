@@ -31,10 +31,23 @@ type Client = SupabaseClient;
 /** `bhel-nch` → the project's UUID, or null if no live project matches. */
 export async function projectIdFromSlug(supabase: Client, slug: string): Promise<string | null> {
   if (isUuid(slug)) return slug;
-  const { data, error } = await supabase.from("projects").select("id, code").is("deleted_at", null);
-  if (error || !data) return null;
   const wanted = slugify(slug);
-  const hit = (data as { id: string; code: string }[]).find((p) => projectSlug(p.code) === wanted);
+  // Ask the database for the ONE row, rather than pulling every project the
+  // caller can see and filtering in JavaScript — this runs in middleware, on
+  // every request to a project URL. `ilike` because the segment is the code
+  // lowercased; it matches no wildcard, as a code contains none.
+  const { data, error } = await supabase
+    .from("projects")
+    .select("id, code")
+    .ilike("code", wanted)
+    .is("deleted_at", null)
+    .limit(1);
+  if (error || !data) return null;
+  const rows = data as { id: string; code: string }[];
+  // Re-check through projectSlug rather than trusting ilike: a code could in
+  // principle differ from its slug by more than case (slugify also folds
+  // punctuation), and resolving the wrong project would be worse than a miss.
+  const hit = rows.find((p) => projectSlug(p.code) === wanted);
   return hit?.id ?? null;
 }
 
