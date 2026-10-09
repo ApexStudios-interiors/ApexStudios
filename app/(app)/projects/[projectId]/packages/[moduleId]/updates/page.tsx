@@ -3,6 +3,7 @@ import { getUpdatesForProject } from "@/features/updates/queries";
 import { UpdateList } from "@/features/updates/components/UpdateList";
 import { Card } from "@/components/ui/Card";
 import Link from "next/link";
+import { packageBase } from "@/lib/routing/current";
 
 /**
  * build/06-files-jobs-daily-updates.md §4.2: "filtered to one package." A
@@ -23,7 +24,10 @@ export default async function PackageUpdatesTab({
   const { cursor } = await searchParams;
   const session = await requireSession();
 
-  const page = await getUpdatesForProject(session, projectId, { packageId: moduleId, cursor });
+  const [page, base] = await Promise.all([
+    getUpdatesForProject(session, projectId, { packageId: moduleId, cursor }),
+    packageBase(projectId, moduleId),
+  ]);
 
   return (
     <>
@@ -33,7 +37,7 @@ export default async function PackageUpdatesTab({
       {page.nextCursor && (
         <div className="mt-3 text-center">
           <Link
-            href={`/projects/${projectId}/packages/${moduleId}/updates?cursor=${page.nextCursor}`}
+            href={`${base}/updates?cursor=${page.nextCursor}`}
             className="text-[13px] text-muted-foreground underline"
           >
             Load more

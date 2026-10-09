@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/shared/DatePicker";
 import { todayIst } from "@/lib/dates";
+import { useProjectBase } from "@/hooks/useProjectBase";
 
 /**
  * build/06-files-jobs-daily-updates.md §4.2. `updateId` is generated once,
@@ -28,6 +29,7 @@ import { todayIst } from "@/lib/dates";
 export function PostUpdateDialog({ projectId, moduleId }: { projectId: string; moduleId?: string }) {
   const { closeDialog, toast } = useApp();
   const router = useRouter();
+  const base = useProjectBase(projectId);
 
   const [updateId] = useState(() => crypto.randomUUID());
   const [packages, setPackages] = useState<{ id: string; name: string }[] | null>(null);
@@ -83,7 +85,7 @@ export function PostUpdateDialog({ projectId, moduleId }: { projectId: string; m
       return;
     }
     closeDialog();
-    router.push(`/projects/${projectId}/updates`);
+    router.push(`${base}/updates`);
     router.refresh();
     toast("Update posted");
   }

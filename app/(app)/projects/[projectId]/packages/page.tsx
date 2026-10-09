@@ -6,6 +6,7 @@ import { ModuleTable } from "@/features/packages/components/ModuleTable";
 import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
+import { projectBase } from "@/lib/routing/current";
 
 /** build/04-projects-packages-phases.md §4.4 step 3: the same table as the
  *  dashboard, full width. */
@@ -37,7 +38,11 @@ export default async function PackagesPage({ params }: { params: Promise<{ proje
         </div>
       </div>
       <Card>
-        <ModuleTable projectId={projectId} data={packages} projectProgressPct={header.progressPct} />
+        <ModuleTable
+          base={await projectBase(projectId)}
+          data={packages}
+          projectProgressPct={header.progressPct}
+        />
       </Card>
     </div>
   );

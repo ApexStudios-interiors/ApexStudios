@@ -21,6 +21,7 @@ import { Icon } from "@/components/ui/Icon";
 import { LegacyDashboardCards } from "./LegacyDashboardCards";
 import { dmy } from "@/lib/logic";
 import { formatINRCompact } from "@/lib/money";
+import { projectBase } from "@/lib/routing/current";
 
 /**
  * build/04-projects-packages-phases.md §4.4 step 2. Stat row and Packages
@@ -32,6 +33,9 @@ import { formatINRCompact } from "@/lib/money";
  */
 export default async function ProjectDashboardPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
+  // Canonical base for every link on this page — middleware rewrote a
+  // readable URL to ids, so `projectId` here is a UUID (lib/routing/current).
+  const base = await projectBase(projectId);
   const session = await requireSession();
 
   const header = await getProjectHeader(session, projectId);
@@ -104,11 +108,12 @@ export default async function ProjectDashboardPage({ params }: { params: Promise
         <CardHeader>
           <h3>Packages</h3>
         </CardHeader>
-        <ModuleTable projectId={projectId} data={packages} projectProgressPct={header.progressPct} />
+        <ModuleTable base={base} data={packages} projectProgressPct={header.progressPct} />
       </Card>
 
       <LegacyDashboardCards
         projectId={projectId}
+        base={base}
         isClient={isClient}
         isSite={!isMoney && !isClient}
         isAdmin={isMoney}

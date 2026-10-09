@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useApp } from "@/context/AppContext";
 import { ALLOWED_SECTIONS, sectionFromPath } from "@/lib/rbac/nav";
+import { useProjectBase } from "@/hooks/useProjectBase";
 
 /**
  * UX only — layout.tsx does the SECURITY check (requireProjectAccess,
@@ -22,6 +23,7 @@ export function ProjectShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { role, setLastProjectId } = useApp();
   const projectId = params.projectId;
+  const base = useProjectBase(projectId);
 
   useEffect(() => {
     setLastProjectId(projectId);
@@ -32,9 +34,9 @@ export function ProjectShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const section = sectionFromPath(pathname, projectId);
     if (!ALLOWED_SECTIONS[role].includes(section)) {
-      router.replace(`/projects/${projectId}`);
+      router.replace(base);
     }
-  }, [pathname, projectId, role, router]);
+  }, [pathname, projectId, role, router, base]);
 
   return <>{children}</>;
 }

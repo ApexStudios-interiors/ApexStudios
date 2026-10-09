@@ -9,6 +9,7 @@ import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 import Link from "next/link";
+import { projectBase } from "@/lib/routing/current";
 
 /**
  * build/06-files-jobs-daily-updates.md §4.2: the timeline, the package
@@ -38,7 +39,7 @@ export default async function UpdatesPage({
 
   const effectiveRole = session.impersonating?.role ?? session.role;
   const isClient = effectiveRole === "client";
-  const basePath = `/projects/${projectId}/updates`;
+  const basePath = `${await projectBase(projectId)}/updates`;
 
   return (
     <div>

@@ -11,6 +11,7 @@ import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { TablePagination } from "@/components/shared/TablePagination";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
+import { projectBase } from "@/lib/routing/current";
 
 const VALID_STATUSES: ApprovalStatus[] = ["pending", "approved", "rejected"];
 
@@ -51,7 +52,7 @@ export default async function ApprovalsPage({
 
   const list = await getApprovalsPage(session, projectId, status ? { status } : {}, parsePageRequest(paging));
   const client = effectiveRole === "client";
-  const basePath = `/projects/${projectId}/approvals`;
+  const basePath = `${await projectBase(projectId)}/approvals`;
 
   return (
     <div>

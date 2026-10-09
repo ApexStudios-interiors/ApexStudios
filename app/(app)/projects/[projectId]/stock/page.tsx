@@ -13,6 +13,7 @@ import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { TablePagination } from "@/components/shared/TablePagination";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
+import { projectBase } from "@/lib/routing/current";
 
 const VALID_STATUSES: StockRequestStatus[] = ["pending", "approved", "ordered", "delivered", "rejected"];
 
@@ -56,7 +57,7 @@ export default async function StockPage({
   ]);
 
   const isAdmin = effectiveRole === "admin";
-  const basePath = `/projects/${projectId}/stock`;
+  const basePath = `${await projectBase(projectId)}/stock`;
 
   return (
     <div>
