@@ -3,7 +3,7 @@ import type { PackagesForProject } from "@/features/packages/queries";
 import { Bar } from "@/components/ui/Bar";
 import { ModuleStatusBadge } from "@/components/shared/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";
-import { td, tdNum, th, thNum, trClick, trTotal, sub } from "@/components/ui/table";
+import { td, tdNum, tdSeq, tdTop, th, thNum, thSeq, trClick, trTotal, sub } from "@/components/ui/table";
 import { formatINR } from "@/lib/money";
 import { packageSlug } from "@/lib/routing/slug";
 
@@ -31,6 +31,12 @@ export function ModuleTable({
     <TableWrap>
       <thead>
         <tr>
+          {/* The number is its OWN column, not a span inside the name.
+              Inline, a long name wrapped underneath it — "External
+              Development and Lift" put its second line hard against the cell
+              edge while the first began after the number, so neither lined up
+              with anything. A cell cannot wrap under its neighbour. */}
+          <th className={thSeq}>#</th>
           <th className={th}>Package</th>
           {data.role === "money" ? (
             <>
@@ -55,19 +61,23 @@ export function ModuleTable({
       <tbody>
         {data.packages.map((p) => (
           <tr key={p.id} className={trClick}>
-            <td className={td}>
+            {/* `align-top`, not the shared `align-middle`: on a two-line name
+                the number belongs beside the FIRST line, which is where the
+                reader's eye starts, not floating against the middle of the
+                block. `tabular-nums` keeps 01 and 11 the same width so the
+                column edge stays straight. */}
+            <td className={tdSeq}>{String(p.seqNo).padStart(2, "0")}</td>
+            <td className={tdTop}>
               <Link
                 href={`${base}/packages/${packageSlug(p.name, p.seqNo, false)}`}
                 className="font-medium hover:underline"
               >
-                <span className="inline-block min-w-[22px] mr-1.5 text-muted-foreground tabular-nums font-medium">
-                  {String(p.seqNo).padStart(2, "0")}
-                </span>
                 {p.name}
               </Link>
-              <span className={sub} style={{ paddingLeft: 22 }}>
-                {p.lead}
-              </span>
+              {/* No padding to fake alignment any more — the lead sits in the
+                  same cell as the name, so it lines up with it by itself
+                  whatever width the number column takes. */}
+              <span className={sub}>{p.lead}</span>
             </td>
             {p.role === "money" ? (
               <>
@@ -101,7 +111,9 @@ export function ModuleTable({
         ))}
         {data.role === "money" ? (
           <tr className={trTotal}>
-            <td className={td}>Total</td>
+            <td className={td} colSpan={2}>
+              Total
+            </td>
             <td className={tdNum}>{formatINR(data.totals.allocated)}</td>
             <td className={tdNum}>{formatINR(data.totals.internal)}</td>
             <td className={tdNum}>{formatINR(data.totals.committed)}</td>
@@ -116,7 +128,9 @@ export function ModuleTable({
           </tr>
         ) : data.role === "client" ? (
           <tr className={trTotal}>
-            <td className={td}>Total</td>
+            <td className={td} colSpan={2}>
+              Total
+            </td>
             <td className={tdNum}>{formatINR(data.totals.allocated)}</td>
             <td className={td}>
               <Bar value={projectProgressPct} of={100} />
