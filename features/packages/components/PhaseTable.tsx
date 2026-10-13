@@ -1,7 +1,7 @@
 import type { PhasesForPackage } from "@/features/packages/queries";
 import { Bar } from "@/components/ui/Bar";
 import { TableWrap } from "@/components/ui/TableWrap";
-import { td, tdNum, th, thNum, trTotal } from "@/components/ui/table";
+import { td, tdNum, tdSeq, tdTop, th, thNum, thSeq, trTotal } from "@/components/ui/table";
 import { Empty } from "@/components/ui/Empty";
 import { formatINR } from "@/lib/money";
 
@@ -14,6 +14,7 @@ export function PhaseTable({ data }: { data: PhasesForPackage }) {
     <TableWrap>
       <thead>
         <tr>
+          <th className={thSeq}>#</th>
           <th className={th}>Phase</th>
           {data.role === "money" ? (
             <>
@@ -33,7 +34,8 @@ export function PhaseTable({ data }: { data: PhasesForPackage }) {
       <tbody>
         {data.phases.map((p) => (
           <tr key={p.id}>
-            <td className={td}>{p.name}</td>
+            <td className={tdSeq}>{String(p.seqNo).padStart(2, "0")}</td>
+            <td className={tdTop}>{p.name}</td>
             {p.role === "money" ? (
               <>
                 <td className={tdNum}>{formatINR(p.allocated)}</td>
@@ -55,7 +57,9 @@ export function PhaseTable({ data }: { data: PhasesForPackage }) {
         ))}
         {data.role === "money" ? (
           <tr className={trTotal}>
-            <td className={td}>Total</td>
+            <td className={td} colSpan={2}>
+              Total
+            </td>
             <td className={tdNum}>{formatINR(data.totals.allocated)}</td>
             <td className={tdNum}>{formatINR(data.totals.internal)}</td>
             <td className={tdNum}>{formatINR(data.totals.committed)}</td>
@@ -66,7 +70,9 @@ export function PhaseTable({ data }: { data: PhasesForPackage }) {
           </tr>
         ) : data.role === "client" ? (
           <tr className={trTotal}>
-            <td className={td}>Total</td>
+            <td className={td} colSpan={2}>
+              Total
+            </td>
             <td className={tdNum}>{formatINR(data.totals.allocated)}</td>
           </tr>
         ) : null}

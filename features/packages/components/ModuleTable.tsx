@@ -3,7 +3,7 @@ import type { PackagesForProject } from "@/features/packages/queries";
 import { Bar } from "@/components/ui/Bar";
 import { ModuleStatusBadge } from "@/components/shared/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";
-import { td, tdNum, th, thNum, trClick, trTotal, sub } from "@/components/ui/table";
+import { td, tdNum, tdSeq, tdTop, th, thNum, thSeq, trClick, trTotal, sub } from "@/components/ui/table";
 import { formatINR } from "@/lib/money";
 import { packageSlug } from "@/lib/routing/slug";
 
@@ -36,7 +36,7 @@ export function ModuleTable({
               Development and Lift" put its second line hard against the cell
               edge while the first began after the number, so neither lined up
               with anything. A cell cannot wrap under its neighbour. */}
-          <th className={th + " w-px pr-0 text-right"}>#</th>
+          <th className={thSeq}>#</th>
           <th className={th}>Package</th>
           {data.role === "money" ? (
             <>
@@ -66,10 +66,8 @@ export function ModuleTable({
                 reader's eye starts, not floating against the middle of the
                 block. `tabular-nums` keeps 01 and 11 the same width so the
                 column edge stays straight. */}
-            <td className={td + " w-px pr-0 text-right align-top tabular-nums text-muted-foreground"}>
-              {String(p.seqNo).padStart(2, "0")}
-            </td>
-            <td className={td + " align-top"}>
+            <td className={tdSeq}>{String(p.seqNo).padStart(2, "0")}</td>
+            <td className={tdTop}>
               <Link
                 href={`${base}/packages/${packageSlug(p.name, p.seqNo, false)}`}
                 className="font-medium hover:underline"
