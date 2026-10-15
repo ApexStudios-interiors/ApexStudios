@@ -3,7 +3,9 @@ import {
   computeCommitted,
   costToClientFactor,
   durationWeightedProgress,
+  filterPackageRows,
   packageStatusLabel,
+  packageStatusOptions,
   phaseVariance,
   weightedProgress,
 } from "./service";
@@ -127,5 +129,47 @@ describe("packageStatusLabel", () => {
 
   it("falls back to the raw value for anything unrecognised, rather than throwing", () => {
     expect(packageStatusLabel("unknown_status")).toBe("unknown_status");
+  });
+});
+
+describe("packageStatusOptions", () => {
+  it("offers All, then only the statuses present, in the enum's order", () => {
+    const rows = [{ status: "completed" }, { status: "not_started" }, { status: "completed" }];
+    expect(packageStatusOptions(rows)).toEqual([
+      { key: "", label: "All" },
+      { key: "not_started", label: "Not started" },
+      { key: "completed", label: "Completed" },
+    ]);
+  });
+
+  it("is just All for no packages", () => {
+    expect(packageStatusOptions([])).toEqual([{ key: "", label: "All" }]);
+  });
+});
+
+describe("filterPackageRows", () => {
+  const rows = [
+    { seqNo: 1, name: "Swimming Pool", lead: "Suresh K", status: "design" },
+    { seqNo: 2, name: "Facade and Windows", lead: "Prakash R", status: "not_started" },
+    { seqNo: 12, name: "Landscape", lead: "To assign", status: "in_progress" },
+  ];
+
+  it("returns every row with no search and status All", () => {
+    expect(filterPackageRows(rows, { q: "", status: "" })).toEqual(rows);
+  });
+
+  it("matches the name and the lead, case-insensitively, ignoring outer spaces", () => {
+    expect(filterPackageRows(rows, { q: "  pool ", status: "" }).map((r) => r.seqNo)).toEqual([1]);
+    expect(filterPackageRows(rows, { q: "PRAKASH", status: "" }).map((r) => r.seqNo)).toEqual([2]);
+  });
+
+  it("matches the zero-padded number", () => {
+    expect(filterPackageRows(rows, { q: "02", status: "" }).map((r) => r.seqNo)).toEqual([2]);
+    expect(filterPackageRows(rows, { q: "12", status: "" }).map((r) => r.seqNo)).toEqual([12]);
+  });
+
+  it("filters by status, and combines it with the search", () => {
+    expect(filterPackageRows(rows, { q: "", status: "design" }).map((r) => r.seqNo)).toEqual([1]);
+    expect(filterPackageRows(rows, { q: "pool", status: "not_started" })).toEqual([]);
   });
 });

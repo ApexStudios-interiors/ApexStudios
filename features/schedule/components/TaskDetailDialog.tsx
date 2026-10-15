@@ -10,6 +10,10 @@ import { updateTaskSchema } from "@/features/schedule/schema";
 import { updateTask, setTaskProgress, getTaskForEdit, type TaskForEdit } from "@/features/schedule/actions";
 import { DatePicker } from "@/components/shared/DatePicker";
 import { DialogShell, Field, inputClass, textareaClass } from "@/components/ui/DialogShell";
+import { Button } from "@/components/ui/button";
+
+/** The progress quick picks under the slider. */
+const PROGRESS_PICKS = [0, 25, 50, 75, 100];
 
 /**
  * build/05-schedule-and-progress.md §3.4: progress slider, start date,
@@ -124,6 +128,27 @@ export function TaskDetailDialog({ taskId }: { projectId: string; moduleId: stri
               onPointerUp={(e) => commitProgress(+e.currentTarget.value)}
               className="w-full accent-current"
             />
+            {/* Quick picks — the same save as releasing the slider
+                (commitProgress: optimistic, rolled back on failure). The
+                mobile app's task sheet offers the same five. */}
+            <div className="flex gap-1.5 mt-2" role="group" aria-label="Set progress">
+              {PROGRESS_PICKS.map((pct) => (
+                <Button
+                  key={pct}
+                  type="button"
+                  size="sm"
+                  variant={optimisticProgress === pct ? "primary" : "default"}
+                  aria-pressed={optimisticProgress === pct}
+                  className="flex-1 tabular-nums"
+                  disabled={progressAction.isPending}
+                  onClick={() => {
+                    if (pct !== optimisticProgress) commitProgress(pct);
+                  }}
+                >
+                  {pct}%
+                </Button>
+              ))}
+            </div>
           </Field>
         </div>
         <div className="col-span-2">
