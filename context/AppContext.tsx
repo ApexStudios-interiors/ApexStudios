@@ -43,6 +43,7 @@ export type DialogState =
       projectName: string;
       clients: { id: string; fullName: string; email: string | null }[];
     }
+  | { kind: "adjustInventory"; item: { id: string; name: string; unit: string; qtyOnHand: number } }
   | null;
 
 /**

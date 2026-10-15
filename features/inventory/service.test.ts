@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { inventorySearchFilter, inventoryStatus, normalizeInventorySearch } from "./service";
+import {
+  OTHER_REASON,
+  adjustmentChange,
+  composeAdjustReason,
+  inventorySearchFilter,
+  inventoryStatus,
+  normalizeInventorySearch,
+} from "./service";
 
 describe("normalizeInventorySearch", () => {
   it("treats a missing, empty or whitespace-only param as no search at all", () => {
@@ -66,5 +73,33 @@ describe("inventoryStatus", () => {
 
   it("is ok when the reorder level is zero and qty is positive", () => {
     expect(inventoryStatus(5, 0)).toBe("ok");
+  });
+});
+
+describe("composeAdjustReason", () => {
+  it("stores a preset on its own when there is no note", () => {
+    expect(composeAdjustReason("Damaged", "")).toBe("Damaged");
+    expect(composeAdjustReason("Damaged", "   ")).toBe("Damaged");
+  });
+
+  it("keeps the preset first when a note is added, so it stays countable", () => {
+    expect(composeAdjustReason("Physical count", " Oct audit ")).toBe("Physical count: Oct audit");
+  });
+
+  it("stores only the note for Other — and nothing when there is no note, for the schema to refuse", () => {
+    expect(composeAdjustReason(OTHER_REASON, " Returned to supplier ")).toBe("Returned to supplier");
+    expect(composeAdjustReason(OTHER_REASON, "")).toBe("");
+  });
+});
+
+describe("adjustmentChange", () => {
+  it("is signed: positive adds stock, negative removes it", () => {
+    expect(adjustmentChange(120, 95)).toBe(-25);
+    expect(adjustmentChange(0, 40)).toBe(40);
+    expect(adjustmentChange(10, 10)).toBe(0);
+  });
+
+  it("rounds to the 3 decimal places a quantity is stored at", () => {
+    expect(adjustmentChange(12, 12.1)).toBe(0.1);
   });
 });

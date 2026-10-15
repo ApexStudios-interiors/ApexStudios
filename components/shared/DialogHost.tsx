@@ -21,6 +21,7 @@ import { CertifyBillDialog } from "@/features/billing/components/CertifyBillDial
 import { InviteUserDialog } from "@/features/auth/components/InviteUserDialog";
 import { CreateClientLoginDialog } from "@/features/users/components/CreateClientLoginDialog";
 import { GrantClientAccessDialog } from "@/features/projects/components/GrantClientAccessDialog";
+import { AdjustInventoryDialog } from "@/features/inventory/components/AdjustInventoryDialog";
 
 export function DialogHost() {
   const { dialog } = useApp();
@@ -91,6 +92,8 @@ export function DialogHost() {
           clients={dialog.clients}
         />
       );
+    case "adjustInventory":
+      return <AdjustInventoryDialog item={dialog.item} />;
     default:
       return null;
   }
