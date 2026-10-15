@@ -16,6 +16,44 @@ export function packageStatusLabel(status: string): string {
   return PACKAGE_STATUS_LABEL[status] ?? status;
 }
 
+/** The Packages page offers search and status filters only from this many
+ *  packages up — a short list reads at a glance and filters would be clutter.
+ *  The mobile app's Packages screen uses the same threshold. */
+export const PACKAGE_FILTER_THRESHOLD = 7;
+
+/**
+ * The Packages page's status filter: "All", then only the statuses this
+ * project's packages actually have, in the enum's order (not started →
+ * design → in progress → completed), labelled with packageStatusLabel.
+ */
+export function packageStatusOptions(rows: { status: string }[]): { key: string; label: string }[] {
+  const order = Object.keys(PACKAGE_STATUS_LABEL);
+  const present = [...new Set(rows.map((r) => r.status))].sort(
+    (a, b) => (order.indexOf(a) + 1 || order.length + 1) - (order.indexOf(b) + 1 || order.length + 1)
+  );
+  return [{ key: "", label: "All" }, ...present.map((s) => ({ key: s, label: packageStatusLabel(s) }))];
+}
+
+/**
+ * The Packages page's search and status filter, over the rows already
+ * loaded: `status` "" means all; `q` matches the number ("01"), name or lead,
+ * case-insensitively. Matching only — nothing is computed.
+ */
+export function filterPackageRows<T extends { seqNo: number; name: string; lead: string; status: string }>(
+  rows: T[],
+  { q, status }: { q: string; status: string }
+): T[] {
+  const needle = q.trim().toLowerCase();
+  return rows.filter(
+    (r) =>
+      (!status || r.status === status) &&
+      (!needle ||
+        r.name.toLowerCase().includes(needle) ||
+        r.lead.toLowerCase().includes(needle) ||
+        String(r.seqNo).padStart(2, "0").includes(needle))
+  );
+}
+
 /**
  * HLD §5.2: phases are not enforced to sum to the package total — real
  * projects hold unallocated contingency. This computes the variance so the UI

@@ -17,6 +17,7 @@ export function ModuleTable({
   base,
   data,
   projectProgressPct,
+  hideTotals = false,
 }: {
   /** Canonical `/projects/<code>` for this project. */
   base: string;
@@ -26,6 +27,9 @@ export function ModuleTable({
    *  from the project row the page already fetched, not recomputed here.
    *  AGENTS.md: a derived value is stored in exactly one place. */
   projectProgressPct: number;
+  /** The Packages page sets this while its search or status filter is on:
+   *  the Total row totals the whole project, not the rows shown. */
+  hideTotals?: boolean;
 }) {
   return (
     <TableWrap>
@@ -109,7 +113,7 @@ export function ModuleTable({
             </td>
           </tr>
         ))}
-        {data.role === "money" ? (
+        {hideTotals ? null : data.role === "money" ? (
           <tr className={trTotal}>
             <td className={td} colSpan={2}>
               Total
