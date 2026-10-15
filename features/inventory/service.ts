@@ -54,3 +54,39 @@ export function inventorySearchFilter(term: string): string {
   const quoted = `"${`%${likeEscaped}%`.replace(/[\\"]/g, (c) => `\\${c}`)}"`;
   return `name.ilike.${quoted},category.ilike.${quoted}`;
 }
+
+/**
+ * The Adjust dialog's preset reasons. A free-text-only reason reads well one
+ * row at a time but cannot be counted afterwards ("how much did we write off
+ * as damaged this quarter?"), so the dialog leads with these and keeps
+ * "Other" for anything they do not cover. Not an enum in the database:
+ * `stock_movements.reason` stays free text, so adding a preset later needs no
+ * migration. The mobile app's Adjust sheet carries the same list.
+ */
+export const ADJUST_REASONS = [
+  "Physical count",
+  "Damaged",
+  "Wastage",
+  "Lost or stolen",
+  "Opening balance",
+] as const;
+export const OTHER_REASON = "Other";
+export type AdjustReasonPreset = (typeof ADJUST_REASONS)[number] | typeof OTHER_REASON;
+
+/**
+ * The reason actually stored. A preset alone is a complete reason; a note
+ * after it is kept as "Preset: note", so the preset still leads the row and
+ * stays countable. "Other" stores the note on its own, and needs one — an
+ * empty string here is what adjustInventorySchema refuses.
+ */
+export function composeAdjustReason(preset: AdjustReasonPreset, note: string): string {
+  const detail = note.trim();
+  if (preset === OTHER_REASON) return detail;
+  return detail ? `${preset}: ${detail}` : preset;
+}
+
+/** The change an adjustment makes, to the 3 decimal places a quantity is
+ *  stored at (`numeric(14,3)`), so 12.1 − 12 reads +0.1, not +0.0999…. */
+export function adjustmentChange(currentQty: number, newQty: number): number {
+  return Math.round((newQty - currentQty) * 1000) / 1000;
+}
