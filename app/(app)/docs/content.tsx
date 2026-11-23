@@ -292,7 +292,7 @@ export const ROLE_STORIES: RoleStory[] = [
       "raise stock requests, approve or reject them, mark them Ordered and mark them Delivered",
       "request an approval from the client and add sample photos while it is pending",
       "create a bill from Billable Now, submit it, and record payments once the client has certified it",
-      "add users from the Users page — Admin, Site Supervisor, or Client (with the project they will see) — and grant an existing client access to another project",
+      "add users from the Users page — Admin, Site Supervisor, or Client (with the project they will see) — grant an existing client access to another project, and remove a client from one project",
       "edit a project's billing constants (GST, retention, material-at-site and TDS percentages)",
       "change the role of, deactivate or reset the password of ANY user except myself — including another Admin",
       "preview a project as a Site Supervisor or Client",
@@ -443,7 +443,7 @@ export const FLOWS: Flow[] = [
     ],
     steps: [
       "On the Users page click Add User, enter a username, name and role (Admin, Site Supervisor or Client). A Client also needs a Project — the one they will see. The username and a generated password are shown once, each with a Copy button — share them now, because the password cannot be viewed again.",
-      "To give an existing client access to another project, open that project's dashboard and use Add existing client on the Client access card.",
+      "To give an existing client access to another project, open that project's dashboard and use Add existing client on the Client access card. To take a client off one project only, click Remove on their row of that card, or use Projects on their row of the Users page — their login and other projects stay. A client's last project can't be removed; deactivate the login instead.",
       "Reset password: on the Users page click Reset password next to the user. A new password is shown once, and the user is signed out everywhere. An admin may reset anyone but themselves — including another admin.",
       "Change your OWN password on the Users page, on your own row — the Change my password button sits where Reset sits for everyone else. It asks for your current password first, needs at least 12 characters, and signs you out of every other device while keeping you signed in here. Site supervisors and clients have no self-service route: they ask an admin to Reset theirs, and are given the new password once.",
       "Change role, deactivate or reactivate from the same row. An admin may act on anyone but themselves, and the last remaining admin cannot be demoted or deactivated — that would leave nobody able to administer the organisation. Deactivating signs the person out and blocks their login until it is reversed; nothing is deleted.",

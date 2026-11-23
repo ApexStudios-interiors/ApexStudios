@@ -112,3 +112,10 @@ export const addProjectMemberSchema = z.object({
   profileId: z.uuid(),
 });
 export type AddProjectMemberInput = z.infer<typeof addProjectMemberSchema>;
+
+/** Take a client login off one project; their other projects are untouched. */
+export const removeProjectMemberSchema = z.object({
+  projectId: z.uuid(),
+  profileId: z.uuid(),
+});
+export type RemoveProjectMemberInput = z.infer<typeof removeProjectMemberSchema>;
