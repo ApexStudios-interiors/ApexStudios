@@ -1,3 +1,4 @@
+import { forbidden } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getBusinessInventory } from "@/features/inventory/queries";
 import { getPortfolio } from "@/features/projects/queries";
@@ -35,6 +36,10 @@ export default async function BusinessInventoryPage({
   const search = normalizeInventorySearch(q);
 
   const effectiveRole = session.impersonating?.role ?? session.role;
+  // HLD §7.1: a client has no stock or inventory surface. The sidebar hides the
+  // link; this is the hard guard for a typed or shared URL, matching /stock
+  // (APX-68, found live — the page used to open with an empty table).
+  if (effectiveRole === "client") forbidden();
   const isAdmin = effectiveRole === "admin";
 
   const [{ items, stats }, portfolio] = await Promise.all([
