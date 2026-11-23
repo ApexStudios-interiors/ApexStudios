@@ -167,3 +167,35 @@ export function normalisePackageNames(names: readonly string[]): string[] {
 export function isSameProjectName(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
+
+/**
+ * Why removing a profile from a project's client access is refused, or null if
+ * it may go ahead. Pure, so the Client access card, the Users page and
+ * removeProjectMember all apply the same rule.
+ *
+ * - `not_client`: only CLIENT access is managed on these screens; a site
+ *   supervisor's membership is not (and owner/admin have no rows at all).
+ * - `not_member`: nothing to remove.
+ * - `last_project`: D51 says a client login always has a project. Taking away
+ *   the only one would leave a login that can sign in and see nothing — the
+ *   right tool for that is Deactivate on the Users page.
+ */
+export type ClientAccessRemovalRefusal = "not_client" | "not_member" | "last_project";
+
+export function clientAccessRemovalRefusal(target: {
+  role: string;
+  isMember: boolean;
+  projectCount: number;
+}): ClientAccessRemovalRefusal | null {
+  if (target.role !== "client") return "not_client";
+  if (!target.isMember) return "not_member";
+  if (target.projectCount <= 1) return "last_project";
+  return null;
+}
+
+export const CLIENT_ACCESS_REMOVAL_REFUSAL_COPY: Record<ClientAccessRemovalRefusal, string> = {
+  not_client: "Only client access is managed here.",
+  not_member: "This client already can't see this project.",
+  last_project:
+    "This is their only project. To stop them signing in, deactivate them on the Users page instead.",
+};

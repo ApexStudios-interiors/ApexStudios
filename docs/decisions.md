@@ -1507,7 +1507,10 @@ owner/admin.
   `addUserSchema` stays staff-only and a client login still always has a project. The Client access
   card's **Create client login** button (and `CreateClientLoginDialog`) is removed the same day:
   Add User is now the one place a client login is created; the card keeps the list and
-  **Add existing client**.
+  **Add existing client**. Also added the same day: **Remove** on each client row of the card, and
+  **Projects** on a client's row of the Users page, to take a client off ONE project
+  (`removeProjectMember`, `pm_delete` — no migration). Refused for a client's last project
+  (`clientAccessRemovalRefusal`): the invariant above holds, and Deactivate is the tool for that.
 - **Client logins are created from the project.** The project dashboard has a **Client access** card
   (owner/admin only): the project's client logins; **Create client login** (username + optional name
   → auth user, `profiles` row with role `client`, `project_members` row for this project, password

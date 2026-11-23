@@ -48,8 +48,10 @@ Three roles with genuinely different data visibility: **Admin**, **Site Supervis
 link, no separate client sign-in and no two-factor step (D48), and the app sends no auth email.
 Accounts are created on the Users page (Add User: Admin, Site Supervisor, or Client). A client
 login always belongs to a project: choosing Client in Add User requires a Project. The project
-dashboard's Client access card lists a project's client logins and grants an existing one access to
-another project; it no longer creates them (D51, amended 2026-11-23).
+dashboard's Client access card lists a project's client logins, grants an existing one access to
+another project, and removes one from that project only (as does Projects on a client's row of the
+Users page). A client's last project cannot be removed — deactivate the login instead. It no longer
+creates logins (D51, amended 2026-11-23).
 
 ### The one rule that matters most
 

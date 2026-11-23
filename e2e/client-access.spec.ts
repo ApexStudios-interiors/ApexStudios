@@ -23,6 +23,9 @@ test.describe("admin: Client access card", () => {
 
     // New client logins come from Users → Add User (removed here 2026-11-23).
     await expect(page.getByRole("button", { name: "Create client login" })).toHaveCount(0);
+    // Each client row has Remove (this project only). Opened, never confirmed:
+    // the only database is production (D49).
+    await expect(page.getByRole("button", { name: "Remove" }).first()).toBeAttached();
   });
 
   test("Add User offers Client, which asks for a project", async ({ page }, testInfo) => {
@@ -39,6 +42,18 @@ test.describe("admin: Client access card", () => {
     await expect(page.getByLabel("Project")).toBeVisible();
     // Stops short of submitting — see the note at the top of this file.
     await page.getByRole("button", { name: "Cancel" }).click();
+  });
+});
+
+test.describe("admin: a client's projects on the Users page", () => {
+  test("client rows have a Projects button listing their projects", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "admin", "admin-only journey");
+    await page.goto("/users");
+    const projects = page.getByRole("button", { name: /^Projects \(\d+\)$/ }).first();
+    await expect(projects).toBeVisible();
+    await projects.click();
+    await expect(page.getByRole("heading", { name: /'s projects$/ })).toBeVisible();
+    await page.getByRole("button", { name: "Close" }).click();
   });
 });
 

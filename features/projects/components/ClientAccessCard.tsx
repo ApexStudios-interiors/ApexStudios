@@ -2,10 +2,12 @@ import type { ProjectClientAccess } from "@/features/projects/queries";
 import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { initials } from "@/lib/logic";
+import { RemoveClientAccessButton } from "./RemoveClientAccessButton";
 
 /**
- * D51: the project's client logins, and Add existing client to give a client
- * login that already exists access to this project too. A NEW client login is
+ * D51: the project's client logins, each with Remove (take them off THIS
+ * project only), and Add existing client to give a client login that already
+ * exists access to this project too. A NEW client login is
  * created from Users → Add User with the Client role (the card's own Create
  * client login button was removed 2026-11-23, once Add User could do it).
  *
@@ -50,7 +52,17 @@ export function ClientAccessCard({
                 {initials(m.fullName)}
               </div>
               <span className="font-medium text-[13.5px]">{m.fullName}</span>
-              {m.email && <span className="ml-auto text-[13px] text-muted-foreground">{m.email}</span>}
+              <span className="ml-auto flex items-center gap-3">
+                {m.email && <span className="text-[13px] text-muted-foreground">{m.email}</span>}
+                <RemoveClientAccessButton
+                  projectId={projectId}
+                  projectName={projectName}
+                  profileId={m.id}
+                  fullName={m.fullName}
+                  projectCount={m.projectCount}
+                  onlyClientOnProject={access.members.length === 1}
+                />
+              </span>
             </li>
           ))}
         </ul>

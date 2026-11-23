@@ -392,9 +392,13 @@ export async function getSiteStockStats(projectId: string): Promise<SiteStockSta
 /** One client login, as the project dashboard's Client access card lists it. */
 export type ClientLoginDTO = { id: string; fullName: string; email: string | null };
 
+/** A client login on this project, with how many live projects it can see in
+ *  all — the card disables Remove when this is its only one (D51). */
+export type ClientMemberDTO = ClientLoginDTO & { projectCount: number };
+
 export type ProjectClientAccess = {
   /** Client logins that can see this project. */
-  members: ClientLoginDTO[];
+  members: ClientMemberDTO[];
   /** Client logins in the org that cannot see it yet — "Add existing client". */
   others: ClientLoginDTO[];
 };
@@ -420,12 +424,63 @@ export async function getProjectClientAccess(projectId: string): Promise<Project
   if (members.error) throw new Error(members.error.message);
 
   const memberIds = new Set(members.data.map((m) => m.profile_id));
+  const projectsByClient = await clientProjectMap([...memberIds]);
   const result: ProjectClientAccess = { members: [], others: [] };
   for (const p of clients.data) {
     const dto = { id: p.id, fullName: p.full_name, email: p.email };
-    (memberIds.has(p.id) ? result.members : result.others).push(dto);
+    if (memberIds.has(p.id)) {
+      result.members.push({ ...dto, projectCount: projectsByClient.get(p.id)?.length ?? 0 });
+    } else {
+      result.others.push(dto);
+    }
   }
   return result;
+}
+
+/** A project a client login can see, as the Users page lists it. */
+export type ClientProjectDTO = { id: string; code: string; name: string };
+
+/**
+ * The live projects each of `profileIds` is a member of, by profile id. Owner/
+ * admin callers only (the Client access card and the Users page): pm_select
+ * lets an admin read every membership row in the org, and projects_select is
+ * org-scoped. id, code and name only — no money column.
+ */
+async function clientProjectMap(profileIds: string[]): Promise<Map<string, ClientProjectDTO[]>> {
+  const byProfile = new Map<string, ClientProjectDTO[]>();
+  if (profileIds.length === 0) return byProfile;
+
+  const supabase = await createClient();
+  const { data: rows, error } = await supabase
+    .from("project_members")
+    .select("profile_id, project_id")
+    .in("profile_id", profileIds);
+  if (error) throw new Error(error.message);
+  if (rows.length === 0) return byProfile;
+
+  const { data: projects, error: pErr } = await supabase
+    .from("projects")
+    .select("id, code, name")
+    .in("id", [...new Set(rows.map((r) => r.project_id))])
+    .is("deleted_at", null)
+    .order("name", { ascending: true });
+  if (pErr) throw new Error(pErr.message);
+
+  const projectById = new Map(projects.map((p) => [p.id, p]));
+  for (const r of rows) {
+    const p = projectById.get(r.project_id);
+    if (!p) continue; // soft-deleted project
+    const list = byProfile.get(r.profile_id) ?? [];
+    list.push({ id: p.id, code: p.code, name: p.name });
+    byProfile.set(r.profile_id, list);
+  }
+  for (const list of byProfile.values()) list.sort((a, b) => a.name.localeCompare(b.name));
+  return byProfile;
+}
+
+/** For the Users page: each listed client login's projects (D51). */
+export async function listClientProjects(clientIds: string[]): Promise<Record<string, ClientProjectDTO[]>> {
+  return Object.fromEntries(await clientProjectMap(clientIds));
 }
 
 /** A project as a form's Project select lists it. */

@@ -10,6 +10,7 @@ import {
   createClientSchema,
   createProjectSchema,
   previewProjectCodeSchema,
+  removeProjectMemberSchema,
   setProjectRateVisibilitySchema,
   setProjectStatusSchema,
   updateProjectSchema,
@@ -21,7 +22,7 @@ import {
   projectCodeBase,
   type RateVisibility,
 } from "./service";
-import { insertProjectMember } from "./members";
+import { deleteProjectMember, insertProjectMember } from "./members";
 
 /**
  * build/04-projects-packages-phases.md §4.1: adminAction for all four, each
@@ -235,6 +236,26 @@ export const addProjectMember = adminAction
     revalidatePath("/");
     revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
     return { status };
+  });
+
+/**
+ * Takes a client login off one project (the Client access card's Remove, and
+ * the Users page's client Projects list). Their other projects and the login
+ * itself are untouched. A refusal (not a client, not a member, their last
+ * project) comes back as `{ status: "refused", reason }`, not an error.
+ */
+export const removeProjectMember = adminAction
+  .inputSchema(removeProjectMemberSchema)
+  .action(async ({ parsedInput }) => {
+    const supabase = await createClient();
+    const result = await deleteProjectMember(supabase, parsedInput);
+    if (result.status === "removed") {
+      updateTag(`project:${parsedInput.projectId}`);
+      revalidatePath("/");
+      revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
+      revalidatePath("/users");
+    }
+    return result;
   });
 
 /**

@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/auth/session";
 import { countActiveOwners, listUsers } from "@/features/users/queries";
-import { listProjectOptions } from "@/features/projects/queries";
+import { listClientProjects, listProjectOptions } from "@/features/projects/queries";
+import { ClientProjectsButton } from "@/features/users/components/ClientProjectsButton";
 import { UserRoleSelect } from "@/features/users/components/UserRoleSelect";
 import { DeactivateUserButton } from "@/features/users/components/DeactivateUserButton";
 import { ResetPasswordButton } from "@/features/users/components/ResetPasswordButton";
@@ -42,6 +43,10 @@ export default async function UsersPage({
     countActiveOwners(),
     listProjectOptions(),
   ]);
+  // D51: each listed client's projects, for the row's Projects button.
+  const clientProjects = await listClientProjects(
+    users.rows.filter((u) => u.role === "client").map((u) => u.id)
+  );
 
   return (
     <div>
@@ -93,6 +98,13 @@ export default async function UsersPage({
                   </td>
                   <td className={td} style={{ textAlign: "right" }}>
                     <div className="flex justify-end gap-1">
+                      {u.role === "client" && (
+                        <ClientProjectsButton
+                          profileId={u.id}
+                          fullName={u.fullName}
+                          projects={clientProjects[u.id] ?? []}
+                        />
+                      )}
                       {/* Your own row gets "Change my password" instead of
                           "Reset" — Reset is refused against yourself (D52) and
                           would be the wrong tool anyway, since it ends the
