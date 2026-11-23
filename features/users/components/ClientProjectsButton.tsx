@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
 import { Button } from "@/components/ui/button";
+import { DisabledReason } from "@/components/shared/DisabledReason";
 import {
   Dialog,
   DialogClose,
@@ -127,22 +128,21 @@ export function ClientProjectsButton({
                       >
                         {p.name}
                       </Link>
-                      <span
-                        className="ml-auto inline-flex"
-                        title={refusal ? CLIENT_ACCESS_REMOVAL_REFUSAL_COPY[refusal] : undefined}
-                      >
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={refusal !== null || remove.isPending}
-                          onClick={() => {
-                            remove.reset();
-                            setRefusalText(null);
-                            setConfirmingId(p.id);
-                          }}
-                        >
-                          Remove
-                        </Button>
+                      <span className="ml-auto inline-flex">
+                        <DisabledReason reason={refusal ? CLIENT_ACCESS_REMOVAL_REFUSAL_COPY[refusal] : null}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={refusal !== null || remove.isPending}
+                            onClick={() => {
+                              remove.reset();
+                              setRefusalText(null);
+                              setConfirmingId(p.id);
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </DisabledReason>
                       </span>
                     </>
                   )}

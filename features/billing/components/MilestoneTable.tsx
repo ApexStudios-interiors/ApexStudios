@@ -58,7 +58,7 @@ export function MilestoneTable({
     const result = await markPackagePhasesComplete({ packageId });
     setBulkPending(false);
     if (!result?.data) {
-      toast(result?.serverError ?? "Could not mark these phases complete");
+      toast(result?.serverError ?? "Could not mark these phases complete", "error");
       return;
     }
     const { marked, failed } = result.data;
@@ -73,7 +73,7 @@ export function MilestoneTable({
   async function onMarkComplete(phaseId: string) {
     const result = await markPhaseComplete({ phaseId });
     if (!result?.data) {
-      toast(result?.serverError ?? "Could not mark this phase complete");
+      toast(result?.serverError ?? "Could not mark this phase complete", "error");
       return;
     }
     router.refresh();
