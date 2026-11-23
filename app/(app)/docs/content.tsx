@@ -29,7 +29,7 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "Project",
         definition:
-          "One client job at one location. It holds packages and moves through Planning, Active, On hold, Completed and Archived.",
+          "One client job at one location. It holds packages and moves through Planning, Active, On hold, Completed and Archived. A completed project takes no new stock requests or daily updates; an archived one is read-only except for billing and payments.",
       },
       {
         term: "Package",
@@ -287,13 +287,16 @@ export const ROLE_STORIES: RoleStory[] = [
     role: "Admin",
     can: [
       "see every project, including internal cost, committed spend and margin",
-      "create and edit projects, packages, phases and tasks, and set task progress",
+      "create projects and edit them (name, location, target end date, contract value and the billing constants) with Edit Project on the dashboard",
+      "change a project's status with Change Status — Planning, Active, On hold, Completed, Archived — and reopen a completed or archived one, giving a reason",
+      "add and edit packages, phases (Add Phase and Edit on the package's Budget tab, or Create phase from Add Task) and tasks, and set task progress",
+      "put a Site Supervisor on a project, or take them off it, with the Site team card on the dashboard or Projects on their row of the Users page",
       "post daily updates",
       "raise stock requests, approve or reject them, mark them Ordered and mark them Delivered",
       "request an approval from the client and add sample photos while it is pending",
       "create a bill from Billable Now, submit it, and record payments once the client has certified it",
       "add users from the Users page — Admin, Site Supervisor, or Client (with the project they will see) — grant an existing client access to another project, and remove a client from one project",
-      "edit a project's billing constants (GST, retention, material-at-site and TDS percentages)",
+      "edit a project's billing constants (GST, retention, material-at-site and TDS percentages, the mobilisation advance and its recovery %) — they apply to the next bill, never to one already made",
       "change the role of, deactivate or reset the password of ANY user except myself — including another Admin",
       "preview a project as a Site Supervisor or Client",
       "see Failed Jobs and retry one",
@@ -303,6 +306,8 @@ export const ROLE_STORIES: RoleStory[] = [
       "change my own role, deactivate myself or reset my own password — use Change my password instead",
       "demote, deactivate or delete the last remaining Admin, which would leave nobody able to administer the organisation",
       "edit a bill after it has been submitted — a correction is a credit note or an adjustment on the next bill",
+      "change a phase's allocated amount once it is on a bill (Billed or Paid)",
+      "change anything on an archived project except billing and payments — reopen it first",
       "change anything while previewing as another role",
     ],
   },
@@ -322,7 +327,8 @@ export const ROLE_STORIES: RoleStory[] = [
       "see any money: no budgets, no contract value, no rates on existing requests, no Value column, no bills",
       "approve or reject a stock request, or mark one Ordered",
       "see the Billing page or the Users page",
-      "create or edit a project, package or phase",
+      "create or edit a project, package or phase, or change a project's status — if a package has no phase, ask an admin to add one",
+      "raise a stock request or post a daily update on a completed project",
     ],
   },
   {
@@ -360,6 +366,32 @@ export type Flow = {
 };
 
 export const FLOWS: Flow[] = [
+  {
+    id: "flow-project",
+    title: "Setting up and closing a project",
+    purpose: "Everything a new project needs before site work starts, and what changes once it is finished.",
+    chain: [
+      { badge: <Badge variant="secondary">Planning</Badge>, who: "New Project creates it" },
+      { badge: <Badge variant="default">Active</Badge>, who: "An admin, once it is set up" },
+      { badge: <Badge variant="secondary">Completed</Badge>, who: "An admin, when the work is done" },
+      { badge: <Badge variant="secondary">Archived</Badge>, who: "Automatically 12 months later, or an admin" },
+    ],
+    exits: [
+      { badge: <Badge variant="secondary">On hold</Badge>, who: "An admin pauses an active project; it goes back to Active or on to Completed" },
+    ],
+    steps: [
+      "Create the project with + New Project. Its dashboard shows a Set up this project card listing what is still missing, each item with a link to where to do it. The card goes away when everything is done.",
+      "Give every package a budget (Edit on the package), then add its phases on the package's Budget tab with + Add Phase. Tasks belong to phases, and phases are what get billed.",
+      "Add tasks on each package's Schedule. If a package has no phase yet, Add Task offers Create phase and brings you back.",
+      "Put a Site Supervisor on the project with Add site supervisor on the Site team card, and give the client access with Add existing client on the Client access card. A supervisor sees only the projects they are on.",
+      "Click Change Status and move it to Active. Edit Project changes the name, location, target end date, contract value and billing constants at any time before it is archived.",
+      "When the work is done, Change Status → Completed. New stock requests and daily updates stop; billing, payments, deliveries and approvals carry on. Twelve months later it is archived, and from then on it is read-only except for billing and payments.",
+    ],
+    notes: [
+      "Reopening — Completed back to Active, or Archived back to Completed — needs a reason, which is kept in the audit log with every other status change.",
+      "A phase already on a bill keeps its allocated amount. Correct it with a credit note or an adjustment on the next bill.",
+    ],
+  },
   {
     id: "flow-stock",
     title: "Stock request",
@@ -446,6 +478,7 @@ export const FLOWS: Flow[] = [
     steps: [
       "On the Users page click Add User, enter a username, name and role (Admin, Site Supervisor or Client). A Client also needs a Project — the one they will see. The username and a generated password are shown once, each with a Copy button — share them now, because the password cannot be viewed again.",
       "To give an existing client access to another project, open that project's dashboard and use Add existing client on the Client access card. To take a client off one project only, click Remove on their row of that card, or use Projects on their row of the Users page — their login and other projects stay. This works even on their only project: they can still sign in but see no projects until you give them one again, or deactivate the login.",
+      "Site Supervisors work the same way: a supervisor sees only the projects they are on. Put one on a project with Add site supervisor on its Site team card, or from Projects on their row of the Users page (which also has Add to project); Remove takes them off one project only.",
       "Reset password: on the Users page click Reset password next to the user. A new password is shown once, and the user is signed out everywhere. An admin may reset anyone but themselves — including another admin.",
       "Change your OWN password on the Users page, on your own row — the Change my password button sits where Reset sits for everyone else. It asks for your current password first, needs at least 12 characters, and signs you out of every other device while keeping you signed in here. Site supervisors and clients have no self-service route: they ask an admin to Reset theirs, and are given the new password once.",
       "Change role, deactivate or reactivate from the same row. An admin may act on anyone but themselves, and the last remaining admin cannot be demoted or deactivated — that would leave nobody able to administer the organisation. Deactivating signs the person out and blocks their login until it is reversed; nothing is deleted.",
@@ -487,7 +520,7 @@ export const JOB_SCHEDULE: { job: string; when: string; what: string }[] = [
 export const WHERE: { item: string; roles: string; what: string }[] = [
   { item: "All Projects", roles: "Everyone", what: "The portfolio: one card per project you can see. The button at the top of the sidebar opens a list to jump between projects." },
   { item: "Inventory (ALL)", roles: "Admin, Site", what: "Every project's stock in one table, with a project filter." },
-  { item: "Dashboard", roles: "Everyone", what: "A project's stats, its packages, and cards for pending approvals, pending requests and the latest updates. Admins also find the Client access and Rate visibility cards here." },
+  { item: "Dashboard", roles: "Everyone", what: "A project's status, stats, its packages, and cards for pending approvals, pending requests and the latest updates. Admins also find Edit Project, Change Status, the Set up this project checklist (while anything is missing), and the Site team, Client access and Rate visibility cards here." },
   { item: "Packages", roles: "Everyone", what: "The project's packages; expand in the sidebar to jump to one. A package page has its budget and phases, schedule, updates, stock requests and (admins) billing." },
   { item: "Schedule", roles: "Everyone", what: "The Gantt chart per package; click a task bar to edit progress and dates (clients see a read-only summary)." },
   { item: "Daily Updates", roles: "Everyone", what: "The site timeline with photos; + Post Update for staff." },
@@ -495,7 +528,7 @@ export const WHERE: { item: string; roles: string; what: string }[] = [
   { item: "Stock Requests", roles: "Admin, Site", what: "Raise and progress material requests. The sidebar badge counts pending ones." },
   { item: "Approvals", roles: "Everyone", what: "Client sign-offs on samples and drawings. The sidebar badge (clients only) counts those awaiting a decision." },
   { item: "Billing / Bills", roles: "Admin, Client", what: "Billable Now and the RA bills (admins); the bills to approve and pay (client, where the badge counts submitted bills)." },
-  { item: "Users", roles: "Admin", what: "Add staff, change roles, reset passwords, deactivate and reactivate." },
+  { item: "Users", roles: "Admin", what: "Add staff, change roles, reset passwords, deactivate and reactivate. Projects on a client's or Site Supervisor's row lists, adds and removes the projects they can see." },
   { item: "Failed Jobs", roles: "Admin", what: "Background jobs that gave up, with their last error and a Retry button." },
   { item: "Docs", roles: "Everyone", what: "This page." },
   { item: "Bell (header)", roles: "Everyone", what: "Open items across all your projects, scoped to your role. Each entry links to the page it concerns." },
@@ -535,6 +568,7 @@ export const LEGEND: { label: string; badges: ReactNode; meaning: string }[] = [
         <Badge variant="secondary">Archived</Badge>
       </>
     ),
-    meaning: "Set by an admin. Archived happens automatically 12 months after completion.",
+    meaning:
+      "Set by an admin with Change Status: Planning → Active → On hold or Completed → Archived. Archived also happens automatically 12 months after completion. Reopening needs a reason. Completed takes no new stock requests or daily updates; Archived is read-only except for billing and payments.",
   },
 ];

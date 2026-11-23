@@ -52,7 +52,8 @@ dashboard's Client access card lists a project's client logins, grants an existi
 another project, and removes one from that project only (as does Projects on a client's row of the
 Users page) — even their only project, which leaves a login that signs in to no project until one is
 given back or it is deactivated. It no longer
-creates logins (D51, amended 2026-11-23).
+creates logins (D51, amended 2026-11-23). The dashboard's Site team card does the same for Site
+Supervisors, as does Projects on a supervisor's row of the Users page (2026-11-24).
 
 ### The one rule that matters most
 

@@ -4,9 +4,12 @@ import {
   costToClientFactor,
   durationWeightedProgress,
   filterPackageRows,
+  isPhaseBilled,
   packageStatusLabel,
   packageStatusOptions,
+  phaseAllocatedChangeRefusal,
   phaseVariance,
+  PHASE_BILLED_COPY,
   weightedProgress,
 } from "./service";
 
@@ -171,5 +174,36 @@ describe("filterPackageRows", () => {
   it("filters by status, and combines it with the search", () => {
     expect(filterPackageRows(rows, { q: "", status: "design" }).map((r) => r.seqNo)).toEqual([1]);
     expect(filterPackageRows(rows, { q: "pool", status: "not_started" })).toEqual([]);
+  });
+});
+
+describe("phaseAllocatedChangeRefusal (APX-10)", () => {
+  it("treats Billed and Paid as on a bill, nothing else", () => {
+    expect(isPhaseBilled("billed")).toBe(true);
+    expect(isPhaseBilled("paid")).toBe(true);
+    expect(isPhaseBilled("billable")).toBe(false);
+    expect(isPhaseBilled("unresolved")).toBe(false);
+  });
+
+  it("refuses a change to a billed phase's allocated amount", () => {
+    expect(
+      phaseAllocatedChangeRefusal({ billingStatus: "billed", allocatedAmount: "125000" }, "130000")
+    ).toBe(PHASE_BILLED_COPY);
+    expect(phaseAllocatedChangeRefusal({ billingStatus: "paid", allocatedAmount: 125000 }, "0")).toBe(
+      PHASE_BILLED_COPY
+    );
+  });
+
+  it("does not count the same amount written differently as a change", () => {
+    expect(
+      phaseAllocatedChangeRefusal({ billingStatus: "billed", allocatedAmount: "125000.00" }, "125000")
+    ).toBeNull();
+  });
+
+  it("allows any change before billing, and an edit that leaves Allocated alone", () => {
+    expect(phaseAllocatedChangeRefusal({ billingStatus: "billable", allocatedAmount: "1" }, "2")).toBeNull();
+    expect(
+      phaseAllocatedChangeRefusal({ billingStatus: "paid", allocatedAmount: "1" }, undefined)
+    ).toBeNull();
   });
 });

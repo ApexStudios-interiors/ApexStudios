@@ -32,6 +32,11 @@ const ERROR_MESSAGES = {
   MAS_EXCEEDS_GROSS:
     "The material advance to recover is more than this bill's value. Add more items, or check the phase's value.",
   INVALID_PERIOD: "Give both billing period dates, with the start on or before the end.",
+  CONFLICT:
+    "Someone else changed this while you were editing. Close and reopen it to see the current values.",
+  PROJECT_ARCHIVED: "This project is archived, so it is read-only.",
+  PROJECT_COMPLETED: "This project is completed, so no new stock requests or daily updates can be added.",
+  PHASE_BILLED: "This phase is already on a bill, so its allocated amount can no longer change.",
 } as const;
 
 /** Postgres RAISE EXCEPTION messages the RPCs use are prefixed with their code

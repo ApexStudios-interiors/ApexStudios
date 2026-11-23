@@ -42,6 +42,17 @@ export type DialogState =
       projectName: string;
       clients: { id: string; fullName: string; email: string | null }[];
     }
+  // APX-10/11/12: project setup screens.
+  | { kind: "editProject"; projectId: string }
+  | { kind: "projectStatus"; projectId: string; projectName: string; status: string }
+  | { kind: "addPhase"; projectId: string; moduleId: string; thenAddTask?: boolean }
+  | { kind: "editPhase"; projectId: string; moduleId: string; phaseId: string }
+  | {
+      kind: "grantSiteAccess";
+      projectId: string;
+      projectName: string;
+      supervisors: { id: string; fullName: string; email: string | null }[];
+    }
   | { kind: "adjustInventory"; item: { id: string; name: string; unit: string; qtyOnHand: number } }
   | null;
 

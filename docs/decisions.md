@@ -2263,6 +2263,61 @@ still behind `BILLING_ENABLED`.
 4. Bill date = first submission date, and the billing period: confirm against the GST invoice-date rule
    and the return period.
 5. The existing D4 question (MAS as secured advance vs sale) still governs all of the above.
+### 2026-11-24 — Project setup screens: phases, project edit and status, site team, read-only projects
+
+**Question:** The audit (APX-10, 11, 12, 41, 70) found that a project created in the app could not be
+run: no screen made phases, nothing edited a project or changed its status, a new Site Supervisor
+could not be put on any project, and finished projects stayed fully editable.
+**Answered:** 2026-11-24 by Voola (owner)
+**Answer:**
+
+- **Phases (APX-10).** Admins add and edit phases on a package's Budget tab, and from Add Task's
+  "Create phase" when the package has none (it returns to Add Task). Edit Phase uses the same
+  optimistic concurrency as Edit Package (`updated_at` scope; zero rows is a `CONFLICT` with its own
+  message). **A phase on a bill (Billed or Paid) keeps its allocated amount** — refused by
+  `updatePhase` and by `trg_phases_allocated_locked`; a correction is a credit note or an adjustment
+  on the next bill, as for the bill itself. Name and internal budget stay editable.
+- **Edit Project (APX-11).** Name, location, target end date, contract value and the per-project
+  billing constants (GST, retention, material-at-site, TDS, mobilisation advance and its recovery %).
+  Validation now matches packages: money is `moneyString`, percentages 0–100 with ≤3 decimals, so
+  NaN and negatives cannot reach the database; the target end date may not precede the start date
+  and the advance may not fall below what bills have recovered (inline field errors); the update is
+  scoped to `deleted_at is null` and zero rows is `NOT_FOUND`. Rates are snapshotted onto bills, so a
+  change applies to the next bill only. **This is not a change to the tax arithmetic** — the values a
+  project carries were always per-project columns; this only gives them a screen. Which values are
+  correct for a real contract is still CA-gated (HLD §8.4).
+- **Project status (APX-11).** Through `rpc_set_project_status` only (security definer, admin only,
+  row-locked, one `audit_log` `transition` row per move). Legal moves: Planning → Active; Active →
+  On Hold or Completed; On Hold → Active or Completed; Completed → Archived; and two **reopens**,
+  Completed → Active and Archived → Completed, which require a reason (stored in the audit row). A
+  signed-in user can no longer change `projects.status` with a plain update
+  (`trg_projects_status_via_rpc`); the `project.archive` job (service_role) is unaffected.
+  `completed_at` is now kept when a project is archived (it used to be cleared); un-archiving to
+  Completed restamps it, restarting the 12-month clock.
+- **Site team (APX-12).** A *Site team* card on the project dashboard (admins) lists the project's
+  Site Supervisors, with Remove and Add site supervisor, and *Projects* on a Site Supervisor's row of
+  the Users page lists, removes and adds projects (as it already did for clients, now with Add too).
+  The removal rule from PRs #89/#90 is generalised (`memberRemovalRefusal`): a client **or** a site
+  supervisor may be removed from a project, including their last one (they can sign in and see no
+  project); an admin is an implicit member and has no row; a card that manages one role refuses the
+  other (`expectedRole`). No migration: `pm_insert` / `pm_delete` already allow an admin.
+- **Read-only projects (APX-41).** Enforced by one BEFORE INSERT OR UPDATE trigger,
+  `trg_00_project_writable`, on stock_requests, approvals, daily_updates, tasks, phases, packages and
+  attachments, so it holds for the web, the mobile API and every RPC. **Archived:** every write is
+  refused (`PROJECT_ARCHIVED`) except what billing and payments need — a phase update that only
+  moves `billing_status`, the packages `progress_pct` rollup cache, and bill attachments. **Completed:**
+  only a *new* stock request or daily update is refused (`PROJECT_COMPLETED`); billing, payments,
+  delivering what was ordered, a client deciding an approval and correcting a task all carry on.
+  Both codes are mapped in `lib/safe-action.ts` (and to 409 on the mobile routes that create those
+  rows). The app disables the matching buttons and shows a banner on every page of the project.
+  Not covered by this entry (owned elsewhere): excluding archived projects from notifications.
+- **Setup checklist (APX-70).** A card on the dashboard for admins while anything is missing and the
+  project is not completed/archived: packages with budgets → phases in every package → a schedule in
+  every package → a site supervisor → client access → status Active. Each item links to where it is
+  done; the card disappears when all are done.
+
+**Migrations (apply with `pnpm db:push` after merge):** `20261124300000_project_status_rpc.sql`,
+`20261124300001_project_read_only_guards.sql`. pgTAP: `supabase/tests/15_project_status_and_read_only_test.sql`.
 
 ---
 

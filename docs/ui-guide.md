@@ -103,8 +103,17 @@ Top to bottom:
 - A card per project: name, client, status badge, a Progress bar, a Budget-used bar (Admin only), footer line (`{n} packages · {value} allocated/contract · Started {date}`). Click anywhere on the card to open that project.
 
 ### 6.2 Project Dashboard (`/projects/:id`)
-- Heading = project name; subtitle = client · location · start date.
-- Buttons: **+ Add Package** (Admin), **+ Stock Request** (not Client).
+- Heading = project name and its status badge; subtitle = client · location · start date.
+- Buttons: **Edit Project** (Admin) → *Edit Project* dialog · **Change Status** (Admin) → *Change status*
+  dialog · **+ Add Package** (Admin) · **+ Stock Request** (not Client). On a **completed** project
+  + Stock Request is disabled; on an **archived** one + Add Package is disabled too (see §11, read-only
+  projects). The reason is the button's title and a banner at the top of every page of the project.
+- **Set up this project** card (Admin, 2026-11-24) — only while something is missing and the project is
+  not completed or archived. Six items in order: Packages with budgets · Phases in every package · A
+  schedule in every package · A site supervisor · Client access · Status set to Active. Each open item
+  says what is missing and links to where to fix it (Add Package, the first package's Budget or
+  Schedule tab, the Site team or Client access card, Change status). The card disappears when all six
+  are done.
 - Stat row, role-dependent:
   - **Admin (5 stats):** Allocated Budget, Internal Budget, Committed, Remaining, Progress
   - **Client (4 stats):** Contract Value, Work Progress, Bills Raised, Awaiting Your Approval
@@ -113,6 +122,12 @@ Top to bottom:
 - **Pending Approvals** card — only if any exist *and* role isn't Site; "View all" jumps to Approvals.
 - **Pending Requests** card — only if any exist *and* role isn't Client; "View all" jumps to Stock Requests.
 - **Latest Updates** card — last 3 daily updates, "View all" jumps to Daily Updates.
+- **Site team** card (Admin, 2026-11-24) — the Site Supervisors who can see this project, each with
+  **Remove** (this project only; confirm step, and a note when it is their only project), and
+  **Add site supervisor** to put an existing supervisor on it. A supervisor sees only projects they are
+  on, so a new one sees nothing until added here or from the Users page.
+- **Client access** card (Admin) — the project's client logins, **Remove**, **Add existing client** (D51).
+- **Rate visibility** card (Admin, D55).
 
 ### 6.3 Packages list (`/projects/:id/packages`)
 - Heading + "**+ Add Package**" (Admin) → *Add Package* dialog.
@@ -134,10 +149,11 @@ Every row is clickable → opens that package's detail page.
 
 ### 6.5 Package detail (`/projects/:id/packages/:moduleId`)
 - Heading = `{no} {package name}`; subtitle = lead · status · progress %.
-- Buttons: **Edit** (Admin) → *Edit Package* dialog · **+ Add Task** (Schedule tab, not Client) · **+ Post Update** (Updates tab, not Client) · **+ Stock Request** (not Client).
+- Buttons: **Edit** (Admin) → *Edit Package* dialog · **+ Add Task** (Schedule tab, not Client) · **+ Post Update** (Updates tab, not Client) · **+ Stock Request** (not Client). Disabled on a read-only project as in §6.2.
 - Stat row: same Admin/Client shape as §6.2 but scoped to this one package. **Site sees no stat row here** — straight to the tabs.
 - **Tabs:** Budget *(labeled "Phases" for non-Admin)* · Schedule · Updates · Stock Requests *(hidden for Client)* · Billing *(Admin only)*.
-  - **Budget/Phases tab:** phase-level table — Allocated/Internal/Committed/Remaining/Used (Admin), Contract Value (Client), Requests count (Site).
+  - **Budget/Phases tab:** phase-level table — Allocated/Internal/Committed/Remaining/Used (Admin), Contract Value (Client), Requests count (Site). Admin also gets **+ Add Phase** above the table and **Edit** on each row (→ *Add Phase* / *Edit Phase*, 2026-11-24); a phase already on a bill shows a *Billed* badge and its Allocated is locked. Not on an archived project.
+  - **Add Task** on a package with no phases says so; an Admin gets **Create phase** there, which opens *Add Phase* and returns to *Add Task* afterwards. A Site Supervisor is told to ask an admin.
   - **Schedule tab:** the Gantt chart for this package (§7).
   - **Updates tab:** daily updates filtered to this package.
   - **Stock Requests tab:** requests filtered to this package.
@@ -184,6 +200,7 @@ See §8 — documented together since they're the same table, just scoped differ
 ### 6.12 Users (`/users`, Admin only)
 - "**+ Invite User**" button → *Invite User* dialog.
 - Table: avatar + name, contact, a role dropdown and a Deactivate/Reactivate button (D54). Both are real: changing a role or deactivating signs that person out everywhere, and deactivation bans the login until it is reversed. Deactivate is reversible — nothing is deleted. Owner and admin only, and an admin may act only on site/client users.
+- **Projects (n)** on each Client and Site Supervisor row (D51; Site rows added 2026-11-24): the projects that login can see, each with **Remove** (that project only, confirmed in place), and **Add to project** for one it cannot see yet. A Site Supervisor added here sees the project on next load.
 
 ---
 
@@ -250,10 +267,13 @@ Color is reserved entirely for status — everything else in the UI is grayscale
 - **Committed** (per package) = sum of `qty × rate` for every stock request in that package with status Approved, Ordered, *or* Delivered.
 - **Remaining** = Internal Budget − Committed.
 - **Progress** = task-duration-weighted average of `%complete` across a package's tasks (a 3-week task counts 3× a 1-week task).
-- **Billing constants:** GST **18%**, Retention **5%**, Material-at-site billable at **75%** of its client value.
+- **Billing constants:** per project, defaulting to GST **18%**, Retention **5%**, Material-at-site billable at **75%** of its client value, TDS **0%**. An Admin changes them (and the mobilisation advance and its recovery %) in *Edit Project*; they are copied onto each bill when it is created, so a change never restates an existing bill.
 - A **phase becomes billable** when every one of its tasks hits 100%, *or* it's been marked complete manually (for phases with no linked tasks), *or* — for materials — a stock request reaches Delivered.
 - **Bill math**, top to bottom: Gross (sum of selected line values) → minus **recovery** (material already billed for a phase now being billed as a completed milestone, to avoid double-billing) → **Taxable value** → minus 5% retention → plus 18% GST → **Net Payable**.
 - **Cost→client factor**: `alloc ÷ internal` for a phase (or module, if the phase has no internal figure) — this is what converts a material's internal cost into its client-billable value.
+- **Project status** (2026-11-24): Planning → Active → On Hold / Completed → Archived, via *Change status* (Admin only, audited). Reopening (Completed → Active, Archived → Completed) needs a reason. Completing stamps the completion date the 12-month auto-archive reads.
+- **Read-only projects** (2026-11-24): an **archived** project refuses every change — packages, phases, tasks, stock requests, approvals, daily updates, attachments — except billing and payments. A **completed** project refuses only *new* stock requests and daily updates; billing, payments, deliveries, approvals and task corrections carry on. Enforced in the database; the buttons are disabled to match.
+- **A phase on a bill keeps its Allocated amount** (2026-11-24): once Billed or Paid it cannot change; correct with a credit note or an adjustment on the next bill.
 
 ---
 
@@ -312,6 +332,20 @@ stateDiagram-v2
     Paid --> [*]
 ```
 
+**Project** (2026-11-24 — *Change status*, Admin only, every move audited)
+```mermaid
+stateDiagram-v2
+    [*] --> Planning: Admin creates
+    Planning --> Active
+    Active --> OnHold
+    OnHold --> Active
+    Active --> Completed
+    OnHold --> Completed
+    Completed --> Archived: Admin, or automatically 12 months later
+    Completed --> Active: reopen (reason required)
+    Archived --> Completed: reopen (reason required)
+```
+
 ---
 
 ## 14. User flows
@@ -320,7 +354,10 @@ stateDiagram-v2
 ```mermaid
 flowchart TD
     A[Create project] --> B[Add packages with allocated/internal budgets]
-    B --> C[Add tasks to a package's schedule]
+    B --> B2[Add phases to each package]
+    B2 --> C[Add tasks to a package's schedule]
+    C --> C2[Site team: add a supervisor · Client access: add the client]
+    C2 --> C3[Change status to Active]
     C --> D{Site posts stock requests}
     D --> E[Admin approves request]
     E --> F[Admin marks Ordered]
@@ -408,6 +445,11 @@ flowchart TD
 | **New Project** | All Projects → "+ New Project" | Project Name, Client, Location, Start Date, Packages (comma-separated) | Creates project, navigates to its Dashboard |
 | **Add Package** | Dashboard/Packages → "+ Add Package" | Package Name, Allocated Budget, Internal Budget, Lead | Adds package to the project |
 | **Edit Package** | Package detail → "Edit" | Package Name, Allocated Budget, Internal Budget, Lead, Status | Updates the package |
+| **Edit Project** | Dashboard → "Edit Project" (Admin) | Project Name, Location, Target End Date, Contract Value, GST %, Retention %, Material at site billable %, TDS %, Mobilisation advance, Advance recovery % | Updates the project; rates apply to the next bill |
+| **Change status** | Dashboard → "Change Status" (Admin), or the setup checklist | New status (legal next steps only), Reason (when reopening) | Moves the status through the audited RPC |
+| **Add Phase** | Package → Budget tab → "+ Add Phase" (Admin), or Add Task → "Create phase" | Phase Name, Allocated, Internal | Adds a phase; from Add Task, returns to Add Task |
+| **Edit Phase** | Package → Budget tab → row "Edit" (Admin) | Phase Name, Allocated (locked once billed), Internal | Updates the phase; refuses if someone else saved first |
+| **Add site supervisor** | Dashboard → Site team → "Add site supervisor" (Admin) | Site Supervisor | Puts them on this project |
 | **Add Task** | Schedule tab / Schedule page → "+ Add Task" | Task, Phase, Owner, Start Week, Duration (weeks) | Adds a task to the Gantt |
 | **Task Detail** | Click a Gantt bar | Progress (slider), Start Week, Duration (weeks), Note | Updates the task |
 | **New Stock Request** | "+ Stock Request" (several pages) | Package, Phase, Material (with suggestions), Quantity + unit, Needed By, Rate *(Admin only)*, Note | Creates request, goes to Stock Requests |
