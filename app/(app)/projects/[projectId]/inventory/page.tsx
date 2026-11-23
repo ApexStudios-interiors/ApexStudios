@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, forbidden } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getProjectHeader } from "@/features/projects/queries";
 import { getProjectInventory } from "@/features/inventory/queries";
@@ -30,6 +30,10 @@ export default async function InventoryPage({
   if (!header) notFound();
 
   const effectiveRole = session.impersonating?.role ?? session.role;
+  // HLD §7.1: a client has no stock or inventory surface. The sidebar hides the
+  // link; this is the hard guard for a typed or shared URL, matching /stock
+  // (APX-68, found live — the page used to open with an empty table).
+  if (effectiveRole === "client") forbidden();
   const isAdmin = effectiveRole === "admin";
 
   const { items, stats } = await getProjectInventory(
