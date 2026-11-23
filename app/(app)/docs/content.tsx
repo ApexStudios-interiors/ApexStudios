@@ -442,8 +442,8 @@ export const FLOWS: Flow[] = [
       { badge: <Badge variant="secondary">Deactivated</Badge>, who: "An admin deactivates; reactivating is one click" },
     ],
     steps: [
-      "Staff: on the Users page click Add User, enter a username, name and role (Admin or Site Supervisor). The username and a generated password are shown once, each with a Copy button — share them now, because the password cannot be viewed again.",
-      "Clients: on the project's dashboard, use the Client access card. Create client login makes a new client account for this project (credentials shown once, as above); Add existing client gives a client who already has a login access to this project.",
+      "On the Users page click Add User, enter a username, name and role (Admin, Site Supervisor or Client). A Client also needs a Project — the one they will see. The username and a generated password are shown once, each with a Copy button — share them now, because the password cannot be viewed again.",
+      "To give an existing client access to another project, open that project's dashboard and use Add existing client on the Client access card.",
       "Reset password: on the Users page click Reset password next to the user. A new password is shown once, and the user is signed out everywhere. An admin may reset anyone but themselves — including another admin.",
       "Change your OWN password on the Users page, on your own row — the Change my password button sits where Reset sits for everyone else. It asks for your current password first, needs at least 12 characters, and signs you out of every other device while keeping you signed in here. Site supervisors and clients have no self-service route: they ask an admin to Reset theirs, and are given the new password once.",
       "Change role, deactivate or reactivate from the same row. An admin may act on anyone but themselves, and the last remaining admin cannot be demoted or deactivated — that would leave nobody able to administer the organisation. Deactivating signs the person out and blocks their login until it is reversed; nothing is deleted.",

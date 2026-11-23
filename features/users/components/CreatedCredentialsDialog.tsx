@@ -6,7 +6,7 @@ import { CopyField } from "./CopyField";
 export type CreatedCredentials = { username: string; email: string; password: string };
 
 /**
- * The second state of Add User and Create client login: the username and the
+ * The second state of Add User: the username and the
  * generated password, each with a Copy button, shown once. The password lives
  * only in the calling dialog's state; closing discards it and nothing can show
  * it again.

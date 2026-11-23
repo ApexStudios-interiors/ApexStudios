@@ -104,7 +104,8 @@ export const addUser = adminAction.inputSchema(addUserSchema).action(async ({ pa
 });
 
 /**
- * D51: a client login is created from a project, by owner/admin, and is a
+ * D51: a client login is created for a project (Add User, Client role), by
+ * owner/admin, and is a
  * member of that project from the moment it exists. The membership insert is
  * provisionAccount's `afterProfile` step, so a failure there (or an unknown or
  * other-org project) deletes the auth user rather than leaving a client

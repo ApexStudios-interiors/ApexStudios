@@ -36,7 +36,6 @@ export type DialogState =
   | { kind: "rejectBill"; billId: string; refNo: string }
   | { kind: "certifyBill"; billId: string; refNo: string }
   | { kind: "inviteUser"; projects: { id: string; name: string }[] }
-  | { kind: "createClientLogin"; projectId: string; projectName: string }
   | {
       kind: "grantClientAccess";
       projectId: string;

@@ -41,9 +41,9 @@ type CreateResult =
  *
  * Admin, Site Supervisor or Client (D51 amendment, 2026-11-23). Staff go
  * through `addUser`, whose schema stays staff-only. Client asks for a Project
- * and goes through `createClientLogin` — the same action as the project's
- * Client access card — so a client login still always has at least one
- * project it can see; the rule is enforced there, not here.
+ * and goes through `createClientLogin`, so a client login still always has at
+ * least one project it can see; the rule is enforced there, not here. This is
+ * the only place a new client login is created.
  *
  * Two states in one dialog: the form, then — once, after creation — the
  * username and generated password, each with a Copy button
