@@ -108,8 +108,12 @@ where sr.deleted_at is null
 comment on view public.v_stock_request_notify is
   'D68 (2026-11-24). Stock request status timestamps for v_notifications, admin/site only. Omits rate and billed_on_bill_id like v_stock_request_site; adds rejected_at (from stock_request_events) and the requester''s role.';
 
-revoke all on public.v_stock_request_notify from anon, public;
-grant select on public.v_stock_request_notify to authenticated;
+-- Not revoked from anon: v_notifications is security_invoker, so an anon read
+-- of IT checks anon's privilege on this view too, and a revoke turns anon's
+-- empty result into a permission error (caught by
+-- tests/integration/notifications.test.ts). anon gets zero rows here anyway:
+-- auth_role() is null for it, so the role guard above is false.
+grant select on public.v_stock_request_notify to anon, authenticated;
 
 -- ── v_notifications ─────────────────────────────────────────────────────────
 create or replace view public.v_notifications
