@@ -60,3 +60,49 @@ export async function getFailedJobs(req: PageRequest): Promise<Page<FailedJob>> 
   }));
   return { ...page, rows };
 }
+
+/** The backup jobs the admin-shell banner watches (APX-19). */
+export const BACKUP_JOB_NAMES = ["backup.nightly", "backup.verify"] as const;
+
+export type BackupAlert = {
+  name: (typeof BACKUP_JOB_NAMES)[number];
+  lastError: string | null;
+  finishedAt: string | null;
+};
+
+/**
+ * The most recent run of each backup job, and whether either is failed. The
+ * nightly backup is the only recovery point on this tier, and a failure used
+ * to be one row on the Failed Jobs page that nobody had reason to open; the
+ * admin shell now shows a banner while the LATEST run of either job is
+ * failed, and it clears itself the next time that job succeeds. Admin-only by
+ * RLS (`jobs_select_admin`) as well as by the shell, which calls this for an
+ * admin only. Bounded: a handful of rows, newest first.
+ */
+export async function getBackupAlert(): Promise<BackupAlert | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("jobs")
+    .select("name, status, last_error, finished_at, created_at")
+    .in("name", [...BACKUP_JOB_NAMES])
+    .order("created_at", { ascending: false })
+    .limit(10);
+  if (error) throw new Error(error.message);
+  return latestBackupFailure(data);
+}
+
+/** Pure, for tests: the failed one among each job's newest row, if any. */
+export function latestBackupFailure(
+  rows: readonly { name: string; status: string; last_error: string | null; finished_at: string | null }[]
+): BackupAlert | null {
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (seen.has(row.name)) continue; // only each job's newest row counts
+    seen.add(row.name);
+    const name = BACKUP_JOB_NAMES.find((n) => n === row.name);
+    if (name && row.status === "failed") {
+      return { name, lastError: row.last_error, finishedAt: row.finished_at };
+    }
+  }
+  return null;
+}
