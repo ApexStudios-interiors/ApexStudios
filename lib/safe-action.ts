@@ -37,6 +37,9 @@ const ERROR_MESSAGES = {
   PROJECT_ARCHIVED: "This project is archived, so it is read-only.",
   PROJECT_COMPLETED: "This project is completed, so no new stock requests or daily updates can be added.",
   PHASE_BILLED: "This phase is already on a bill, so its allocated amount can no longer change.",
+  // 20261124400002 (APX-14, APX-44).
+  RATE_REQUIRED: "Enter a rate (₹ per unit) of 0 or more.",
+  ALREADY_SUBMITTED: "This was already submitted. Refresh to see it.",
 } as const;
 
 /** Postgres RAISE EXCEPTION messages the RPCs use are prefixed with their code

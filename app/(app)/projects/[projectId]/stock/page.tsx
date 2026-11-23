@@ -16,7 +16,14 @@ import { Icon } from "@/components/ui/Icon";
 import { projectBase } from "@/lib/routing/current";
 import { projectWriteRefusal } from "@/features/projects/service";
 
-const VALID_STATUSES: StockRequestStatus[] = ["pending", "approved", "ordered", "delivered", "rejected"];
+const VALID_STATUSES: StockRequestStatus[] = [
+  "pending",
+  "approved",
+  "ordered",
+  "delivered",
+  "rejected",
+  "cancelled",
+];
 
 /**
  * build/07-stock-inventory-notifications.md §2.5 step 1. Status tabs and the

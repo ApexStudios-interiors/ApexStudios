@@ -1076,6 +1076,10 @@ export type Database = {
           updated_by: string | null;
           deleted_at: string | null;
           created_by: string | null;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          cancelled_reason: string | null;
+          split_from_id: string | null;
         };
         Insert: {
           id?: string;
@@ -1105,6 +1109,10 @@ export type Database = {
           updated_by?: string | null;
           deleted_at?: string | null;
           created_by?: string | null;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          cancelled_reason?: string | null;
+          split_from_id?: string | null;
         };
         Update: {
           id?: string;
@@ -1134,6 +1142,10 @@ export type Database = {
           updated_by?: string | null;
           deleted_at?: string | null;
           created_by?: string | null;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          cancelled_reason?: string | null;
+          split_from_id?: string | null;
         };
         Relationships: [];
       };
@@ -1309,6 +1321,7 @@ export type Database = {
           reorder_level: number | null;
           location: string | null;
           stock_status: string | null;
+          updated_at: string | null;
         };
         Relationships: [];
       };
@@ -1448,6 +1461,9 @@ export type Database = {
           delivered_at: string | null;
           rejected_reason: string | null;
           created_at: string | null;
+          cancelled_at: string | null;
+          cancelled_reason: string | null;
+          split_from_id: string | null;
         };
         Relationships: [];
       };
@@ -1616,6 +1632,7 @@ export type Database = {
           p_rate?: number;
           p_needed_by?: string;
           p_note?: string;
+          p_id?: string;
         };
         Returns: unknown;
       };
@@ -1746,8 +1763,48 @@ export type Database = {
           p_request_id: string;
           p_to_status: Database["public"]["Enums"]["stock_request_status"];
           p_note?: string;
+          p_rate?: number;
+          p_delivered_qty?: number;
         };
         Returns: unknown;
+      };
+      rpc_edit_stock_request: {
+        Args: {
+          p_request_id: string;
+          p_qty: number;
+          p_needed_by?: string;
+          p_note?: string;
+        };
+        Returns: Json;
+      };
+      rpc_set_stock_request_rate: {
+        Args: {
+          p_request_id: string;
+          p_rate: number;
+        };
+        Returns: Json;
+      };
+      rpc_set_inventory_reorder_level: {
+        Args: {
+          p_item_id: string;
+          p_reorder_level: number;
+        };
+        Returns: Json;
+      };
+      rpc_record_stock_usage: {
+        Args: {
+          p_item_id: string;
+          p_package_id: string;
+          p_qty: number;
+          p_note?: string;
+        };
+        Returns: Json;
+      };
+      rpc_withdraw_approval: {
+        Args: {
+          p_approval_id: string;
+        };
+        Returns: Json;
       };
       trg_projects_completed_at: {
         Args: Record<string, never>;
@@ -1778,7 +1835,7 @@ export type Database = {
       package_status: "not_started" | "design" | "in_progress" | "completed";
       phase_billing_status: "unresolved" | "billable" | "billed" | "paid";
       project_status: "planning" | "active" | "on_hold" | "completed" | "archived";
-      stock_request_status: "pending" | "approved" | "ordered" | "delivered" | "rejected";
+      stock_request_status: "pending" | "approved" | "ordered" | "delivered" | "rejected" | "cancelled";
     };
   };
 };

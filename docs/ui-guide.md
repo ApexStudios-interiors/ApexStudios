@@ -175,15 +175,22 @@ See §8 — documented together since they're the same table, just scoped differ
 
 ### 6.9 Stock Requests (`/projects/:id/stock`)
 - "**+ New Request**" button → *New Stock Request* dialog.
-- Status filter tabs: All / Pending / Approved / Ordered / Delivered / Rejected. Package filter dropdown.
-- Columns: Request (id, date, requester) · Material (item + package) · Qty · Value *(Admin only)* · Needed By · Status · Actions.
-- Actions depend on current status: **Pending** → Approve/Reject (Admin only) · **Approved** → Mark Ordered (Admin) · **Ordered** → Mark Delivered (Admin or Site).
+- Status filter tabs: All / Pending / Approved / Ordered / Delivered / Rejected / Cancelled. Package filter dropdown.
+- Columns: Request (id, date, requester) · Material (item + package) · Qty · Value *(Admin only)* · Needed By · Status (with the rejection or cancellation reason under the badge, and "Remainder of a part delivery" on a split-off request) · Actions.
+- Actions depend on current status (D68, 2026-11-24):
+  - **Pending** → **Approve** (Admin) opens a dialog that **requires the rate** (₹ per unit, 0 allowed) and shows the value it commits · **Reject** (Admin, reason required) · **Edit** (quantity, Needed By, note — the requester or an Admin) · **Cancel** (only the person who raised it; no reason needed).
+  - **Approved** → **Mark Ordered** (Admin, one click) · **Rate** (Admin: set or correct the rate) · **Cancel** (Admin, reason required).
+  - **Ordered** → **Mark Delivered** (Admin or Site) opens a confirmation showing the quantity and unit; the delivered quantity can be lowered for a **part delivery**, and the rest stays Ordered as a new linked request with its own number · **Rate** and **Cancel** (Admin, as above).
+  - **Delivered / Rejected / Cancelled** → none; they are final.
+- Each row has its own pending state; a failed action shows its message (a toast, or inside the dialog) and refreshes the row to its real status.
+- Submitting the New Stock Request form twice (a retry after a lost connection) does not raise a second request: the form says "Request already submitted".
+- Typing a material that is already in this project's inventory (same name, ignoring case and spacing, and the same unit) links the request to that item, and the form says so; its delivery adds to that item instead of creating a new one.
 
 ### 6.10 Approvals (`/projects/:id/approvals`)
 - "**+ Request Approval**" button (not Client) → *Request Approval* dialog.
 - Status filter tabs: Pending / Approved / Rejected / All.
 - Columns: Ref · Item (with package, note, up to 4 sample-photo thumbnails) · Type badge · Requested · Needed By · Status (+ decided date once resolved) · Actions.
-- Actions: **Client**, when Pending, gets Approve/Reject buttons — this *is* the client sign-off. Everyone else gets an "Add photos" button → *Add Sample Photos* dialog.
+- Actions: **Client**, when Pending, gets Approve/Reject buttons — this *is* the client sign-off. Everyone else gets an "Add photos" button → *Add Sample Photos* dialog, and the person who requested a still-pending approval also gets **Withdraw** (it leaves the client's list and bell; D68).
 
 ### 6.11 Billing (Admin/Site) / Bills (Client) (`/projects/:id/billing`)
 **Admin view:**
@@ -217,7 +224,14 @@ Two views over the same `InventoryItem` records (item, category, quantity on han
 - **Per-project** (`/projects/:id/inventory`) — one project's stock.
 - **Business-wide** (`/inventory`, sidebar-tagged **ALL**) — every project's stock in one table with a Project column and a project filter, for a studio-wide view.
 
-Both show the same stat row (Total Items, Total Value, Low Stock count, Critical count) and the same table (Item + category, On Hand, Reorder Level, Value, Location, Status).
+Both show the same stat row (Total Items, Total Value, Low Stock count, Critical count) and the same table (Item + category, On Hand, Reorder Level, Value, Location, Status, actions).
+
+**Row actions (D68, 2026-11-24):**
+- **Record usage** *(Admin, Site — a project's own stock with something on hand)*: package, quantity used (at most what is on hand), optional note. Takes the quantity off the stock as an "out" movement.
+- **Adjust** *(Admin)*: the new quantity after a physical count, with a reason (PR #81's dialog). Also how an opening balance is entered — a new item always starts at 0.
+- **Minimum** *(Admin)*: the item's minimum stock; previews the status it will read as.
+
+Unit cost is never readable by a Site Supervisor — not on screen and not through the API.
 
 **Status is derived, not stored:**
 
@@ -307,9 +321,13 @@ stateDiagram-v2
     Pending --> Approved: Admin approves
     Pending --> Rejected: Admin rejects
     Approved --> Ordered: Admin marks ordered
-    Ordered --> Delivered: Admin or Site marks delivered
+    Ordered --> Delivered: Admin or Site marks delivered (part delivery splits off the rest as a new Ordered request)
+    Pending --> Cancelled: the requester cancels
+    Approved --> Cancelled: Admin cancels, with a reason
+    Ordered --> Cancelled: Admin cancels, with a reason
     Delivered --> [*]
     Rejected --> [*]
+    Cancelled --> [*]
 ```
 
 **Approval** (client sign-off on samples/makes/drawings)
@@ -454,8 +472,8 @@ flowchart TD
 | **Task Detail** | Click a Gantt bar | Progress (slider), Start Week, Duration (weeks), Note | Updates the task |
 | **New Stock Request** | "+ Stock Request" (several pages) | Package, Phase, Material (with suggestions), Quantity + unit, Needed By, Rate *(Admin only)*, Note | Creates request, goes to Stock Requests |
 | **Request Approval** | Approvals → "+ Request Approval" | Package, Phase, Type, Needed By, Item, Note, Sample Photos | Creates approval, goes to Approvals |
-| **Add Sample Photos** | Approvals table → "Add photos" | Photos | Appends photo count to that approval |
-| **Post Daily Update** | "+ Post Update" (several pages) | Package, Date, Work Done, Photos | Creates update, goes to Daily Updates |
+| **Add Sample Photos** | Approvals table → "Add photos" | Photos (only as many as the approval has room for, of 4) | Attaches the photos. Upload waits for every photo to finish; **Cancel removes the photos it uploaded** |
+| **Post Daily Update** | "+ Post Update" (several pages) | Package (**no default** from the project page — a choice is required; a package page pre-selects its own), Date, Work Done, Photos | Creates update, goes to Daily Updates. Post waits for photos still uploading |
 | **Upload Bill Copy** | Billing → "Upload" | Bill PDF / image (multi-file) | Attaches file(s) to the bill |
 | **View Bill** | Billing → "View" | *(read-only)* | Download PDF/Excel (toast only, demo) |
 | **Invite User** | Users → "+ Invite User" | Name, Email or Phone, Role | Adds the person to the team table |

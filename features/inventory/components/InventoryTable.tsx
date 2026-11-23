@@ -5,7 +5,8 @@ import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, sub } from "@/components/ui/table";
 import { Empty } from "@/components/ui/Empty";
 import { MinimumStockInfo } from "@/features/inventory/components/MinimumStockInfo";
-import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
+import { InventoryRowActions } from "@/features/inventory/components/InventoryRowActions";
+import type { Role } from "@/lib/rbac/roles";
 
 /**
  * build/07-stock-inventory-notifications.md §2.5 step 5: already props-driven
@@ -20,15 +21,17 @@ import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
  * column is simply not rendered at all for that role, rather than rendered
  * as "–" (AGENTS.md: never fetch or expose the column in the first place).
  *
- * `isAdmin` also adds the last column's Adjust button (AdjustInventoryDialog)
- * — the same admin-only write the mobile app offers; the action and
- * rpc_adjust_inventory refuse anyone else regardless.
+ * `role` adds the last column, InventoryRowActions: Record usage (admin and
+ * site), and for an admin Adjust (AdjustInventoryDialog, #81 — the same
+ * admin-only write the mobile app offers) and Minimum stock. Every action and
+ * RPC refuses anyone else regardless.
  */
 export function InventoryTable({
   items,
   isAdmin,
   showProject = false,
   empty = "No inventory recorded yet.",
+  role,
 }: {
   items: InventoryItemDTO[];
   isAdmin: boolean;
@@ -36,7 +39,12 @@ export function InventoryTable({
   /** The empty-state text. A search that matches nothing is not the same
    *  situation as an inventory with nothing in it, and should not say so. */
   empty?: string;
+  /** The EFFECTIVE role. When given (admin or site), each row gets its
+   *  actions: Record usage, and for an admin Adjust and Minimum stock
+   *  (APX-15, APX-69). Omitted, the table is read-only as before. */
+  role?: Role;
 }) {
+  const showActions = role === "admin" || role === "site";
   return (
     <TableWrap>
       <thead>
@@ -51,7 +59,7 @@ export function InventoryTable({
           {isAdmin && <th className={thNum}>Value</th>}
           <th className={th}>Location</th>
           <th className={th}>Status</th>
-          {isAdmin && (
+          {showActions && (
             <th className={th}>
               <span className="sr-only">Actions</span>
             </th>
@@ -88,18 +96,9 @@ export function InventoryTable({
               <td className={td}>
                 <StockLevelBadge status={i.status} />
               </td>
-              {isAdmin && (
-                <td className={td + " text-right"}>
-                  <OpenDialogButton
-                    size="sm"
-                    dialog={{
-                      kind: "adjustInventory",
-                      item: { id: i.id, name: i.name, unit: i.unit, qtyOnHand: i.qtyOnHand },
-                    }}
-                    aria-label={`Adjust ${i.name}`}
-                  >
-                    Adjust
-                  </OpenDialogButton>
+              {showActions && role && (
+                <td className={td}>
+                  <InventoryRowActions item={i} role={role} />
                 </td>
               )}
             </tr>
@@ -111,8 +110,11 @@ export function InventoryTable({
                 via review: this stayed keyed on `showProject` alone after
                 `isAdmin` was added, under-spanning the empty state for a
                 non-admin business-wide view and over-spanning it for a
-                non-admin project view. Admin also has the Adjust column. */}
-            <td className={td} colSpan={5 + (showProject ? 1 : 0) + (isAdmin ? 2 : 0)}>
+                non-admin project view. */}
+            <td
+              className={td}
+              colSpan={5 + (showProject ? 1 : 0) + (isAdmin ? 1 : 0) + (showActions ? 1 : 0)}
+            >
               <Empty>{empty}</Empty>
             </td>
           </tr>

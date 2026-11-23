@@ -2263,7 +2263,7 @@ still behind `BILLING_ENABLED`.
 4. Bill date = first submission date, and the billing period: confirm against the GST invoice-date rule
    and the return period.
 5. The existing D4 question (MAS as secured advance vs sale) still governs all of the above.
-### 2026-11-24 — Project setup screens: phases, project edit and status, site team, read-only projects
+### D70 — Project setup screens: phases, project edit and status, site team, read-only projects
 
 **Question:** The audit (APX-10, 11, 12, 41, 70) found that a project created in the app could not be
 run: no screen made phases, nothing edited a project or changed its status, a new Site Supervisor
@@ -2318,6 +2318,57 @@ could not be put on any project, and finished projects stayed fully editable.
 
 **Migrations (apply with `pnpm db:push` after merge):** `20261124300000_project_status_rpc.sql`,
 `20261124300001_project_read_only_guards.sql`. pgTAP: `supabase/tests/15_project_status_and_read_only_test.sql`.
+### D71 — Stock and inventory corrections: rate on approval, cancel and edit, usage and part deliveries, one item per material
+
+**Question:** The 2026-11 audit found the stock workflow could not be corrected and inventory could
+not be trusted: a supervisor could read `unit_cost` (APX-03), Site-raised requests reached bills at
+₹0 (APX-14), every delivery created a new inventory item and nothing set minimum stock (APX-15),
+nothing could be cancelled or edited (APX-42), a retried submit raised a second request (APX-44),
+stock only ever went up and deliveries always booked the full quantity (APX-69). What are the rules?
+**Answered:** 2026-11-24 by Voola
+**Answer:** Migrations `20261124400001` and `20261124400002`:
+
+- **`unit_cost` is withheld by column privilege (APX-03).** `authenticated` has SELECT on every
+  `inventory_items` column except `unit_cost`; rows stay visible to admin and site as before
+  (`inventory_select`), so names and quantities — and the bell's low-stock branch — keep working. An
+  admin reads cost through `v_inventory_status` (now a definer view filtered to `is_admin()` and the
+  org) and `rpc_inventory_stats` (now security definer, same scoping in its body).
+  `stock_movements` is admin-only by row policy. A **new** `inventory_items` column must be granted
+  by its own migration — deliberately, so a money column can never leak by default.
+- **A rate is required to approve (APX-14).** Approve opens a dialog; `rpc_transition_stock_request`
+  takes an admin-only `p_rate` on pending → approved and refuses a rate-less approval
+  (`RATE_REQUIRED`). An admin may set or correct the rate up to delivery with
+  `rpc_set_stock_request_rate` (audited); from delivery it is fixed. The mobile transition route
+  accepts `rate`; an app build that does not send one gets a 422 when approving a rate-less request.
+- **One inventory item per material (APX-15).** The New Request form resolves a typed material to
+  this project's existing item (same normalised name and unit). Delivery of an unlinked request
+  reuses the project's oldest live item with the same normalised name and unit before creating one,
+  under an advisory lock. The supporting index is **not unique**: production already holds duplicate
+  items from before this rule, and they are left as they are (merging them is two compensating
+  movements per row — Adjust). An item created at ₹0 takes the first real delivered rate.
+  `inventory_sku_uq` becomes a partial unique index over rows **with** a SKU, so a project can hold
+  more than one SKU-less item. Minimum stock is set by `rpc_set_inventory_reorder_level` (admin,
+  audited). The web Adjust dialog is PR #81's.
+- **Opening balances (APX-34).** A direct `inventory_items` insert must have `qty_on_hand = 0`; the
+  balance is then entered with Adjust, so the ledger explains every unit.
+- **Cancel and edit (APX-42).** New terminal status `cancelled`. Pending → cancelled by the person
+  who raised it (no reason needed); approved/ordered → cancelled by an admin with a required reason,
+  kept in `cancelled_reason`. `rpc_edit_stock_request` changes quantity, needed-by and note while
+  pending, for the requester or an admin. A pending **approval** may be withdrawn by its requester
+  (`rpc_withdraw_approval`, a soft delete — it leaves the client's list and bell).
+- **Retries (APX-44).** The form sends a client-generated id; a second submit with the same id is
+  `ALREADY_SUBMITTED` and the form says "already submitted".
+- **Usage and part deliveries (APX-69).** "Record usage" (admin or site) writes an `out` movement
+  against a package (`ref_type 'usage'`), never more than on hand. Mark Delivered takes an optional
+  delivered quantity: **less than ordered splits the request** — this one is delivered for what
+  arrived, and the remainder becomes a new request, status Ordered, with its own number,
+  `split_from_id` pointing back, and the same rate, package and approval. Chosen over a
+  `delivered_qty` column because every reader (committed budget, Billable Now, MAS, the bell, mobile)
+  already reads `qty` with `status` and stays correct unchanged.
+
+The low-stock rule everywhere is the page's: **Critical** at `qty_on_hand = 0`, **Low** when
+`qty_on_hand < reorder_level`; an item is "low stock" for the bell when either holds. Purchase
+orders and GRNs remain out of scope (HLD §2.2).
 
 ---
 

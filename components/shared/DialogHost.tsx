@@ -61,6 +61,7 @@ export function DialogHost() {
           approvalId={dialog.approvalId}
           projectId={dialog.projectId}
           item={dialog.item}
+          existingPhotos={dialog.existingPhotos}
         />
       );
     case "decideApproval":

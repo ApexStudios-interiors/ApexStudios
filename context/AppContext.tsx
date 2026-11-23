@@ -26,7 +26,15 @@ export type DialogState =
         item: string;
       };
     }
-  | { kind: "approvalPhotos"; approvalId: string; projectId: string; item: string }
+  | {
+      kind: "approvalPhotos";
+      approvalId: string;
+      projectId: string;
+      item: string;
+      /** Photos already on the approval, so the uploader offers only what is
+       *  left of MAX_PHOTOS_PER_ENTITY (APX-46). Optional: 0 when omitted. */
+      existingPhotos?: number;
+    }
   | { kind: "decideApproval"; approvalId: string; decision: "approved" | "rejected"; item: string }
   | { kind: "postUpdate"; projectId: string; moduleId?: string }
   | { kind: "editUpdate"; updateId: string; body: string }

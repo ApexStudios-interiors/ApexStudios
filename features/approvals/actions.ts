@@ -5,7 +5,12 @@ import { revalidatePath, updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { siteAction, clientAction } from "@/lib/safe-action";
 import { requireSession } from "@/lib/auth/session";
-import { addSamplePhotosSchema, decideApprovalSchema, requestApprovalSchema } from "./schema";
+import {
+  addSamplePhotosSchema,
+  decideApprovalSchema,
+  requestApprovalSchema,
+  withdrawApprovalSchema,
+} from "./schema";
 import { requestApprovalFor } from "./create";
 import { approvalForPhotos } from "./photos";
 
@@ -84,6 +89,25 @@ export const decideApproval = clientAction
     updateTag(`project:${row.project_id}`);
     revalidatePath(`/projects/${row.project_id}`, "layout");
     return { id: row.id, status: row.status };
+  });
+
+/**
+ * APX-42: the person who requested an approval withdraws it while it is still
+ * pending. rpc_withdraw_approval decides everything (requester only, pending
+ * only, under the row lock a client decision also takes) and soft-deletes it.
+ */
+export const withdrawApproval = siteAction
+  .inputSchema(withdrawApprovalSchema)
+  .action(async ({ parsedInput }) => {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("rpc_withdraw_approval", {
+      p_approval_id: parsedInput.approvalId,
+    });
+    if (error) throw new Error(error.message);
+    const row = data as { id: string; project_id: string };
+    updateTag(`project:${row.project_id}`);
+    revalidatePath(`/projects/${row.project_id}`, "layout");
+    return { id: row.id };
   });
 
 /** `NewApprovalDialog`'s Package field — `v_package_site`, same reason

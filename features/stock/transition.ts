@@ -32,6 +32,9 @@ export async function transitionStockRequestFor(
     p_request_id: input.requestId,
     p_to_status: input.toStatus,
     p_note: input.note,
+    // APX-14 / APX-69 — the RPC decides who may send these and when.
+    p_rate: input.rate,
+    p_delivered_qty: input.deliveredQty,
   });
   if (error) throw new Error(error.message);
   // A `returns public.stock_requests` RPC is typed `unknown` by the generator
