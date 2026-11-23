@@ -77,8 +77,54 @@ describe("checkProductionTarget", () => {
   it("fails closed when the production ref is not configured and nobody is watching", () => {
     vi.stubEnv("SUPABASE_PROD_PROJECT_REF", "");
     vi.stubEnv("CI", "1");
-    const { refuse } = checkProductionTarget(["postgresql://postgres:pw@localhost:5432/x"], "the seed");
+    const { refuse } = checkProductionTarget(["postgresql://postgres:pw@db.example.com:5432/x"], "the seed");
     expect(refuse).toContain("SUPABASE_PROD_PROJECT_REF is not set");
+  });
+
+  it("allows a throwaway local stack with no production ref configured (CI's database job)", () => {
+    vi.stubEnv("SUPABASE_PROD_PROJECT_REF", "");
+    vi.stubEnv("CI", "1");
+    const result = checkProductionTarget(
+      ["postgresql://postgres:postgres@127.0.0.1:54322/postgres", "http://127.0.0.1:54321"],
+      "the integration tests"
+    );
+    expect(result).toEqual({ refuse: null, warn: null });
+    expect(
+      checkProductionTarget(["postgresql://postgres:pw@localhost:5432/x"], "the seed").refuse
+    ).toBeNull();
+  });
+
+  it("does not treat a local database paired with a remote API URL as local", () => {
+    vi.stubEnv("SUPABASE_PROD_PROJECT_REF", "");
+    vi.stubEnv("CI", "1");
+    const { refuse } = checkProductionTarget(
+      ["postgresql://postgres:postgres@127.0.0.1:54322/postgres", `https://${PROD}.supabase.co`],
+      "the integration tests"
+    );
+    expect(refuse).toContain("SUPABASE_PROD_PROJECT_REF is not set");
+  });
+
+  it("does not treat a tunnel to a hosted pooler on localhost as local", () => {
+    vi.stubEnv("SUPABASE_PROD_PROJECT_REF", "");
+    vi.stubEnv("CI", "1");
+    expect(
+      checkProductionTarget([`postgresql://postgres.${PROD}:pw@127.0.0.1:6543/postgres`], "the seed").refuse
+    ).not.toBeNull();
+  });
+
+  it("does not treat a bare project ref as local", () => {
+    vi.stubEnv("SUPABASE_PROD_PROJECT_REF", "");
+    vi.stubEnv("CI", "1");
+    expect(checkProductionTarget([OTHER], "a database reset").refuse).not.toBeNull();
+  });
+
+  it("still refuses the production ref when it is configured, local stack or not", () => {
+    vi.stubEnv("SUPABASE_PROD_PROJECT_REF", PROD);
+    const { refuse } = checkProductionTarget(
+      ["postgresql://postgres:postgres@127.0.0.1:54322/postgres", `https://${PROD}.supabase.co`],
+      "the integration tests"
+    );
+    expect(refuse).toContain(`Refusing to run the integration tests against ${PROD}`);
   });
 
   it("treats a placeholder ref as no ref at all", () => {

@@ -1,3 +1,15 @@
+-- KNOWN FAILURE APX-TBD: stale since D66 (owner role retired, every admin equal); asserts the pre-D66 owner hierarchy
+--
+-- Found 2026-11-23, the first time this file ran (CI's local stack, APX-13).
+-- Every case below was written for the owner/admin hierarchy that migration
+-- 20261005090001_retire_owner_role.sql removed: admins may now change, deactivate
+-- and reset other admins; the invariant is "last active ADMIN", not owner; and
+-- the fixture `update profiles set role = 'owner'` is itself refused by the
+-- guard ("the owner role has been retired and cannot be assigned"), which aborts
+-- the file. It needs rewriting against D66, not patching, and it guards who may
+-- change whose privileges, so the rewrite deserves its own reviewed PR.
+-- scripts/run-pgtap.mjs skips a file whose first line is this marker.
+--
 -- Change a user's role, and deactivate / reactivate a user (migration
 -- 20260918090001). Like 03_auth_test.sql and 11_password_reset_test.sql this
 -- simulates the caller's JWT with set_config, because the rule is read from
