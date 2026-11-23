@@ -185,6 +185,20 @@ jobs:
             supabase/config.toml
           grep -nE '^(sign_in_sign_ups|token_refresh|token_verifications) =' supabase/config.toml
 
+      - name: Leave the custom access token hook unregistered, as in production
+        # Production has never registered public.custom_access_token_hook with
+        # GoTrue (docs/progress-tracker.md; it needs `supabase config push`),
+        # so auth_role()/auth_org() read profiles on each request. config.toml
+        # enables it, and on a local stack that registration takes effect —
+        # where the hook returns NULL (profiles forces RLS and has no policy
+        # for supabase_auth_admin) and every sign-in fails with "output claims
+        # do not conform to the expected schema". CI tests what production
+        # runs; the hook's own defect is a known issue, not a CI concern.
+        run: |
+          sed -i -E '/^\[auth\.hook\.custom_access_token\]/,/^enabled/ s/^enabled = true/enabled = false/' \
+            supabase/config.toml
+          grep -nA1 '^\[auth\.hook\.custom_access_token\]' supabase/config.toml
+
       - name: Start a throwaway Supabase (applies migrations + seed)
         # Only Postgres, GoTrue (auth), PostgREST and Kong (the API gateway)
         # are needed: the suites talk SQL to :54322 and supabase-js to :54321.
@@ -208,6 +222,16 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "DB  $DB_URL"
           echo "API $API_URL"
+
+      - name: TEMP diagnose hook
+        continue-on-error: true
+        run: |
+          docker exec -i supabase_db_apex-dashboard psql -U supabase_admin -d postgres <<'SQL'
+          select rolname, rolbypassrls from pg_roles where rolname in ('supabase_auth_admin','postgres');
+          set role supabase_auth_admin;
+          select count(*) as profiles_visible_to_auth_admin from public.profiles;
+          select public.custom_access_token_hook(jsonb_build_object('user_id','00000000-0000-4000-8000-0000000000d5','claims',jsonb_build_object('app_metadata','{}'::jsonb))) is null as hook_returns_null;
+          SQL
 
       - name: RLS and structural tests (pgTAP)
         run: pnpm test:rls
