@@ -597,6 +597,10 @@ export async function getCurrentBillPdfKey(session: Session, billId: string): Pr
     .select("r2_key")
     .eq("entity_type", "bill")
     .eq("entity_id", billId)
+    // APX-05: only the row the bill.pdf job itself recorded. A file name is
+    // whatever an uploader sent, so the name alone never identifies the
+    // invoice; `kind` cannot be set by a signed-in session (att_insert).
+    .eq("kind", "generated_invoice")
     .eq("mime_type", "application/pdf")
     .eq("file_name", billPdfFileName(bill.bill_no, bill.revision))
     .is("deleted_at", null)

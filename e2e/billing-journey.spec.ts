@@ -74,7 +74,12 @@ async function cleanupBill(
     await sql`delete from public.jobs where payload->>'billId' = ${billId}`;
     await sql`delete from public.attachments where entity_id = ${billId}`;
     await sql`delete from public.payments where bill_id = ${billId}`;
-    await sql`delete from public.bill_events where bill_id = ${billId}`;
+    // bill_events is append-only (20261124100008): removed only inside a
+    // transaction that turns the maintenance switch on.
+    await sql.begin(async (tx) => {
+      await tx`select set_config('apex.ledger_maintenance', 'on', true)`;
+      await tx`delete from public.bill_events where bill_id = ${billId}`;
+    });
     await sql`delete from public.bill_lines where bill_id = ${billId}`;
     await sql`delete from public.bills where id = ${billId}`;
   }

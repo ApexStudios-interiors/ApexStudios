@@ -1,7 +1,7 @@
 "use server";
 
 import "server-only";
-import { authedAction } from "@/lib/safe-action";
+import { previewAllowedAction } from "@/lib/safe-action";
 import { markNotificationReadFor } from "./read";
 import { markNotificationReadSchema } from "./schema";
 
@@ -10,7 +10,7 @@ import { markNotificationReadSchema } from "./schema";
  * own row only, the id from the session, `read_at` refreshed on a second
  * open — lives in ./read.ts, shared with the mobile API.
  */
-export const markNotificationRead = authedAction
+export const markNotificationRead = previewAllowedAction
   .inputSchema(markNotificationReadSchema)
   .action(async ({ parsedInput, ctx }) => {
     await markNotificationReadFor(ctx.session, parsedInput);

@@ -47,17 +47,23 @@ test.describe("full stock lifecycle across three roles", () => {
     if (!createdRequestId) return;
     const sql = dbConnect();
     try {
-      await sql`delete from public.stock_movements where ref_type = 'stock_request' and ref_id = ${createdRequestId}`;
-      await sql`delete from public.stock_request_events where request_id = ${createdRequestId}`;
-      const [row] =
-        await sql`select inventory_item_id from public.stock_requests where id = ${createdRequestId}`;
-      await sql`delete from public.stock_requests where id = ${createdRequestId}`;
-      // Only clean up the inventory item if this test created a brand new
-      // one (material_name below is unique per run) — never touch a seeded item.
-      if (row?.inventory_item_id) {
-        await sql`delete from public.stock_movements where inventory_item_id = ${row.inventory_item_id}`;
-        await sql`delete from public.inventory_items where id = ${row.inventory_item_id}`;
-      }
+      // stock_movements and stock_request_events are append-only
+      // (20261124100008): a test removes its own rows only inside a
+      // transaction that turns the maintenance switch on.
+      await sql.begin(async (tx) => {
+        await tx`select set_config('apex.ledger_maintenance', 'on', true)`;
+        await tx`delete from public.stock_movements where ref_type = 'stock_request' and ref_id = ${createdRequestId}`;
+        await tx`delete from public.stock_request_events where request_id = ${createdRequestId}`;
+        const [row] =
+          await tx`select inventory_item_id from public.stock_requests where id = ${createdRequestId}`;
+        await tx`delete from public.stock_requests where id = ${createdRequestId}`;
+        // Only clean up the inventory item if this test created a brand new
+        // one (material_name below is unique per run) — never touch a seeded item.
+        if (row?.inventory_item_id) {
+          await tx`delete from public.stock_movements where inventory_item_id = ${row.inventory_item_id}`;
+          await tx`delete from public.inventory_items where id = ${row.inventory_item_id}`;
+        }
+      });
     } finally {
       await sql.end({ timeout: 5 });
     }

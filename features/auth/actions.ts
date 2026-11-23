@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { actionClient } from "@/lib/safe-action";
 import { signInEmail } from "@/features/users/service";
+import { LOGIN_LOCKED_MESSAGE, loginAllowed, recordLoginFailure } from "./login-throttle";
 import { loginSchema } from "./schema";
 
 /**
@@ -16,22 +17,28 @@ import { loginSchema } from "./schema";
  * with username + password. There is no magic link and no other sign-in path,
  * and nothing in the app asks Supabase to send an auth email.
  *
- * DEFERRED (recorded, not silently skipped): §2.7's "per-IP and per-email
- * throttle in the action". Supabase's own project-level limits are live today
- * via supabase/config.toml [auth.rate_limit] (sign_in_sign_ups) — real
- * protection, not a placeholder — but they are project-wide, not per-account.
- * An additional per-account cooldown needs a small table and is left for a
- * follow-up rather than rushed here.
+ * Throttling (APX-38, 2026-11-24): Supabase's own project-level limits
+ * (supabase/config.toml [auth.rate_limit]) are per IP — and sign-in runs on
+ * the server, so every user shares Vercel's addresses. The per-USERNAME
+ * throttle is ./login-throttle.ts: checked before GoTrue is asked, and a
+ * failure is recorded after. A locked username gets its own message — it says
+ * nothing about whether the account exists, because unknown usernames are
+ * counted and locked exactly like real ones.
  */
 
 export const signInWithPassword = actionClient.inputSchema(loginSchema).action(async ({ parsedInput }) => {
   const supabase = await createClient();
+
+  if (!(await loginAllowed(supabase, parsedInput.username))) {
+    return { ok: false as const, message: LOGIN_LOCKED_MESSAGE };
+  }
 
   const { error } = await supabase.auth.signInWithPassword({
     email: signInEmail(parsedInput.username),
     password: parsedInput.password,
   });
   if (error) {
+    await recordLoginFailure(supabase, parsedInput.username);
     // Never reveal whether the account exists — the message is identical
     // either way, decided here rather than left to whatever GoTrue said.
     // Returned, not thrown: lib/safe-action.ts's mapDomainError replaces any

@@ -1,0 +1,27 @@
+-- Security hardening (audit 2026-11-24, APX-04): no direct INSERT into
+-- approvals
+--
+-- ap_insert (last redefined in 20261005090001) let any admin or site member
+-- INSERT straight into approvals through PostgREST with no limit on status,
+-- decided_by or decided_at — so a supervisor's own token could create a row
+-- already marked 'approved' by the client, with no audit entry and without
+-- the client ever seeing it. 20261007090001's own comment notes a direct
+-- insert "skips the RPC entirely".
+--
+-- Nothing in the application inserts directly: requestApproval (web) and the
+-- mobile route both go through rpc_create_approval, which always creates a
+-- pending row under a row lock, allocates ref_no and writes the audit. That
+-- RPC is SECURITY DEFINER, owned by postgres (BYPASSRLS), so it needs no
+-- policy — the same reasoning 20261007090006 §A applied to stock_requests.
+-- With no INSERT policy, RLS refuses every direct insert by a normal session.
+--
+-- Reviewed alongside, per the audit, and deliberately left in place:
+--   du_insert    daily updates ARE inserted directly (features/updates/write.ts).
+--                The policy pins author_id = auth.uid(), org and role; the
+--                table has no status or decision columns to forge, and
+--                20261007090003/…04/…05 guard its ancestry, edits and photos.
+--   tasks_insert tasks ARE inserted directly (features/schedule/tasks.ts). The
+--                columns a direct insert must not set (progress_pct,
+--                deleted_at) are guarded by trg_tasks_column_guard in
+--                20261124100008, which also limits direct updates.
+drop policy if exists ap_insert on public.approvals;

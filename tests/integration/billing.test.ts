@@ -1,7 +1,7 @@
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
-import { connect, SEED } from "./db";
+import { connect, SEED, withLedgerMaintenance } from "./db";
 import { one } from "./expect-row";
 
 /**
@@ -65,15 +65,22 @@ const trackedBillIds: string[] = [];
 
 afterEach(async () => {
   if (trackedBillIds.length) {
-    await sql`delete from public.payments where bill_id = any(${trackedBillIds})`;
-    await sql`delete from public.bill_events where bill_id = any(${trackedBillIds})`;
-    await sql`delete from public.bill_lines where bill_id = any(${trackedBillIds})`;
-    await sql`update public.stock_requests set billed_on_bill_id = null where billed_on_bill_id = any(${trackedBillIds})`;
-    await sql`delete from public.bills where id = any(${trackedBillIds})`;
+    // bill_events is append-only (20261124100008) — see withLedgerMaintenance.
+    await withLedgerMaintenance(sql, async (tx) => {
+      await tx`delete from public.payments where bill_id = any(${trackedBillIds})`;
+      await tx`delete from public.bill_events where bill_id = any(${trackedBillIds})`;
+      await tx`delete from public.bill_lines where bill_id = any(${trackedBillIds})`;
+      await tx`update public.stock_requests set billed_on_bill_id = null where billed_on_bill_id = any(${trackedBillIds})`;
+      await tx`delete from public.bills where id = any(${trackedBillIds})`;
+    });
     trackedBillIds.length = 0;
   }
   if (trackedSrIds.length) {
-    await sql`delete from public.stock_requests where id = any(${trackedSrIds})`;
+    // Cascades to stock_request_events, which is append-only too.
+    await withLedgerMaintenance(
+      sql,
+      (tx) => tx`delete from public.stock_requests where id = any(${trackedSrIds})`
+    );
     trackedSrIds.length = 0;
   }
   if (trackedPhaseIds.length) {
@@ -381,6 +388,10 @@ describe("rpc_transition_bill — lifecycle and T-05", () => {
     });
     expect(error).toBeNull();
     expect((data as BillRow).status).toBe("certified");
+    // APX-02: the RPC's own response carries no internal block for a client.
+    const row = data as Record<string, unknown>;
+    expect(row.internal_cost_amount).toBeNull();
+    expect(row.margin_amount).toBeNull();
   });
 
   it("client rejection returns the bill to draft with revision 2 and the reason recorded", async () => {

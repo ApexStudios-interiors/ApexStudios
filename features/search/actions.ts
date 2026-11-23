@@ -1,7 +1,7 @@
 "use server";
 
 import "server-only";
-import { authedAction } from "@/lib/safe-action";
+import { previewAllowedAction } from "@/lib/safe-action";
 import { searchAllSchema } from "./schema";
 import { searchFor } from "./run";
 
@@ -12,6 +12,6 @@ import { searchFor } from "./run";
  * mobile API; the per-entity role scoping and the result caps live in
  * queries.ts/service.ts.
  */
-export const searchAll = authedAction
+export const searchAll = previewAllowedAction
   .inputSchema(searchAllSchema)
   .action(async ({ parsedInput, ctx }) => searchFor(ctx.session, parsedInput.query));

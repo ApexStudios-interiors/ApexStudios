@@ -39,11 +39,8 @@ describe("searchFor", () => {
   it("checks the rate limit, then searches with the caller's session", async () => {
     await searchFor(SESSION, "tile");
 
-    expect(h.rpc).toHaveBeenCalledExactlyOnceWith("rpc_check_rate_limit", {
-      p_action: "search",
-      p_max_per_window: 20,
-      p_window_seconds: 60,
-    });
+    // Only the action: the window and the maximum are the server's (APX-56).
+    expect(h.rpc).toHaveBeenCalledExactlyOnceWith("rpc_check_rate_limit", { p_action: "search" });
     expect(h.searchAll).toHaveBeenCalledExactlyOnceWith(SESSION, "tile");
   });
 

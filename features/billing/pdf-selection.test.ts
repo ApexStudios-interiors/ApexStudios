@@ -75,6 +75,7 @@ function pdf(fileName: string, createdAt: string, over: Row = {}): Row {
     r2_key: `key/${fileName}@${createdAt}`,
     created_at: createdAt,
     deleted_at: null,
+    kind: "generated_invoice",
     ...over,
   };
 }
@@ -108,6 +109,23 @@ describe("getCurrentBillPdfKey", () => {
     expect(await getCurrentBillPdfKey(sessionAs("client"), BILL_ID)).toBe(
       "key/RA-APX-001.pdf@2026-10-01T10:00:00Z"
     );
+  });
+
+  it("APX-05: an upload carrying the invoice's exact name is never served, however new", async () => {
+    h.attachments = [
+      pdf("RA-APX-001.pdf", "2026-10-01T10:00:00Z"),
+      pdf("RA-APX-001.pdf", "2026-10-09T10:00:00Z", { kind: "upload" }),
+    ];
+
+    expect(await getCurrentBillPdfKey(sessionAs("client"), BILL_ID)).toBe(
+      "key/RA-APX-001.pdf@2026-10-01T10:00:00Z"
+    );
+  });
+
+  it("APX-05: an upload with the invoice's name, and no generated invoice yet → none", async () => {
+    h.attachments = [pdf("RA-APX-001.pdf", "2026-10-09T10:00:00Z", { kind: "upload" })];
+
+    expect(await getCurrentBillPdfKey(sessionAs("admin"), BILL_ID)).toBeNull();
   });
 
   it("after a rejection and resubmission → the current revision's PDF, not the superseded one", async () => {

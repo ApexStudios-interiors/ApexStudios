@@ -2123,6 +2123,86 @@ web-only.
 
 ---
 
+### D68 — Security hardening from the 2026-11-24 audit (APX-01 … APX-59)
+
+**Question:** The 2026-11-24 audit found a set of places where the database or the action layer
+trusted the caller more than the product's rules allow. What does each rule become?
+**Answered:** 2026-11-24 by Voola
+**Answer:** Migrations `20261124100001`–`20261124100010`, with pgTAP coverage in
+`supabase/tests/15_security_hardening_test.sql`. Decisions that are not obvious from the code:
+
+- **Helper functions (APX-01, APX-56).** `fn_audit` and `fn_recompute_progress` are no longer
+  executable by `anon` or `authenticated` — only definer functions and triggers call them.
+  `fn_cost_to_client_factor` stays executable by `authenticated` (the invoker view `v_billable_now`
+  calls it as the admin reading it) but answers NULL to anyone but an admin, and `anon` loses it.
+  `rpc_check_rate_limit` now takes the action only; the limit per action is decided in SQL. The old
+  three-argument form remains as a shim that ignores the caller's numbers, to be dropped once no
+  deployment calls it. pgTAP keeps an allow-list of every non-RPC definer function reachable by
+  `authenticated`, and of every definer function reachable by `anon`: a new one fails CI until it is
+  added on purpose.
+- **Role-scoped views (APX-09).** `*_client` views admit admin or client, `v_stock_request_site`
+  and `v_inventory_site` admin or site; the bill views show a client only bills that have been sent
+  (`status <> 'draft'` and `submitted_at` set). **`v_package_site` and `v_phase_site` are not
+  narrowed**: despite the name they are the money-free package/phase lists, and clients read them
+  on purpose (Schedule, Approvals, Daily Updates, search). `v_inventory_site` also gains the missing
+  `org_id = auth_org()` on central-store rows.
+- **`projects` money columns (APX-09).** `authenticated` has column-level SELECT on every column of
+  `projects` except `contract_value`, `mobilisation_advance` and `mobilisation_recovered`, which are
+  read through the definer view `v_project_finance` (admin, or a client on their own project). This
+  is the only way to hide a column from one app role, since every app role is the database role
+  `authenticated`. **Consequence: a new column on `projects` must be granted to `authenticated`**
+  (AGENTS.md database rule 9); pgTAP asserts the exact ungranted set.
+- **Approvals (APX-04).** No direct INSERT policy; `rpc_create_approval` is the only way in.
+  `du_insert` and `tasks_insert` were reviewed and kept: daily updates and tasks are inserted
+  directly by design, and the columns that matter are guarded by triggers.
+- **Attachments (APX-05, APX-37).** `attachments.kind` (`upload` | `generated_invoice`) marks the
+  bill.pdf job's own document; a signed-in session can only insert `upload`, and the invoice served
+  is selected by `kind`, never by file name. A signed-in insert must name a project and an `r2_key`
+  under `org/{org}/project/{project}/{entity_type}/{entity_id}/`, its entity must belong to that
+  project, and only admin or site may attach to a bill (02-lld.md §7's "bill copy").
+- **Jobs (APX-35).** The audit suggested revoking `rpc_enqueue_job` and enqueueing from definer RPCs.
+  Not done, because Vercel deploys on merge and `pnpm db:push` runs separately, so either order
+  would leave one side missing its half. Instead the RPC re-derives the job for a signed-in caller:
+  a thumbnail only for the caller's own upload, a bill PDF only by an admin for a `submitted` bill,
+  with the payload, the idempotency key (`billPdfJobKey`) and `run_after` rebuilt server-side. The
+  handler renders only an issued bill (`submitted`, `certified` or `paid` — certified and paid
+  included deliberately, since a client may certify before the job runs and the figures are
+  immutable); a draft or cancelled bill is a no-op, not a failure.
+- **Profiles (APX-36).** A non-admin sees themselves, the org's admins, (if site) the other
+  supervisors, and anyone sharing a project with them. A direct self-update may change only
+  `full_name` and `phone`. Columns are not narrowed (an admin's email stays visible to their
+  projects' members) — a view would be needed; recorded as a follow-up.
+- **Counters, ledgers, tasks (APX-34).** A direct (PostgREST) update may not change `projects`'
+  `next_*_seq`, `mobilisation_recovered`, `progress_pct`, `org_id` or `created_*`, and nobody may
+  change a project's `code` once a bill exists. A direct task update may change only name, dates,
+  duration, note and owner; progress goes through `rpc_set_task_progress`. The guards test
+  `current_user`, so every SECURITY DEFINER path is unaffected. `stock_movements`, `audit_log`,
+  `bill_events` and `stock_request_events` refuse UPDATE, DELETE and TRUNCATE from **every** role,
+  the owner included; the only escape is a transaction-local `apex.ledger_maintenance = 'on'`, which
+  no API path can set, used by the test suites' cleanup. A movement is `in` or `out`, never `adjust`
+  (D31 as a constraint). `inventory_insert` is out of this decision's scope (stock work).
+- **Preview is read-only (APX-25).** `authedAction` — and so every role-guarded client — refuses
+  while previewing, with "Preview is read-only". `previewAllowedAction` is the explicit allow-list:
+  start/stop preview, mark a notification read, search, a download URL.
+- **Sign-in (APX-27, APX-38, APX-59).** `?next=` refuses control characters and backslashes and must
+  resolve to the same origin. A per-username throttle (10 failures in 15 minutes, keyed by a hash of
+  the normalised username, unknown usernames counted alike) runs before GoTrue; it fails open if the
+  throttle itself errors. A session whose JWT role claim disagrees with `profiles.role` is refused
+  (web and mobile), so a role change takes effect immediately even with the hook registered.
+  Supabase CAPTCHA and leaked-password protection are dashboard settings, left to the owner.
+- **Web (APX-57).** CSP (`frame-ancestors 'none'`, R2 and Supabase origins allowed, `'unsafe-inline'`
+  scripts because nonces would force every page dynamic), HSTS, `X-Frame-Options`, nosniff,
+  referrer and permissions policies — `lib/security/headers.ts`. Cron/backup secrets compare in
+  constant time. `/api/health` keeps one connection per instance and reuses a check for 15 s.
+- **Organisation scope (APX-58).** `is_member_of` admits an admin only to their own org's projects.
+
+**Deployment order.** Several changes need both halves (the app reads `v_project_finance`,
+`attachments.kind`, the one-argument `rpc_check_rate_limit`; the database revokes the `projects`
+columns). Apply the migrations immediately after the merge deploy goes live; until then the
+portfolio, the admin Billing page, Download PDF and search error.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |
