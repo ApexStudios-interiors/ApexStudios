@@ -25,6 +25,7 @@ const ERROR_MESSAGES = {
   NEGATIVE_STOCK: "Not enough stock on hand.",
   REASON_REQUIRED: "Please give a reason.",
   RATE_LIMITED: "Too many requests. Please wait a moment and try again.",
+  CONFLICT: "Someone else changed this while you were editing. Reload to see the current values.",
 } as const;
 
 /** Postgres RAISE EXCEPTION messages the RPCs use are prefixed with their code
