@@ -62,11 +62,14 @@
 -- view can read low stock from it if it moves off the base table.
 -- getMaterialSuggestions (features/stock/actions.ts) reads it now too.
 
+-- anon gets the same column list back: it reaches no row (inventory_select
+-- needs an admin or site role), but views it may query under its own rights —
+-- v_notifications — must answer "no rows", not "permission denied".
 revoke select on public.inventory_items from authenticated, anon;
 grant select (
   id, org_id, project_id, name, category, sku, unit, qty_on_hand, reorder_level,
   location, created_at, created_by, updated_at, updated_by, deleted_at
-) on public.inventory_items to authenticated;
+) on public.inventory_items to authenticated, anon;
 
 -- Unchanged from 20261005090001 — restated so this file shows the whole rule.
 drop policy if exists inventory_select on public.inventory_items;
