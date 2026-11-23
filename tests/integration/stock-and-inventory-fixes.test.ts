@@ -42,11 +42,13 @@ const tag = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 afterEach(async () => {
   if (trackedRequestIds.length) {
     // Remainders of a part delivery point back at a tracked request.
-    const children = await sql`select id from public.stock_requests where split_from_id = any(${trackedRequestIds})`;
+    const children =
+      await sql`select id from public.stock_requests where split_from_id = any(${trackedRequestIds})`;
     const ids = [...trackedRequestIds, ...children.map((c) => c.id as string)];
     const items = await sql`select distinct inventory_item_id from public.stock_requests
                              where id = any(${ids}) and inventory_item_id is not null`;
-    for (const i of items) if (!trackedItemIds.includes(i.inventory_item_id)) trackedItemIds.push(i.inventory_item_id);
+    for (const i of items)
+      if (!trackedItemIds.includes(i.inventory_item_id)) trackedItemIds.push(i.inventory_item_id);
     await sql`delete from public.stock_request_events where request_id = any(${ids})`;
     await sql`delete from public.stock_movements where ref_type = 'stock_request' and ref_id = any(${ids})`;
     await sql`update public.stock_requests set inventory_item_id = null, split_from_id = null where id = any(${ids})`;
@@ -131,7 +133,9 @@ describe("APX-03 — a site session cannot read unit_cost", () => {
     expect(moves.error).toBeNull();
     expect(moves.data).toEqual([]);
 
-    const view = await site.from("v_inventory_site").select("id, name, qty_on_hand, stock_status, updated_at");
+    const view = await site
+      .from("v_inventory_site")
+      .select("id, name, qty_on_hand, stock_status, updated_at");
     expect(view.error).toBeNull();
     expect((view.data ?? []).length).toBeGreaterThan(0);
 
@@ -197,7 +201,10 @@ describe("APX-14 — a rate on approval, and set until delivery", () => {
       p_rate: 250,
     });
     expect(error).toBeNull();
-    const stored = one(await sql`select rate::float as rate from public.stock_requests where id = ${id}`, "r");
+    const stored = one(
+      await sql`select rate::float as rate from public.stock_requests where id = ${id}`,
+      "r"
+    );
     expect(stored.rate).toBe(250);
     const after = one(
       await sql`select coalesce(committed, 0)::float as c from public.v_package_rollup where package_id = ${SEED.poolPackage}`,
@@ -240,7 +247,8 @@ describe("APX-14 — a rate on approval, and set until delivery", () => {
     const ok = await admin.rpc("rpc_set_stock_request_rate", { p_request_id: ordered, p_rate: 410.5 });
     expect(ok.error).toBeNull();
     expect(Number((ok.data as { rate: number }).rate)).toBe(410.5);
-    const audit = await sql`select action from public.audit_log where entity_type = 'stock_request' and entity_id = ${ordered}`;
+    const audit =
+      await sql`select action from public.audit_log where entity_type = 'stock_request' and entity_id = ${ordered}`;
     expect(audit.map((a) => a.action)).toContain("set_rate");
 
     const negative = await admin.rpc("rpc_set_stock_request_rate", { p_request_id: ordered, p_rate: -1 });
@@ -261,13 +269,22 @@ describe("APX-15 — deliveries of one material land on one item", () => {
   it("two deliveries of the same material (spelt differently) produce one item with the quantities summed", async () => {
     const name = `Cement OPC 53 ${tag()}`;
     const a = await insertRequest({ status: "ordered", material: name, qty: 5 });
-    const b = await insertRequest({ status: "ordered", material: `  ${name.toUpperCase().replace(" ", "  ")} `, qty: 7 });
+    const b = await insertRequest({
+      status: "ordered",
+      material: `  ${name.toUpperCase().replace(" ", "  ")} `,
+      qty: 7,
+    });
     const site = await client(SITE_EMAIL);
 
-    expect((await site.rpc("rpc_transition_stock_request", { p_request_id: a, p_to_status: "delivered" })).error).toBeNull();
-    expect((await site.rpc("rpc_transition_stock_request", { p_request_id: b, p_to_status: "delivered" })).error).toBeNull();
+    expect(
+      (await site.rpc("rpc_transition_stock_request", { p_request_id: a, p_to_status: "delivered" })).error
+    ).toBeNull();
+    expect(
+      (await site.rpc("rpc_transition_stock_request", { p_request_id: b, p_to_status: "delivered" })).error
+    ).toBeNull();
 
-    const linked = await sql`select distinct inventory_item_id from public.stock_requests where id = any(${[a, b]})`;
+    const linked =
+      await sql`select distinct inventory_item_id from public.stock_requests where id = any(${[a, b]})`;
     expect(linked).toHaveLength(1);
     expect(await qtyOf(linked[0]?.inventory_item_id)).toBe(12);
   });
@@ -299,7 +316,8 @@ describe("APX-15 — deliveries of one material land on one item", () => {
     const admin = await client(ADMIN_EMAIL);
     await admin.rpc("rpc_transition_stock_request", { p_request_id: a, p_to_status: "delivered" });
     await admin.rpc("rpc_transition_stock_request", { p_request_id: b, p_to_status: "delivered" });
-    const linked = await sql`select distinct inventory_item_id from public.stock_requests where id = any(${[a, b]})`;
+    const linked =
+      await sql`select distinct inventory_item_id from public.stock_requests where id = any(${[a, b]})`;
     expect(linked).toHaveLength(2);
   });
 
@@ -310,10 +328,14 @@ describe("APX-15 — deliveries of one material land on one item", () => {
     expect(ok.error).toBeNull();
     expect(Number((ok.data as { reorder_level: number }).reorder_level)).toBe(10);
     expect(JSON.stringify(ok.data)).not.toMatch(/unit_cost/);
-    const audit = await sql`select action from public.audit_log where entity_type = 'inventory_item' and entity_id = ${item}`;
+    const audit =
+      await sql`select action from public.audit_log where entity_type = 'inventory_item' and entity_id = ${item}`;
     expect(audit.map((a) => a.action)).toContain("set_reorder_level");
 
-    const negative = await admin.rpc("rpc_set_inventory_reorder_level", { p_item_id: item, p_reorder_level: -1 });
+    const negative = await admin.rpc("rpc_set_inventory_reorder_level", {
+      p_item_id: item,
+      p_reorder_level: -1,
+    });
     expect(negative.error?.message).toMatch(/^REASON_REQUIRED/);
 
     const site = await client(SITE_EMAIL);
@@ -327,11 +349,17 @@ describe("APX-42 — cancel and edit a stock request", () => {
   it("the requester cancels their own pending request; nobody else can", async () => {
     const id = await insertRequest({ status: "pending" });
     const admin = await client(ADMIN_EMAIL);
-    const byAdmin = await admin.rpc("rpc_transition_stock_request", { p_request_id: id, p_to_status: "cancelled" });
+    const byAdmin = await admin.rpc("rpc_transition_stock_request", {
+      p_request_id: id,
+      p_to_status: "cancelled",
+    });
     expect(byAdmin.error?.message).toMatch(/^FORBIDDEN/);
 
     const site = await client(SITE_EMAIL);
-    const { error } = await site.rpc("rpc_transition_stock_request", { p_request_id: id, p_to_status: "cancelled" });
+    const { error } = await site.rpc("rpc_transition_stock_request", {
+      p_request_id: id,
+      p_to_status: "cancelled",
+    });
     expect(error).toBeNull();
     const row = one(
       await sql`select status::text as status, cancelled_at, cancelled_by from public.stock_requests where id = ${id}`,
@@ -353,7 +381,10 @@ describe("APX-42 — cancel and edit a stock request", () => {
     expect(bySite.error?.message).toMatch(/^FORBIDDEN/);
 
     const admin = await client(ADMIN_EMAIL);
-    const noReason = await admin.rpc("rpc_transition_stock_request", { p_request_id: ordered, p_to_status: "cancelled" });
+    const noReason = await admin.rpc("rpc_transition_stock_request", {
+      p_request_id: ordered,
+      p_to_status: "cancelled",
+    });
     expect(noReason.error?.message).toMatch(/^REASON_REQUIRED/);
 
     const ok = await admin.rpc("rpc_transition_stock_request", {
@@ -374,7 +405,11 @@ describe("APX-42 — cancel and edit a stock request", () => {
     const site = await client(SITE_EMAIL);
     await site.rpc("rpc_transition_stock_request", { p_request_id: id, p_to_status: "cancelled" });
     const admin = await client(ADMIN_EMAIL);
-    const again = await admin.rpc("rpc_transition_stock_request", { p_request_id: id, p_to_status: "approved", p_rate: 1 });
+    const again = await admin.rpc("rpc_transition_stock_request", {
+      p_request_id: id,
+      p_to_status: "approved",
+      p_rate: 1,
+    });
     expect(again.error?.message).toMatch(/^ILLEGAL_TRANSITION/);
 
     const delivered = await insertRequest({ status: "delivered" });
@@ -394,7 +429,11 @@ describe("APX-42 — cancel and edit a stock request", () => {
     const site = await client(SITE_EMAIL);
 
     const [cancel, deliver] = await Promise.all([
-      admin.rpc("rpc_transition_stock_request", { p_request_id: id, p_to_status: "cancelled", p_note: "race" }),
+      admin.rpc("rpc_transition_stock_request", {
+        p_request_id: id,
+        p_to_status: "cancelled",
+        p_note: "race",
+      }),
       site.rpc("rpc_transition_stock_request", { p_request_id: id, p_to_status: "delivered" }),
     ]);
     expect([cancel.error, deliver.error].filter((e) => e === null)).toHaveLength(1);
@@ -412,14 +451,22 @@ describe("APX-42 — cancel and edit a stock request", () => {
       p_note: "typo fixed",
     });
     expect(ok.error).toBeNull();
-    const row = one(await sql`select qty::float as qty, note from public.stock_requests where id = ${id}`, "edited");
+    const row = one(
+      await sql`select qty::float as qty, note from public.stock_requests where id = ${id}`,
+      "edited"
+    );
     expect(row).toEqual({ qty: 100, note: "typo fixed" });
-    const audit = await sql`select action from public.audit_log where entity_type = 'stock_request' and entity_id = ${id}`;
+    const audit =
+      await sql`select action from public.audit_log where entity_type = 'stock_request' and entity_id = ${id}`;
     expect(audit.map((a) => a.action)).toContain("edit");
 
     const zero = await site.rpc("rpc_edit_stock_request", { p_request_id: id, p_qty: 0 });
     expect(zero.error?.message).toMatch(/^REASON_REQUIRED/);
-    const past = await site.rpc("rpc_edit_stock_request", { p_request_id: id, p_qty: 1, p_needed_by: "2020-01-01" });
+    const past = await site.rpc("rpc_edit_stock_request", {
+      p_request_id: id,
+      p_qty: 1,
+      p_needed_by: "2020-01-01",
+    });
     expect(past.error?.message).toMatch(/^REASON_REQUIRED/);
 
     const c = await client(CLIENT_EMAIL);
@@ -508,17 +555,28 @@ describe("APX-69 — record usage", () => {
     expect(Number((data as { qty_on_hand: number }).qty_on_hand)).toBe(6);
     expect(JSON.stringify(data)).not.toMatch(/unit_cost|rate/);
     expect(await qtyOf(item)).toBe(6);
-    const moves = await sql`select direction::text as d, qty::float as q, ref_type, ref_id, reason from public.stock_movements
+    const moves =
+      await sql`select direction::text as d, qty::float as q, ref_type, ref_id, reason from public.stock_movements
                              where inventory_item_id = ${item} and ref_type = 'usage'`;
-    expect(moves.map((m) => [m.d, m.q, m.ref_id, m.reason])).toEqual([["out", 4, SEED.poolPackage, "Pool deck screed"]]);
+    expect(moves.map((m) => [m.d, m.q, m.ref_id, m.reason])).toEqual([
+      ["out", 4, SEED.poolPackage, "Pool deck screed"],
+    ]);
   });
 
   it("refuses more than is on hand, a zero quantity, a package of another project, and a client", async () => {
     const item = await insertItem(3);
     const site = await client(SITE_EMAIL);
-    const tooMuch = await site.rpc("rpc_record_stock_usage", { p_item_id: item, p_package_id: SEED.poolPackage, p_qty: 4 });
+    const tooMuch = await site.rpc("rpc_record_stock_usage", {
+      p_item_id: item,
+      p_package_id: SEED.poolPackage,
+      p_qty: 4,
+    });
     expect(tooMuch.error?.message).toMatch(/^NEGATIVE_STOCK/);
-    const zero = await site.rpc("rpc_record_stock_usage", { p_item_id: item, p_package_id: SEED.poolPackage, p_qty: 0 });
+    const zero = await site.rpc("rpc_record_stock_usage", {
+      p_item_id: item,
+      p_package_id: SEED.poolPackage,
+      p_qty: 0,
+    });
     expect(zero.error?.message).toMatch(/^REASON_REQUIRED/);
 
     const otherPkg = one(
@@ -526,11 +584,19 @@ describe("APX-69 — record usage", () => {
       "other project package"
     ).id as string;
     const admin = await client(ADMIN_EMAIL);
-    const wrongPkg = await admin.rpc("rpc_record_stock_usage", { p_item_id: item, p_package_id: otherPkg, p_qty: 1 });
+    const wrongPkg = await admin.rpc("rpc_record_stock_usage", {
+      p_item_id: item,
+      p_package_id: otherPkg,
+      p_qty: 1,
+    });
     expect(wrongPkg.error?.message).toMatch(/^NOT_FOUND/);
 
     const c = await client(CLIENT_EMAIL);
-    const byClient = await c.rpc("rpc_record_stock_usage", { p_item_id: item, p_package_id: SEED.poolPackage, p_qty: 1 });
+    const byClient = await c.rpc("rpc_record_stock_usage", {
+      p_item_id: item,
+      p_package_id: SEED.poolPackage,
+      p_qty: 1,
+    });
     expect(byClient.error?.message).toMatch(/^FORBIDDEN/);
     expect(await qtyOf(item)).toBe(3);
   });
@@ -565,7 +631,10 @@ describe("APX-69 — partial delivery", () => {
     expect(error).toBeNull();
     expect((data as { rate: unknown }).rate).toBeNull();
 
-    const original = one(await sql`select status::text as s, qty::float as q from public.stock_requests where id = ${id}`, "o");
+    const original = one(
+      await sql`select status::text as s, qty::float as q from public.stock_requests where id = ${id}`,
+      "o"
+    );
     expect(original).toEqual({ s: "delivered", q: 6 });
     const child = one(
       await sql`select status::text as s, qty::float as q, rate::float as r, inventory_item_id, ref_no
@@ -582,9 +651,17 @@ describe("APX-69 — partial delivery", () => {
   it("refuses a delivered quantity above the request, zero, or given on another move", async () => {
     const id = await insertRequest({ status: "ordered", qty: 5 });
     const site = await client(SITE_EMAIL);
-    const over = await site.rpc("rpc_transition_stock_request", { p_request_id: id, p_to_status: "delivered", p_delivered_qty: 6 });
+    const over = await site.rpc("rpc_transition_stock_request", {
+      p_request_id: id,
+      p_to_status: "delivered",
+      p_delivered_qty: 6,
+    });
     expect(over.error?.message).toMatch(/^REASON_REQUIRED/);
-    const zero = await site.rpc("rpc_transition_stock_request", { p_request_id: id, p_to_status: "delivered", p_delivered_qty: 0 });
+    const zero = await site.rpc("rpc_transition_stock_request", {
+      p_request_id: id,
+      p_to_status: "delivered",
+      p_delivered_qty: 0,
+    });
     expect(zero.error?.message).toMatch(/^REASON_REQUIRED/);
 
     const pending = await insertRequest({ status: "pending" });
@@ -601,7 +678,11 @@ describe("APX-69 — partial delivery", () => {
   it("the full quantity given explicitly is an ordinary delivery — no remainder", async () => {
     const id = await insertRequest({ status: "ordered", qty: 5 });
     const site = await client(SITE_EMAIL);
-    const { error } = await site.rpc("rpc_transition_stock_request", { p_request_id: id, p_to_status: "delivered", p_delivered_qty: 5 });
+    const { error } = await site.rpc("rpc_transition_stock_request", {
+      p_request_id: id,
+      p_to_status: "delivered",
+      p_delivered_qty: 5,
+    });
     expect(error).toBeNull();
     expect(await sql`select id from public.stock_requests where split_from_id = ${id}`).toHaveLength(0);
   });
@@ -625,19 +706,26 @@ describe("APX-42 — the requester withdraws a pending approval", () => {
     const site = await client(SITE_EMAIL);
     const { error } = await site.rpc("rpc_withdraw_approval", { p_approval_id: id });
     expect(error).toBeNull();
-    expect(one(await sql`select deleted_at from public.approvals where id = ${id}`, "a").deleted_at).not.toBeNull();
+    expect(
+      one(await sql`select deleted_at from public.approvals where id = ${id}`, "a").deleted_at
+    ).not.toBeNull();
     const c = await client(CLIENT_EMAIL);
     expect((await c.from("approvals").select("id").eq("id", id)).data).toEqual([]);
-    const audit = await sql`select action from public.audit_log where entity_type = 'approval' and entity_id = ${id}`;
+    const audit =
+      await sql`select action from public.audit_log where entity_type = 'approval' and entity_id = ${id}`;
     expect(audit.map((a) => a.action)).toContain("withdraw");
   });
 
   it("nobody else may withdraw it, and a decided one cannot be withdrawn", async () => {
     const id = await insertApproval("pending");
     const admin = await client(ADMIN_EMAIL);
-    expect((await admin.rpc("rpc_withdraw_approval", { p_approval_id: id })).error?.message).toMatch(/^FORBIDDEN/);
+    expect((await admin.rpc("rpc_withdraw_approval", { p_approval_id: id })).error?.message).toMatch(
+      /^FORBIDDEN/
+    );
     const c = await client(CLIENT_EMAIL);
-    expect((await c.rpc("rpc_withdraw_approval", { p_approval_id: id })).error?.message).toMatch(/^FORBIDDEN/);
+    expect((await c.rpc("rpc_withdraw_approval", { p_approval_id: id })).error?.message).toMatch(
+      /^FORBIDDEN/
+    );
 
     const decided = await insertApproval("approved");
     const site = await client(SITE_EMAIL);

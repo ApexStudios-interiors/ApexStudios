@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
+import { formatQty } from "@/lib/quantity";
 import type { StockRequestDTO } from "@/features/stock/queries";
 import { setStockRequestRate } from "@/features/stock/actions";
 import { formatINR } from "@/lib/money";
@@ -70,10 +71,12 @@ export function SetStockRequestRateDialog({
     >
       <DialogContent showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>{request.rate == null ? "Set rate" : "Correct rate"} — {request.refNo}</DialogTitle>
+          <DialogTitle>
+            {request.rate == null ? "Set rate" : "Correct rate"} — {request.refNo}
+          </DialogTitle>
           <DialogDescription>
-            {request.materialName} — {request.qty.toLocaleString("en-IN")} {request.unit}. The rate is fixed once
-            the material is delivered.
+            {request.materialName} — {formatQty(request.qty)} {request.unit}. The rate is fixed once the
+            material is delivered.
           </DialogDescription>
         </DialogHeader>
         <form

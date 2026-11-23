@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
+import { formatQty } from "@/lib/quantity";
 import type { InventoryItemDTO } from "@/features/inventory/queries";
 import { recordStockUsage } from "@/features/inventory/actions";
 import { recordUsageSchema } from "@/features/inventory/schema";
@@ -75,9 +76,7 @@ export function RecordUsageDialog({
   const record = useAction(recordStockUsage, {
     onSuccess: ({ data }) => {
       onOpenChange(false);
-      toast(
-        `Usage recorded — ${data ? data.qtyOnHand.toLocaleString("en-IN") : ""} ${item.unit} of ${item.name} left`
-      );
+      toast(`Usage recorded — ${data ? formatQty(data.qtyOnHand) : ""} ${item.unit} of ${item.name} left`);
       router.refresh();
     },
     onError: () => router.refresh(),
@@ -91,7 +90,7 @@ export function RecordUsageDialog({
       return;
     }
     if (parsed.data.qty > item.qtyOnHand) {
-      setErrors({ qty: `Only ${item.qtyOnHand.toLocaleString("en-IN")} ${item.unit} on hand.` });
+      setErrors({ qty: `Only ${formatQty(item.qtyOnHand)} ${item.unit} on hand.` });
       return;
     }
     setErrors({});
@@ -111,7 +110,7 @@ export function RecordUsageDialog({
         <DialogHeader>
           <DialogTitle>Record usage — {item.name}</DialogTitle>
           <DialogDescription>
-            On hand: {item.qtyOnHand.toLocaleString("en-IN")} {item.unit}. What was used comes off the stock.
+            On hand: {formatQty(item.qtyOnHand)} {item.unit}. What was used comes off the stock.
           </DialogDescription>
         </DialogHeader>
         <form

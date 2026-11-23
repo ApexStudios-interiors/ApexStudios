@@ -38,7 +38,10 @@ function toResult(data: unknown): InventoryQtyResult {
 }
 
 /** APX-69 — "Record usage": an 'out' movement against a package. */
-export async function recordUsageFor(_session: Session, input: RecordUsageInput): Promise<InventoryQtyResult> {
+export async function recordUsageFor(
+  _session: Session,
+  input: RecordUsageInput
+): Promise<InventoryQtyResult> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("rpc_record_stock_usage", {
     p_item_id: input.itemId,

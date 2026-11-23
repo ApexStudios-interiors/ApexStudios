@@ -161,7 +161,9 @@ export function ApprovalTable({
                     Add photos
                   </Button>
                   {/* APX-42: the requester's own pending approval. */}
-                  {a.canWithdraw && <WithdrawApprovalButton approvalId={a.id} refNo={a.refNo} item={a.item} />}
+                  {a.canWithdraw && (
+                    <WithdrawApprovalButton approvalId={a.id} refNo={a.refNo} item={a.item} />
+                  )}
                 </div>
               );
             }

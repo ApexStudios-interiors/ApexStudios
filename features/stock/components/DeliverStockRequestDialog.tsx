@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
+import { formatQty } from "@/lib/quantity";
 import type { StockRequestDTO } from "@/features/stock/queries";
 import { transitionStockRequest } from "@/features/stock/actions";
 import { splitDelivery } from "@/features/stock/service";
@@ -18,8 +19,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Field, inputClass } from "@/components/ui/DialogShell";
-
-const fmtQty = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 3 });
 
 /**
  * APX-39: Mark Delivered is confirmed, showing the quantity and unit that will
@@ -52,7 +51,7 @@ export function DeliverStockRequestDialog({
       onOpenChange(false);
       toast(
         split && split.remainder > 0
-          ? `${fmtQty(split.delivered)} ${request.unit} delivered — ${fmtQty(split.remainder)} still on order`
+          ? `${formatQty(split.delivered)} ${request.unit} delivered — ${formatQty(split.remainder)} still on order`
           : `${request.refNo} delivered`
       );
       router.refresh();
@@ -62,7 +61,9 @@ export function DeliverStockRequestDialog({
 
   function submit() {
     if (!split) {
-      setFieldError(`Enter how much arrived: more than 0 and at most ${fmtQty(request.qty)} ${request.unit}.`);
+      setFieldError(
+        `Enter how much arrived: more than 0 and at most ${formatQty(request.qty)} ${request.unit}.`
+      );
       return;
     }
     setFieldError(null);
@@ -85,8 +86,8 @@ export function DeliverStockRequestDialog({
         <DialogHeader>
           <DialogTitle>Mark {request.refNo} delivered?</DialogTitle>
           <DialogDescription>
-            {request.materialName} — {fmtQty(request.qty)} {request.unit} ordered. What arrives is added to this
-            project&apos;s inventory.
+            {request.materialName} — {formatQty(request.qty)} {request.unit} ordered. What arrives is added to
+            this project&apos;s inventory.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -113,7 +114,7 @@ export function DeliverStockRequestDialog({
             <p className="text-xs text-destructive mt-1">{fieldError}</p>
           ) : split && split.remainder > 0 ? (
             <p className="text-xs text-muted-foreground mt-1.5">
-              Part delivery: {fmtQty(split.remainder)} {request.unit} stays Ordered as a new request.
+              Part delivery: {formatQty(split.remainder)} {request.unit} stays Ordered as a new request.
             </p>
           ) : (
             <p className="text-xs text-muted-foreground mt-1.5">The full quantity.</p>

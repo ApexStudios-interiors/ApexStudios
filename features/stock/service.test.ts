@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   availableTransitions,
+  canEditRequest,
+  canSetRate,
+  cancelNeedsReason,
+  resolveMaterialOption,
+  splitDelivery,
   isDeadlineAtRisk,
   isDuplicateOfDelivered,
   normalizeMaterialName,
@@ -17,10 +22,10 @@ describe("availableTransitions", () => {
     { status: "pending", role: "admin", expected: ["approved", "rejected"] },
     { status: "pending", role: "site", expected: [] },
     { status: "pending", role: "client", expected: [] },
-    { status: "approved", role: "admin", expected: ["ordered"] },
+    { status: "approved", role: "admin", expected: ["ordered", "cancelled"] },
     { status: "approved", role: "site", expected: [] },
     { status: "approved", role: "client", expected: [] },
-    { status: "ordered", role: "admin", expected: ["delivered"] },
+    { status: "ordered", role: "admin", expected: ["delivered", "cancelled"] },
     { status: "ordered", role: "site", expected: ["delivered"] },
     { status: "ordered", role: "client", expected: [] },
     { status: "delivered", role: "admin", expected: [] },
@@ -29,15 +34,104 @@ describe("availableTransitions", () => {
     { status: "rejected", role: "admin", expected: [] },
     { status: "rejected", role: "site", expected: [] },
     { status: "rejected", role: "client", expected: [] },
+    { status: "cancelled", role: "admin", expected: [] },
+    { status: "cancelled", role: "site", expected: [] },
+    { status: "cancelled", role: "client", expected: [] },
   ];
 
   it.each(cases)("$status / $role -> $expected", ({ status, role, expected }) => {
     expect(availableTransitions(status, role).map((t) => t.to)).toEqual(expected);
   });
 
-  it("covers all fifteen status × role combinations", () => {
-    // Three roles since D66 (was four), five statuses.
-    expect(cases.length).toBe(15);
+  it("covers all eighteen status × role combinations", () => {
+    // Three roles since D66 (was four), six statuses since 20261124400001.
+    expect(cases.length).toBe(18);
+  });
+
+  it("offers Cancel on a pending request only to the person who raised it", () => {
+    expect(availableTransitions("pending", "site", { isRequester: true }).map((t) => t.to)).toEqual([
+      "cancelled",
+    ]);
+    expect(availableTransitions("pending", "admin", { isRequester: true }).map((t) => t.to)).toEqual([
+      "approved",
+      "rejected",
+      "cancelled",
+    ]);
+    expect(availableTransitions("pending", "client", { isRequester: true })).toEqual([]);
+    expect(availableTransitions("approved", "site", { isRequester: true })).toEqual([]);
+    expect(availableTransitions("ordered", "site", { isRequester: true }).map((t) => t.to)).toEqual([
+      "delivered",
+    ]);
+  });
+});
+
+describe("cancelNeedsReason", () => {
+  it.each([
+    ["pending", false],
+    ["approved", true],
+    ["ordered", true],
+    ["delivered", false],
+  ] as const)("%s -> %s", (status, expected) => {
+    expect(cancelNeedsReason(status)).toBe(expected);
+  });
+});
+
+describe("canEditRequest", () => {
+  it("pending only, by the requester (site) or any admin", () => {
+    expect(canEditRequest("pending", "site", true)).toBe(true);
+    expect(canEditRequest("pending", "site", false)).toBe(false);
+    expect(canEditRequest("pending", "admin", false)).toBe(true);
+    expect(canEditRequest("pending", "client", true)).toBe(false);
+    expect(canEditRequest("approved", "admin", true)).toBe(false);
+  });
+});
+
+describe("canSetRate", () => {
+  it("admin, until delivered", () => {
+    expect(canSetRate("pending", "admin")).toBe(true);
+    expect(canSetRate("approved", "admin")).toBe(true);
+    expect(canSetRate("ordered", "admin")).toBe(true);
+    expect(canSetRate("delivered", "admin")).toBe(false);
+    expect(canSetRate("cancelled", "admin")).toBe(false);
+    expect(canSetRate("ordered", "site")).toBe(false);
+  });
+});
+
+describe("splitDelivery", () => {
+  it("the whole request when nothing is given", () => {
+    expect(splitDelivery(10)).toEqual({ delivered: 10, remainder: 0 });
+    expect(splitDelivery(10, null)).toEqual({ delivered: 10, remainder: 0 });
+  });
+  it("a part delivery leaves the rest, to three places", () => {
+    expect(splitDelivery(10, 6)).toEqual({ delivered: 6, remainder: 4 });
+    expect(splitDelivery(10, 6.1)).toEqual({ delivered: 6.1, remainder: 3.9 });
+    expect(splitDelivery(10, 10)).toEqual({ delivered: 10, remainder: 0 });
+  });
+  it.each([0, -1, 10.001, Number.NaN, Number.POSITIVE_INFINITY])("refuses %s", (q) => {
+    expect(splitDelivery(10, q)).toBeNull();
+  });
+});
+
+describe("resolveMaterialOption", () => {
+  const options = [
+    { id: "a", name: "Cement OPC 53", unit: "bag" },
+    { id: "b", name: "Plywood 18mm", unit: "nos" },
+    { id: "c", name: "Plywood 18mm", unit: "sft" },
+  ];
+  it("matches on the normalised name and the unit", () => {
+    expect(resolveMaterialOption("  cement  opc 53 ", "bag", options)?.id).toBe("a");
+    expect(resolveMaterialOption("Plywood 18MM", "sft", options)?.id).toBe("c");
+  });
+  it("a different unit is a different material", () => {
+    expect(resolveMaterialOption("Cement OPC 53", "kit", options)).toBeUndefined();
+  });
+  it("with no unit yet, matches only when the name is unambiguous", () => {
+    expect(resolveMaterialOption("Cement OPC 53", undefined, options)?.id).toBe("a");
+    expect(resolveMaterialOption("Plywood 18mm", undefined, options)).toBeUndefined();
+  });
+  it("an unknown or blank name is a new material", () => {
+    expect(resolveMaterialOption("Sand", "bag", options)).toBeUndefined();
+    expect(resolveMaterialOption("   ", "bag", options)).toBeUndefined();
   });
 });
 

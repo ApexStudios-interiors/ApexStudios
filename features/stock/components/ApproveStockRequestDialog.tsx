@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
+import { formatQty } from "@/lib/quantity";
 import type { StockRequestDTO } from "@/features/stock/queries";
 import { transitionStockRequest } from "@/features/stock/actions";
 import { formatINR } from "@/lib/money";
@@ -83,7 +84,7 @@ export function ApproveStockRequestDialog({
         <DialogHeader>
           <DialogTitle>Approve {request.refNo}?</DialogTitle>
           <DialogDescription>
-            {request.materialName} — {request.qty.toLocaleString("en-IN")} {request.unit}
+            {request.materialName} — {formatQty(request.qty)} {request.unit}
             {request.packageName ? ` · ${request.packageName}` : ""}
           </DialogDescription>
         </DialogHeader>
@@ -112,7 +113,9 @@ export function ApproveStockRequestDialog({
             <p className="text-xs text-destructive mt-1">{fieldError}</p>
           ) : (
             <p className="text-xs text-muted-foreground mt-1.5">
-              {value != null ? `Commits ${formatINR(value)} to this package's budget.` : "Required to approve."}
+              {value != null
+                ? `Commits ${formatINR(value)} to this package's budget.`
+                : "Required to approve."}
             </p>
           )}
           {approve.result.serverError && (

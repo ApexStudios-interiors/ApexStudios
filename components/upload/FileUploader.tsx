@@ -122,6 +122,9 @@ export function FileUploader({
     discardRef.current = discardOnUnmount;
   });
   useEffect(() => {
+    // The Set itself is never replaced, only added to, so this is the one
+    // `processNext` will consult after unmount too.
+    const removed = removedIds.current;
     return () => {
       if (!discardRef.current?.()) return;
       for (const item of itemsRef.current) {
@@ -132,7 +135,7 @@ export function FileUploader({
         } else {
           // Queued or uploading: no row yet. `processNext` deletes it the
           // moment it confirms, and skips it if it has not started.
-          removedIds.current.add(item.id);
+          removed.add(item.id);
         }
       }
       queue.current = [];

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
+import { formatQty } from "@/lib/quantity";
 import type { StockRequestDTO } from "@/features/stock/queries";
 import { transitionStockRequest } from "@/features/stock/actions";
 import { cancelNeedsReason } from "@/features/stock/service";
@@ -70,7 +71,7 @@ export function CancelStockRequestDialog({
         <DialogHeader>
           <DialogTitle>Cancel {request.refNo}?</DialogTitle>
           <DialogDescription>
-            {request.materialName} — {request.qty.toLocaleString("en-IN")} {request.unit}.{" "}
+            {request.materialName} — {formatQty(request.qty)} {request.unit}.{" "}
             {needsReason
               ? "It has already been approved, so it leaves the package's committed budget. This cannot be undone."
               : "It is withdrawn before anyone acts on it. This cannot be undone."}

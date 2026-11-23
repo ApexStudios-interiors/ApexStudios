@@ -62,7 +62,11 @@ export function EditStockRequestDialog({
     }
     // A date being changed must not be in the past; an unchanged one may be
     // kept even once it has passed (the RPC applies the same rule).
-    if (parsed.data.neededBy && parsed.data.neededBy !== request.neededBy && parsed.data.neededBy < todayIst()) {
+    if (
+      parsed.data.neededBy &&
+      parsed.data.neededBy !== request.neededBy &&
+      parsed.data.neededBy < todayIst()
+    ) {
       setErrors({ neededBy: "Needed-by date cannot be in the past" });
       return;
     }

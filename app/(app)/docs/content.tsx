@@ -85,12 +85,12 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "Minimum stock",
         definition:
-          "The stock level at which an item should be re-ordered (this column used to be called \"Reorder level\"). While the quantity on hand is above zero but below this number, the row shows a Low badge and the item counts in the Low Stock tile. Exactly at this level the item still counts as OK; at zero it is Critical, not Low.",
+          "The stock level at which an item should be re-ordered (this column used to be called \"Reorder level\"). An admin sets it with Minimum on the item's row. While the quantity on hand is above zero but below this number, the row shows a Low badge and the item counts in the Low Stock tile. Exactly at this level the item still counts as OK; at zero it is Critical, not Low.",
       },
       {
         term: "Inventory",
         definition:
-          "What is physically on hand, per project, with an all-projects view under Inventory (ALL) in the sidebar. Quantities change only when a request is marked delivered.",
+          "What is physically on hand, per project, with an all-projects view under Inventory (ALL) in the sidebar. Quantities go up when a request is marked delivered, down when someone uses Record usage on a row (material used on a package — never more than is on hand), and to a counted figure when an admin uses Adjust (with a reason). A new item starts at 0; its opening balance is an Adjust.",
       },
       {
         term: "Committed",
@@ -289,7 +289,8 @@ export const ROLE_STORIES: RoleStory[] = [
       "see every project, including internal cost, committed spend and margin",
       "create and edit projects, packages, phases and tasks, and set task progress",
       "post daily updates",
-      "raise stock requests, approve or reject them, mark them Ordered and mark them Delivered",
+      "raise stock requests, approve them (with a rate) or reject them, mark them Ordered and mark them Delivered, correct a rate until delivery, and cancel an approved or ordered request with a reason",
+      "adjust an inventory item's quantity after a count, set its minimum stock, and record material used",
       "request an approval from the client and add sample photos while it is pending",
       "create a bill from Billable Now, submit it, and record payments once the client has certified it",
       "add users from the Users page — Admin, Site Supervisor, or Client (with the project they will see) — grant an existing client access to another project, and remove a client from one project",
@@ -313,14 +314,17 @@ export const ROLE_STORIES: RoleStory[] = [
       "see the dashboard, packages, schedule, daily updates, inventory and stock requests of my projects",
       "add tasks and update task progress",
       "post a daily update with photos",
-      "raise a stock request, and mark an ordered request Delivered when it arrives",
+      "raise a stock request, edit or cancel my own while it is still pending, and mark an ordered request Delivered when it arrives — all of it, or the part that came",
+      "record material used on a package from the Inventory page",
+      "withdraw an approval I requested while the client has not yet decided",
       "request an approval and add sample photos while it is pending",
       "see the business-wide Inventory (ALL) view",
       "type a Rate on a new stock request, but only on a project where an admin has set Rate visibility to editable",
     ],
     cannot: [
       "see any money: no budgets, no contract value, no rates on existing requests, no Value column, no bills",
-      "approve or reject a stock request, or mark one Ordered",
+      "approve or reject a stock request, mark one Ordered, or cancel one an admin has approved",
+      "adjust inventory or set minimum stock",
       "see the Billing page or the Users page",
       "create or edit a project, package or phase",
     ],
@@ -370,16 +374,25 @@ export const FLOWS: Flow[] = [
       { badge: <StockRequestStatusBadge status="ordered" />, who: "An admin marks Ordered" },
       { badge: <StockRequestStatusBadge status="delivered" />, who: "Site Supervisor or admin marks Delivered" },
     ],
-    exits: [{ badge: <StockRequestStatusBadge status="rejected" />, who: "An admin rejects a pending request, with a reason" }],
+    exits: [
+      { badge: <StockRequestStatusBadge status="rejected" />, who: "An admin rejects a pending request, with a reason" },
+      {
+        badge: <StockRequestStatusBadge status="cancelled" />,
+        who: "Its requester cancels it while pending, or an admin cancels an approved or ordered one with a reason",
+      },
+    ],
     steps: [
       "Open the project's Stock Requests page and click + New Request. Pick the package, material, quantity, unit and Needed By date. Phase is optional — leave it as None, and if the package has no phases the field simply reads \"No phases in this package\". If an identical order (same material, quantity and Needed By) has already been delivered, the form warns: \"This order has already been delivered with the mentioned quantity and deadline date.\"",
-      "An admin opens the pending request and clicks Approve or Reject. Rejecting requires a reason. Approving adds the request's value to the package's Committed figure.",
+      "If you typed something wrong, click Edit on your pending request to change the quantity, Needed By or note, or Cancel to withdraw it. Once an admin has approved it, only an admin can cancel it, and they must give a reason.",
+      "An admin opens the pending request and clicks Approve or Reject. Approve asks for the rate (₹ per unit — 0 for free-issue material) and cannot be done without one; it adds quantity × rate to the package's Committed figure. Rejecting requires a reason. An admin can correct the rate with Rate until the material is delivered.",
       "Once the material is ordered, an admin clicks Mark Ordered.",
-      "When it arrives, the Site Supervisor (or admin) clicks Mark Delivered. Inventory goes up by that quantity and the material appears in Billable Now.",
+      "When it arrives, the Site Supervisor (or admin) clicks Mark Delivered and confirms the quantity. If less arrived than was ordered, lower the delivered quantity: the rest stays Ordered as a new request with its own number, linked to this one. Inventory goes up by what arrived, and the material appears in Billable Now.",
     ],
     notes: [
       "Red deadline: a pending request's Needed By date turns red from two working days before the date and stays red once the date has passed. Working days are Monday to Friday; there is no holiday calendar, so a public holiday still counts as a working day. Approved, ordered, delivered and rejected requests never show red.",
-      "A request cannot skip a step: Pending cannot go straight to Delivered, and a delivered or rejected request cannot be changed.",
+      "A request cannot skip a step: Pending cannot go straight to Delivered, and a delivered, rejected or cancelled request cannot be changed.",
+      "Pressing Submit twice — for example after the connection dropped — never raises a second request; the form says \"Request already submitted\".",
+      "If the material you type is already in this project's inventory (same name, ignoring capitals and spacing, and the same unit), the form says so and the delivery adds to that item rather than starting a new one.",
     ],
   },
   {

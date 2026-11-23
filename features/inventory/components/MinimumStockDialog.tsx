@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
+import { formatQty } from "@/lib/quantity";
 import type { InventoryItemDTO } from "@/features/inventory/queries";
 import { setReorderLevel } from "@/features/inventory/actions";
 import { inventoryStatus } from "@/features/inventory/service";
@@ -71,8 +72,8 @@ export function MinimumStockDialog({
         <DialogHeader>
           <DialogTitle>Minimum stock — {item.name}</DialogTitle>
           <DialogDescription>
-            Below this the item reads Low; at zero it is Critical. On hand now:{" "}
-            {item.qtyOnHand.toLocaleString("en-IN")} {item.unit}.
+            Below this the item reads Low; at zero it is Critical. On hand now: {formatQty(item.qtyOnHand)}{" "}
+            {item.unit}.
           </DialogDescription>
         </DialogHeader>
         <form

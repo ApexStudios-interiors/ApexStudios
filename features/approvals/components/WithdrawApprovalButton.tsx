@@ -67,8 +67,8 @@ export function WithdrawApprovalButton({
           <DialogHeader>
             <DialogTitle>Withdraw {refNo}?</DialogTitle>
             <DialogDescription>
-              {item}. The client will no longer see it or be asked to decide. This cannot be undone — raise a new
-              approval if it is needed again.
+              {item}. The client will no longer see it or be asked to decide. This cannot be undone — raise a
+              new approval if it is needed again.
             </DialogDescription>
           </DialogHeader>
           {withdraw.result.serverError && (

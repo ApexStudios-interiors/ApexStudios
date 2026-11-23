@@ -20,6 +20,7 @@ const h = vi.hoisted(() => {
     requireProjectAccess: vi.fn(),
     getUnitOptions: vi.fn(),
     getMaterialSuggestions: vi.fn(),
+    getMaterialOptions: vi.fn(),
     getProjectRateVisibility: vi.fn(),
   };
 });
@@ -39,6 +40,7 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/features/stock/actions", () => ({
   getUnitOptions: h.getUnitOptions,
   getMaterialSuggestions: h.getMaterialSuggestions,
+  getMaterialOptions: h.getMaterialOptions,
 }));
 vi.mock("@/features/projects/actions", () => ({ getProjectRateVisibility: h.getProjectRateVisibility }));
 
@@ -62,6 +64,9 @@ const UNITS = [
   { code: "sft", label: "Square feet" },
   { code: "nos", label: "Numbers" },
 ];
+
+/** getMaterialOptions' shape (APX-15): this project's items, with ids and units. */
+const MATERIAL_ITEMS = [{ id: "00000000-0000-4000-8000-000000000601", name: "Cement OPC 53", unit: "bag" }];
 
 /** getMaterialSuggestions' own shape: distinct inventory item names. */
 const MATERIALS = ["Cement OPC 53", "Pool-grade vitrified tile 300x300"];
@@ -92,6 +97,8 @@ beforeEach(() => {
   h.getUnitOptions.mockResolvedValue(UNITS);
   h.getMaterialSuggestions.mockReset();
   h.getMaterialSuggestions.mockResolvedValue(MATERIALS);
+  h.getMaterialOptions.mockReset();
+  h.getMaterialOptions.mockResolvedValue(MATERIAL_ITEMS);
   h.getProjectRateVisibility.mockReset();
   h.getProjectRateVisibility.mockResolvedValue("readonly");
 });
@@ -107,12 +114,18 @@ describe("GET /api/mobile/v1/projects/:projectId/stock-requests/options", () => 
 
       expect(res.status).toBe(200);
       expect(res.headers.get("cache-control")).toBe("no-store");
-      expect(await res.json()).toEqual({ rateVisibility: "readonly", units: UNITS, materials: MATERIALS });
+      expect(await res.json()).toEqual({
+        rateVisibility: "readonly",
+        units: UNITS,
+        materials: MATERIALS,
+        materialItems: MATERIAL_ITEMS,
+      });
       expect(h.requireRole).toHaveBeenCalledExactlyOnceWith(["admin", "site"]);
       expect(h.requireProjectAccess).toHaveBeenCalledExactlyOnceWith(session, PROJECT_ID);
       expect(h.getProjectRateVisibility).toHaveBeenCalledExactlyOnceWith(PROJECT_ID);
       expect(h.getUnitOptions).toHaveBeenCalledOnce();
       expect(h.getMaterialSuggestions).toHaveBeenCalledOnce();
+      expect(h.getMaterialOptions).toHaveBeenCalledExactlyOnceWith(PROJECT_ID);
     }
   );
 
@@ -147,7 +160,7 @@ describe("GET /api/mobile/v1/projects/:projectId/stock-requests/options", () => 
       { code: "bag", label: "Bags" },
       { code: "sft", label: "Square feet" },
     ]);
-    expect(Object.keys(body).sort()).toEqual(["materials", "rateVisibility", "units"]);
+    expect(Object.keys(body).sort()).toEqual(["materialItems", "materials", "rateVisibility", "units"]);
   });
 
   it("returns 401 with no Bearer header — a cookie session alone is never enough", async () => {
