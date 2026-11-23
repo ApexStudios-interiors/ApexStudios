@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
 import { env } from "@/lib/env";
-import { drain, reap, selfEnqueueAndDrain, type DrainSummary } from "@/lib/jobs/runner";
+import { drain, reap, selfEnqueueAndDrain, type DrainSummary, type ReapSummary } from "@/lib/jobs/runner";
 import { DRAIN_JOB_NAMES } from "@/lib/jobs/registry";
 
 /**
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   // 3. Claim a bounded batch, dispatch, finish — never real work here.
-  let summary: DrainSummary | { requeued: number };
+  let summary: DrainSummary | ReapSummary;
   switch (job) {
     case "jobs.drain":
       summary = await drain(DRAIN_JOB_NAMES);
