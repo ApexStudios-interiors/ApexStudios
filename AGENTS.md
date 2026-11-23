@@ -47,9 +47,9 @@ Three roles with genuinely different data visibility: **Admin**, **Site Supervis
 **Every role signs in the same way: username + password on `/login` (D51).** There is no magic
 link, no separate client sign-in and no two-factor step (D48), and the app sends no auth email.
 Accounts are created on the Users page (Add User: Admin, Site Supervisor, or Client). A client
-login always belongs to a project: choosing Client in Add User requires a Project, and the project
-dashboard's Client access card can also create one and grants an existing client login access to
-another project (D51, amended 2026-11-23).
+login always belongs to a project: choosing Client in Add User requires a Project. The project
+dashboard's Client access card lists a project's client logins and grants an existing one access to
+another project; it no longer creates them (D51, amended 2026-11-23).
 
 ### The one rule that matters most
 

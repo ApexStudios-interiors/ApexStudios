@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * D51: client logins are created and granted per project, by owner/admin only —
- * from the project dashboard's Client access card, or from Add User with the
- * Client role and a required Project (D51 amendment, 2026-11-23).
+ * D51: client logins are created by owner/admin from Add User with the Client
+ * role and a required Project (D51 amendment, 2026-11-23); the project
+ * dashboard's Client access card lists them and grants an existing one access.
  *
  * Deliberately stops short of submitting. Creating a login writes a real
  * auth.users row, and there is one Supabase project, which is production
@@ -14,20 +14,15 @@ import { expect, test } from "@playwright/test";
 const BHEL_PROJECT = "00000000-0000-4000-8000-0000000000c1";
 
 test.describe("admin: Client access card", () => {
-  test("lists the seeded client and opens Create client login", async ({ page }, testInfo) => {
+  test("lists the seeded client; no Create client login button", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "admin", "admin-only journey");
     await page.goto(`/projects/${BHEL_PROJECT}`);
 
     await expect(page.getByRole("heading", { name: "Client access" })).toBeVisible();
     await expect(page.getByText("tvrao@example.invalid")).toBeVisible();
 
-    await page.getByRole("button", { name: "Create client login" }).click();
-    await expect(page.getByRole("heading", { name: "Create client login" })).toBeVisible();
-    await page.getByLabel("Username").fill("someclient");
-    await expect(page.getByText("Signs in as someclient@beapex.in")).toBeVisible();
-    // No role choice: a login made here is always a client.
-    await expect(page.getByLabel("Role")).toHaveCount(0);
-    await page.getByRole("button", { name: "Cancel" }).click();
+    // New client logins come from Users → Add User (removed here 2026-11-23).
+    await expect(page.getByRole("button", { name: "Create client login" })).toHaveCount(0);
   });
 
   test("Add User offers Client, which asks for a project", async ({ page }, testInfo) => {

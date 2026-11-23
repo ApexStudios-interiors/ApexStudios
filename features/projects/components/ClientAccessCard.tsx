@@ -1,12 +1,13 @@
 import type { ProjectClientAccess } from "@/features/projects/queries";
 import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { Icon } from "@/components/ui/Icon";
 import { initials } from "@/lib/logic";
 
 /**
- * D51: the project's client logins, and the two ways to add one — create a new
- * login for this project, or give an existing client login access to it too.
+ * D51: the project's client logins, and Add existing client to give a client
+ * login that already exists access to this project too. A NEW client login is
+ * created from Users → Add User with the Client role (the card's own Create
+ * client login button was removed 2026-11-23, once Add User could do it).
  *
  * There was no project team or membership surface anywhere in the app before
  * this (addProjectMember had no caller), so it lives on the project dashboard
@@ -35,14 +36,6 @@ export function ClientAccessCard({
               Add existing client
             </OpenDialogButton>
           )}
-          <OpenDialogButton
-            size="sm"
-            variant="primary"
-            dialog={{ kind: "createClientLogin", projectId, projectName }}
-          >
-            <Icon name="plus" className="w-[15px] h-[15px]" />
-            Create client login
-          </OpenDialogButton>
         </div>
       </CardHeader>
       {access.members.length === 0 ? (
