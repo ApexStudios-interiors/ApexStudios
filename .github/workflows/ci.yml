@@ -223,16 +223,6 @@ jobs:
           echo "DB  $DB_URL"
           echo "API $API_URL"
 
-      - name: TEMP diagnose hook
-        continue-on-error: true
-        run: |
-          docker exec -i supabase_db_apex-dashboard psql -U supabase_admin -d postgres <<'SQL'
-          select rolname, rolbypassrls from pg_roles where rolname in ('supabase_auth_admin','postgres');
-          set role supabase_auth_admin;
-          select count(*) as profiles_visible_to_auth_admin from public.profiles;
-          select public.custom_access_token_hook(jsonb_build_object('user_id','00000000-0000-4000-8000-0000000000d5','claims',jsonb_build_object('app_metadata','{}'::jsonb))) is null as hook_returns_null;
-          SQL
-
       - name: RLS and structural tests (pgTAP)
         run: pnpm test:rls
 
