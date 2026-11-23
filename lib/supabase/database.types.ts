@@ -93,6 +93,7 @@ export type Database = {
           uploaded_by: string;
           created_at: string;
           deleted_at: string | null;
+          kind: string;
         };
         Insert: {
           id?: string;
@@ -108,6 +109,7 @@ export type Database = {
           uploaded_by: string;
           created_at?: string;
           deleted_at?: string | null;
+          kind?: string;
         };
         Update: {
           id?: string;
@@ -123,6 +125,7 @@ export type Database = {
           uploaded_by?: string;
           created_at?: string;
           deleted_at?: string | null;
+          kind?: string;
         };
         Relationships: [];
       };
@@ -930,6 +933,24 @@ export type Database = {
         };
         Relationships: [];
       };
+      login_throttle: {
+        Row: {
+          username_hash: string;
+          window_start: string;
+          failures: number;
+        };
+        Insert: {
+          username_hash: string;
+          window_start?: string;
+          failures?: number;
+        };
+        Update: {
+          username_hash?: string;
+          window_start?: string;
+          failures?: number;
+        };
+        Relationships: [];
+      };
       rate_limits: {
         Row: {
           profile_id: string;
@@ -1257,6 +1278,15 @@ export type Database = {
         };
         Relationships: [];
       };
+      v_project_finance: {
+        Row: {
+          id: string | null;
+          contract_value: number | null;
+          mobilisation_advance: number | null;
+          mobilisation_recovered: number | null;
+        };
+        Relationships: [];
+      };
       v_client_name: {
         Row: {
           id: string | null;
@@ -1468,6 +1498,12 @@ export type Database = {
         };
         Returns: string;
       };
+      fn_shares_project: {
+        Args: {
+          p_profile_id: string;
+        };
+        Returns: boolean;
+      };
       fn_recompute_progress: {
         Args: {
           p_package_id: string;
@@ -1493,13 +1529,32 @@ export type Database = {
         };
         Returns: unknown;
       };
-      rpc_check_rate_limit: {
+      rpc_check_rate_limit:
+        | {
+            Args: {
+              p_action: string;
+            };
+            Returns: boolean;
+          }
+        | {
+            Args: {
+              p_action: string;
+              p_max_per_window: number;
+              p_window_seconds?: number;
+            };
+            Returns: boolean;
+          };
+      rpc_login_allowed: {
         Args: {
-          p_action: string;
-          p_max_per_window: number;
-          p_window_seconds?: number;
+          p_username: string;
         };
         Returns: boolean;
+      };
+      rpc_login_record_failure: {
+        Args: {
+          p_username: string;
+        };
+        Returns: unknown;
       };
       rpc_claim_jobs: {
         Args: {

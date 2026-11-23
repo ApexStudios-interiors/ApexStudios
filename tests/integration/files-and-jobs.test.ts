@@ -60,37 +60,76 @@ async function signedInAs(email: string): Promise<SupabaseClient> {
   return client;
 }
 
+/**
+ * APX-35 (20261124100006): a signed-in caller can no longer enqueue an
+ * arbitrary payload under an arbitrary key. Only an attachment.thumbnail for
+ * an attachment the caller uploaded, or — admin only — a bill.pdf for a bill
+ * that is actually submitted; the payload and the idempotency key are
+ * rebuilt in the database from the row itself, so a caller can neither aim a
+ * job at someone else's record nor flood the queue with fresh keys.
+ */
 describe("rpc_enqueue_job", () => {
-  it("a real site session can enqueue attachment.thumbnail", async () => {
+  const BILL_SUBMITTED = "00000000-0000-4000-8000-000000000402";
+  const BILL_DRAFT = "00000000-0000-4000-8000-000000000404";
+
+  async function ownAttachment(uploadedBy: string = SEED.siteProfile): Promise<string> {
+    const entityId = crypto.randomUUID();
+    const row = one(
+      await sql`insert into public.attachments (org_id, project_id, entity_type, entity_id, r2_key, file_name, mime_type, size_bytes, uploaded_by)
+                values (${SEED.org}, ${SEED.project}, 'daily_update', ${entityId},
+                        ${`org/${SEED.org}/project/${SEED.project}/daily_update/${entityId}/${crypto.randomUUID()}-t.jpg`},
+                        't.jpg', 'image/jpeg', 100, ${uploadedBy})
+                returning id`,
+      "inserted an attachment"
+    );
+    cleanupAttachmentIds.push(row.id);
+    return row.id as string;
+  }
+
+  it("a real site session can enqueue attachment.thumbnail for its own upload", async () => {
     const site = await signedInAs("ravi@beapex.in");
-    const idempotencyKey = `test-enqueue-${crypto.randomUUID()}`;
+    const attachmentId = await ownAttachment();
     const { data: id, error } = await site.rpc("rpc_enqueue_job", {
       p_name: "attachment.thumbnail",
-      p_payload: { attachmentId: "irrelevant-for-this-test" },
-      p_idempotency_key: idempotencyKey,
+      p_payload: { attachmentId, extra: "dropped" },
+      p_idempotency_key: "caller-chosen-key-is-ignored",
     });
     expect(error).toBeNull();
     expect(id).toBeTruthy();
     if (id) cleanupJobIds.push(id);
+
+    const job = one(await sql`select payload, idempotency_key from public.jobs where id = ${id}`, "job");
+    expect(job.idempotency_key).toBe(attachmentId);
+    expect(job.payload).toEqual({ attachmentId });
   });
 
-  it("T-24: enqueuing the same (name, idempotency_key) twice returns the same row, at the application RPC too", async () => {
+  it("T-24: enqueuing the same thumbnail twice returns the same row, at the application RPC too", async () => {
     const site = await signedInAs("ravi@beapex.in");
-    const idempotencyKey = `test-idem-${crypto.randomUUID()}`;
+    const attachmentId = await ownAttachment();
     const first = await site.rpc("rpc_enqueue_job", {
       p_name: "attachment.thumbnail",
-      p_payload: {},
-      p_idempotency_key: idempotencyKey,
+      p_payload: { attachmentId },
+      p_idempotency_key: `a-${crypto.randomUUID()}`,
     });
     const second = await site.rpc("rpc_enqueue_job", {
       p_name: "attachment.thumbnail",
-      p_payload: {},
-      p_idempotency_key: idempotencyKey,
+      p_payload: { attachmentId },
+      p_idempotency_key: `b-${crypto.randomUUID()}`,
     });
     expect(first.error).toBeNull();
     expect(second.error).toBeNull();
     expect(second.data).toBe(first.data);
     if (first.data) cleanupJobIds.push(first.data);
+  });
+
+  it("refuses a thumbnail for someone else's attachment", async () => {
+    const client = await signedInAs("tvrao@example.invalid");
+    const attachmentId = await ownAttachment(SEED.siteProfile);
+    const { error } = await client.rpc("rpc_enqueue_job", {
+      p_name: "attachment.thumbnail",
+      p_payload: { attachmentId },
+    });
+    expect(error?.message).toMatch(/^FORBIDDEN/);
   });
 
   it("refuses a job name a real user session has no business enqueueing", async () => {
@@ -99,24 +138,37 @@ describe("rpc_enqueue_job", () => {
     expect(error?.message).toMatch(/FORBIDDEN/);
   });
 
-  /**
-   * The other side of T-24, and the regression this asserts is real: a bill
-   * rejected by the client goes back to draft at `revision + 1`
-   * (`rpc_transition_bill`), and the admin resubmits it. Keyed on
-   * `${billId}:submitted` — no revision — the resubmission hit
-   * `jobs_idem_uq` and produced NO second job, so the PDF the client
-   * certified against was still the pre-rejection one. `billPdfJobKey`
-   * (features/billing/pdf.ts) is what `features/billing/actions.ts` now
-   * passes; this proves it actually escapes the dedup the old key hit.
-   */
-  it("a resubmitted bill's bill.pdf key enqueues a second job, where the revision-blind key did not", async () => {
-    const admin = await signedInAs("suresh@beapex.in");
-    const billId = crypto.randomUUID();
+  it("bill.pdf: a client may not queue an invoice render", async () => {
+    const client = await signedInAs("tvrao@example.invalid");
+    const { error } = await client.rpc("rpc_enqueue_job", {
+      p_name: "bill.pdf",
+      p_payload: { billId: BILL_SUBMITTED },
+    });
+    expect(error?.message).toMatch(/^FORBIDDEN/);
+  });
 
-    const enqueueWith = async (idempotencyKey: string) => {
+  it("bill.pdf: a draft bill is never rendered", async () => {
+    const admin = await signedInAs("suresh@beapex.in");
+    const { error } = await admin.rpc("rpc_enqueue_job", {
+      p_name: "bill.pdf",
+      p_payload: { billId: BILL_DRAFT },
+    });
+    expect(error?.message).toMatch(/^ILLEGAL_TRANSITION/);
+  });
+
+  /**
+   * The revision-keyed dedup (features/billing/pdf.ts) is now applied by the
+   * database itself: whatever key the caller passes, the job is keyed by the
+   * bill's CURRENT revision, so a retried submit is one job and a
+   * resubmission after a rejection (revision + 1) is a second one.
+   */
+  it("bill.pdf: keyed by the bill's own revision, whatever the caller sends", async () => {
+    const admin = await signedInAs("suresh@beapex.in");
+    const before = one(await sql`select revision from public.bills where id = ${BILL_SUBMITTED}`, "bill");
+    const enqueue = async (idempotencyKey: string) => {
       const { data, error } = await admin.rpc("rpc_enqueue_job", {
         p_name: "bill.pdf",
-        p_payload: { billId },
+        p_payload: { billId: BILL_SUBMITTED },
         p_idempotency_key: idempotencyKey,
       });
       expect(error).toBeNull();
@@ -124,23 +176,19 @@ describe("rpc_enqueue_job", () => {
       return data as string;
     };
 
-    // The pre-fix key: submit, reject, resubmit all collapse onto one job.
-    const blindFirst = await enqueueWith(`${billId}:submitted`);
-    const blindSecond = await enqueueWith(`${billId}:submitted`);
-    expect(blindSecond).toBe(blindFirst);
+    const first = await enqueue("one");
+    const again = await enqueue("two");
+    expect(again).toBe(first);
+    const job = one(await sql`select idempotency_key from public.jobs where id = ${first}`, "job");
+    expect(job.idempotency_key).toBe(billPdfJobKey(BILL_SUBMITTED, before.revision as number));
 
-    // The fix: revision 1's submission and revision 2's resubmission are
-    // separate jobs, while a retried enqueue of either is still just one.
-    const revisionOne = await enqueueWith(billPdfJobKey(billId, 1));
-    const revisionOneAgain = await enqueueWith(billPdfJobKey(billId, 1));
-    const revisionTwo = await enqueueWith(billPdfJobKey(billId, 2));
-    expect(revisionOneAgain).toBe(revisionOne);
-    expect(revisionTwo).not.toBe(revisionOne);
-    expect(revisionTwo).not.toBe(blindFirst);
-
-    const rows = await sql`select count(*)::int as n from public.jobs
-                            where name = 'bill.pdf' and payload->>'billId' = ${billId}`;
-    expect(one(rows, "bill.pdf job count").n).toBe(3);
+    await sql`update public.bills set revision = revision + 1 where id = ${BILL_SUBMITTED}`;
+    try {
+      const next = await enqueue("one");
+      expect(next).not.toBe(first);
+    } finally {
+      await sql`update public.bills set revision = ${before.revision as number} where id = ${BILL_SUBMITTED}`;
+    }
   });
 });
 
@@ -506,18 +554,21 @@ describe("daily update photos — who may attach them, and at most four", () => 
   const CLIENT_EMAIL = "tvrao@example.invalid";
 
   function photoRow(entityId: string, over: Partial<Record<string, unknown>> = {}) {
-    return {
+    const row = {
       org_id: SEED.org,
       project_id: SEED.project,
       entity_type: "daily_update",
       entity_id: entityId,
-      r2_key: `org/test/du-photo-${crypto.randomUUID()}.jpg`,
       file_name: "photo.jpg",
       mime_type: "image/jpeg",
       size_bytes: 100,
       uploaded_by: SEED.siteProfile,
       ...over,
     };
+    // The real key layout (lib/r2/keys.ts): trg_attachments_check_integrity
+    // refuses a signed-in insert whose key is not under its own record.
+    const r2_key = `org/${String(row.org_id)}/project/${String(row.project_id)}/daily_update/${entityId}/${crypto.randomUUID()}-photo.jpg`;
+    return { r2_key, ...row };
   }
 
   /** Inserts a photo row as a signed-in user — through RLS and the trigger. */
