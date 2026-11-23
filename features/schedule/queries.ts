@@ -316,3 +316,64 @@ export async function getScheduleForPackage(
   const owners = await ownerNames(taskRows.map((t) => t.owner_profile_id));
   return buildPackageSchedule(pkg, phases, taskRows, project.start_date, todayIso(), owners);
 }
+
+/** One task as the dashboard's Late tasks and Today cards list it. No money —
+ *  `tasks` carries none. */
+export type TaskBriefDTO = {
+  id: string;
+  name: string;
+  packageName: string | null;
+  endDate: string;
+  progressPct: number;
+  late: boolean;
+};
+
+/** Cap per list: a dashboard card, not the schedule. */
+const TASK_BRIEF_LIMIT = 8;
+
+/**
+ * APX-48: the tasks that need attention today — `late` (past the end date,
+ * under 100%, schedule/service `isLate`) and `inProgress` (started, not yet
+ * due, under 100%). Package names through the same role split as the rest of
+ * this file (`packages` for admin, `v_package_site` otherwise).
+ */
+export async function getTaskAttention(
+  session: Session,
+  projectId: string
+): Promise<{ late: TaskBriefDTO[]; lateCount: number; inProgress: TaskBriefDTO[] }> {
+  const effectiveRole = session.impersonating?.role ?? session.role;
+  const isAdmin = effectiveRole === "admin";
+  const supabase = await createClient();
+  const today = todayIso();
+
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("id, name, package_id, start_date, end_date, progress_pct")
+    .eq("project_id", projectId)
+    .is("deleted_at", null)
+    .lte("start_date", today)
+    .lt("progress_pct", 100)
+    .order("end_date", { ascending: true });
+  if (error) throw new Error(error.message);
+
+  const packages = await fetchPackagesForSchedule(isAdmin, projectId);
+  const packageName = new Map(packages.map((p) => [p.id, p.name]));
+
+  const briefs: TaskBriefDTO[] = data.map((t) => {
+    const endDate = t.end_date ?? t.start_date;
+    return {
+      id: t.id,
+      name: t.name,
+      packageName: packageName.get(t.package_id) ?? null,
+      endDate,
+      progressPct: t.progress_pct,
+      late: isLate({ endDate, progressPct: t.progress_pct }, today),
+    };
+  });
+  const late = briefs.filter((t) => t.late);
+  return {
+    late: late.slice(0, TASK_BRIEF_LIMIT),
+    lateCount: late.length,
+    inProgress: briefs.filter((t) => !t.late).slice(0, TASK_BRIEF_LIMIT),
+  };
+}
