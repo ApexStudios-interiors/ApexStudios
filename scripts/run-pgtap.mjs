@@ -47,15 +47,41 @@ assertNotProduction([dbUrl], "the pgTAP suite");
 const sql = postgres(dbUrl, { max: 1, prepare: false, onnotice: () => {} });
 
 const TAP_LINE = /^(not )?ok\s+\d+/;
+// A file whose FIRST line is `-- KNOWN FAILURE APX-<id>: <reason>` is not run,
+// and is listed loudly in the summary. It exists for a file that is stale
+// against the product (not for a failing policy): the reason and the issue id
+// are mandatory, and a skipped file is never counted as passing.
+const KNOWN_FAILURE = /^--\s*KNOWN FAILURE (APX-[\w-]+):\s*(.+)$/;
 let totalOk = 0;
 let totalNotOk = 0;
 let sawAnyLine = false;
+const erroredFiles = [];
+const skippedFiles = [];
 
 try {
   for (const file of files) {
     const full = path.join(DIR, file);
     console.log(`\n── ${full} ──`);
-    const resultSets = await sql.unsafe(readFileSync(full, "utf8"));
+    const text = readFileSync(full, "utf8");
+    const known = KNOWN_FAILURE.exec(text.split("\n", 1)[0] ?? "");
+    if (known) {
+      console.log(`  # SKIP — KNOWN FAILURE ${known[1]}: ${known[2]}`);
+      skippedFiles.push(`${full} (${known[1]})`);
+      continue;
+    }
+
+    let resultSets;
+    try {
+      resultSets = await sql.unsafe(text);
+    } catch (e) {
+      // One file's exception must not hide every file after it. Each file is
+      // its own `begin … rollback`, so the connection is reusable once the
+      // aborted transaction is closed.
+      console.error(`  ✗ ${full} aborted: ${e.message}`);
+      erroredFiles.push(full);
+      await sql.unsafe("rollback").catch(() => {});
+      continue;
+    }
 
     for (const rows of resultSets) {
       for (const row of rows) {
@@ -82,6 +108,15 @@ if (process.exitCode) process.exit(process.exitCode);
 
 console.log(`\n${"═".repeat(60)}`);
 console.log(`${totalOk} ok, ${totalNotOk} not ok, across ${files.length} file(s)`);
+if (skippedFiles.length > 0) {
+  console.warn(`⚠ ${skippedFiles.length} file(s) NOT RUN, marked KNOWN FAILURE:`);
+  for (const f of skippedFiles) console.warn(`    ${f}`);
+}
+if (erroredFiles.length > 0) {
+  console.error(`✗ ${erroredFiles.length} file(s) aborted with an error before finishing:`);
+  for (const f of erroredFiles) console.error(`    ${f}`);
+  process.exit(1);
+}
 
 if (!sawAnyLine) {
   console.error("✗ No TAP output was produced. Something is wrong with the runner or the files.");
