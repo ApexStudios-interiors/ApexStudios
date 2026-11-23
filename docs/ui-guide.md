@@ -39,6 +39,7 @@ flowchart TD
     Home["/ — All Projects"] -->|click a project| Dash["/projects/:id — Dashboard"]
     Home --> Users["/users — Users (Admin only)"]
     Home --> InvAll["/inventory — Inventory, all projects (Admin/Site)"]
+    Home --> Inbox["/inbox — Needs my action (every role)"]
 
     Dash --> Packages["/projects/:id/packages — Packages list"]
     Packages -->|click a package| ModDetail["/projects/:id/packages/:moduleId"]
@@ -67,9 +68,10 @@ Top to bottom:
    - "View all projects" (goes to `/`)
    - every project listed by name + client, click jumps straight to that project's Dashboard
    - highlights the project you're currently in
-3. **Inventory** *(Admin, Site only)* — standalone link to the business-wide `/inventory` view, tagged **ALL** on the right so it's not confused with the per-project Inventory page below.
-4. **Project name** — plain text header, *only rendered once you're inside a project* (hidden on Home/Users/business Inventory, by design — the sidebar shouldn't imply a project is "selected" when you're looking at the portfolio).
-5. **Project navigation** *(only when inside a project, filtered by role — see §13)*:
+3. **Needs my action** *(every role)* — link to `/inbox`, the aged list of everything waiting on you across all your projects (see §9).
+4. **Inventory** *(Admin, Site only)* — standalone link to the business-wide `/inventory` view, tagged **ALL** on the right so it's not confused with the per-project Inventory page below.
+5. **Project name** — plain text header, *only rendered once you're inside a project* (hidden on Home/Users/business Inventory, by design — the sidebar shouldn't imply a project is "selected" when you're looking at the portfolio).
+6. **Project navigation** *(only when inside a project, filtered by role — see §13)*:
    - Dashboard
    - Packages — expandable (chevron toggle); expands into every package as a numbered sub-item (01, 02, 03…)
    - Schedule
@@ -79,15 +81,15 @@ Top to bottom:
    - Approvals
    - Billing / **Bills** (label changes for Client) — badge shows count of **Submitted** bills, Client only
    - Approvals also badges for Client: count of **Pending** approvals
-6. **Studio** *(Admin only)* — group label, contains **Users**.
-7. **User card** (bottom-left) — avatar initials, name, role. Click opens an upward menu: **Switch role** with Admin / Site Supervisor / Client, checkmark on whichever is active.
+7. **Studio** *(Admin only)* — group label, contains **Users**.
+8. **User card** (bottom-left) — avatar initials, name, role. Click opens an upward menu: **Switch role** with Admin / Site Supervisor / Client, checkmark on whichever is active.
 
 ---
 
 ## 5. Header
 
-- **Breadcrumb** (left) — `{Project} / {Section}` or `{Project} / Packages / {Package}` for module pages; just "All Projects", "Users", or "Inventory" on those top-level pages.
-- **Notifications bell** (right) — badge = count of open items; click for a dropdown, role-scoped (see §9).
+- **Breadcrumb** (left) — `{Project} / {Section}` or `{Project} / Packages / {Package}` for module pages; just "All Projects", "Users", "Inventory" or "Needs my action" on those top-level pages.
+- **Notifications bell** (right) — badge = count of unread items; click for a dropdown, role-scoped (see §9). Its footer links to **Needs my action**. Escape closes it.
 - **Theme toggle** (far right) — sun/moon icon button, flips light ↔ dark, remembered via `localStorage`, defaults to your OS setting on first visit.
 
 ---
@@ -248,7 +250,9 @@ Value = quantity × unit cost, summed for the "Total Value" stat.
 
 ## 9. Notifications
 
-The bell icon aggregates live, role-scoped items from across **every** project (not just the one you're viewing) — built fresh from current data each time you open it, nothing is "marked read":
+The bell aggregates live, role-scoped items from across **every** project you can access (not just the one you're viewing), built fresh from current data each time. The badge counts items you have not opened yet (D60); opened items stay listed, in grey, until the work is done. Nothing from an **archived** project appears.
+
+**Open work** (stays until it is done):
 
 | Role | Sees |
 |---|---|
@@ -256,7 +260,32 @@ The bell icon aggregates live, role-scoped items from across **every** project (
 | Site | Pending stock requests · Inventory items that are Low or Critical |
 | Client | Approvals Pending (need their sign-off) · Bills Submitted (awaiting their approval) |
 
+**Status changes** (news — shown for 14 days after they happen, D68):
+
+| Change | Who is told |
+|---|---|
+| Stock request approved | the person who raised it |
+| Stock request ordered | Site Supervisors on the project, and the person who raised it |
+| Stock request delivered | Admins |
+| Stock request rejected — with the reason | the person who raised it |
+| Approval approved / rejected by the client — with the reason | Admins, and the person who requested it |
+| Bill certified / rejected by the client — with the reason | Admins |
+
+Low or Critical uses the Inventory page's own rule: Critical at zero on hand, Low below the minimum stock. No entry ever shows an amount; Site never sees a bill and a client never sees stock. While an admin previews a role, the bell (and search) show only the previewed project.
+
 Each entry is a link straight to the relevant project's relevant page.
+
+### 9.1 Needs my action (`/inbox`)
+
+One list of everything waiting on **you**, across all your projects, oldest first, with how many days each item has waited. Linked from the sidebar and from the bell's footer. Paginated like every table; empty when nothing is waiting.
+
+| Role | Lists |
+|---|---|
+| Admin | Stock requests to decide · Draft bills to submit · Certified bills awaiting payment · Rejected approvals not yet revised |
+| Site | Ordered materials waiting to be received · Your stock requests that were rejected (last 14 days) |
+| Client | Approvals waiting for your decision · Bills waiting for your certification |
+
+Columns: Action, Item (a link to where you act), Project, Since, Waiting. Items waiting a week or more are emphasised. An item leaves the list as soon as the work is done.
 
 ---
 

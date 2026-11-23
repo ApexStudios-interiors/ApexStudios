@@ -1357,6 +1357,8 @@ export type Database = {
           href: string | null;
           created_at: string | null;
           for_roles: unknown | null;
+          for_profile_id: string | null;
+          for_profile_role: Database["public"]["Enums"]["app_role"] | null;
         };
         Relationships: [];
       };
@@ -1438,6 +1440,25 @@ export type Database = {
           name: string | null;
           billing_status: Database["public"]["Enums"]["phase_billing_status"] | null;
           is_complete: boolean | null;
+        };
+        Relationships: [];
+      };
+      v_stock_request_notify: {
+        Row: {
+          id: string | null;
+          project_id: string | null;
+          ref_no: string | null;
+          material_name: string | null;
+          status: Database["public"]["Enums"]["stock_request_status"] | null;
+          requested_by: string | null;
+          requester_role: Database["public"]["Enums"]["app_role"] | null;
+          needed_by: string | null;
+          created_at: string | null;
+          approved_at: string | null;
+          ordered_at: string | null;
+          delivered_at: string | null;
+          rejected_at: string | null;
+          rejected_reason: string | null;
         };
         Relationships: [];
       };
