@@ -1318,9 +1318,7 @@ export const adminAction = actionClient.use(async ({ next, ctx }) => {
 ```
 app/
 ├─ (auth)/
-│  ├─ login/page.tsx                 email+password (staff)
-│  ├─ client-login/page.tsx          magic link / OTP
-│  └─ callback/route.ts
+│  └─ login/page.tsx                 username + password, every role (D51)
 ├─ (app)/
 │  ├─ layout.tsx                     Sidebar + Header + role context
 │  ├─ page.tsx                       All Projects
