@@ -279,6 +279,7 @@ function dto(over: Record<string, unknown> = {}) {
     orderedAt: null,
     deliveredAt: null,
     rejectedReason: null,
+    mine: false,
     ...over,
   };
 }
@@ -378,14 +379,14 @@ describe("GET /api/mobile/v1/projects/:projectId/stock-requests", () => {
     }
   );
 
-  it.each(["cancelled", "PENDING", "", "pending,approved"])("returns 400 for status=%j", async (status) => {
+  it.each(["withdrawn", "PENDING", "", "pending,approved"])("returns 400 for status=%j", async (status) => {
     const res = await list(`?status=${encodeURIComponent(status)}`);
 
     await expectError(
       res,
       400,
       "VALIDATION",
-      "status must be one of: pending, approved, ordered, delivered, rejected."
+      "status must be one of: pending, approved, ordered, delivered, rejected, cancelled."
     );
     expect(h.getStockRequestsPage).not.toHaveBeenCalled();
   });
@@ -464,6 +465,8 @@ describe("GET /api/mobile/v1/projects/:projectId/stock-requests", () => {
     const shown: Record<string, unknown> = dto();
     delete shown.rate;
     delete shown.value;
+    // `mine` feeds `actions`; it is not itself a key of the mobile row.
+    delete shown.mine;
 
     const [row] = (await (await list()).json()).requests;
 
@@ -472,12 +475,13 @@ describe("GET /api/mobile/v1/projects/:projectId/stock-requests", () => {
 
   it.each([
     ["admin", "pending", ["approved", "rejected"]],
-    ["admin", "approved", ["ordered"]],
-    ["admin", "ordered", ["delivered"]],
+    ["admin", "approved", ["ordered", "cancelled"]],
+    ["admin", "ordered", ["delivered", "cancelled"]],
     ["site", "pending", []],
     ["site", "ordered", ["delivered"]],
     ["admin", "delivered", []],
     ["admin", "rejected", []],
+    ["admin", "cancelled", []],
   ] as const)(
     "gives a %s a %s request the actions %j, from availableTransitions",
     async (role, status, expected) => {
@@ -487,7 +491,8 @@ describe("GET /api/mobile/v1/projects/:projectId/stock-requests", () => {
       const [row] = (await (await list()).json()).requests;
 
       expect(row.actions).toEqual(expected);
-      expect(service.availableTransitions).toHaveBeenCalledWith(status, role);
+      // 20261124400002: whether this user raised it decides a pending Cancel.
+      expect(service.availableTransitions).toHaveBeenCalledWith(status, role, { isRequester: false });
     }
   );
 

@@ -52,7 +52,16 @@ export async function createStockRequestFor(
     p_rate: mayEnterRate ? input.rate : undefined,
     p_needed_by: input.neededBy,
     p_note: input.note,
+    // APX-44: the form's own id. Absent (an older mobile build), the RPC
+    // generates one as before.
+    p_id: input.id,
   });
+  // A retry of a request that already succeeded. The RPC answers
+  // ALREADY_SUBMITTED itself; two truly simultaneous submits can instead meet
+  // the primary key, which is the same fact.
+  if (error?.code === "23505" && error.message.includes("stock_requests_pkey")) {
+    throw new Error("ALREADY_SUBMITTED: this stock request was already submitted");
+  }
   if (error) throw new Error(error.message);
   // The generated type for a `returns public.stock_requests` RPC is
   // `unknown` (scripts/gen-types.mjs only maps scalar Postgres types, not

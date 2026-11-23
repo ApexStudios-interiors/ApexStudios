@@ -6,7 +6,7 @@
 -- `inventorySearchFilter`; the behavioural equivalence against that exact
 -- PostgREST filter, from real client sessions, is in
 -- tests/integration/stock-and-inventory.test.ts. This file pins the shape
--- (one overload, invoker, search_path, grants) and the matching rules. Like
+-- (one overload, definer, search_path, grants) and the matching rules. Like
 -- 11_password_reset_test.sql it simulates the caller's JWT with set_config,
 -- because is_admin() and the inventory_items select policy read the claim.
 --
@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(16);
+select plan(18);
 
 -- ── shape ────────────────────────────────────────────────────────────────────
 select is(
@@ -38,10 +38,12 @@ select is(
   'both arguments default, so existing no-arg and project-only callers keep working'
 );
 
+-- 20261124400002 (APX-03): inventory_items is admin-only now, so the RPC is
+-- security definer and applies the org/role/membership scoping in its body.
 select ok(
-  (select not p.prosecdef from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  (select p.prosecdef from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname = 'rpc_inventory_stats'),
-  'rpc_inventory_stats is still security invoker'
+  'rpc_inventory_stats is security definer (inventory_items is admin-only since 20261124400002)'
 );
 
 select ok(
@@ -62,12 +64,21 @@ select ok(
 
 -- ── fixtures, as the migration owner, before switching role ──────────────────
 -- A prefix no seeded item carries, so every count below is exact.
-insert into public.inventory_items (org_id, project_id, name, category, unit, qty_on_hand, reorder_level, unit_cost) values
-  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Pgtapq M_20 grade',   null,          'bag', 10, 5, 100),
-  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Pgtapq M120 grade',   null,          'bag',  2, 5, 100),
-  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Pgtapq 100% acrylic', null,          'can',  0, 5, 100),
-  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Pgtapq back\slash',   null,          'len', 10, 5, 100),
-  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Plain widget',        'PGTAPQ cat',  'nos', 10, 5, 100);
+--
+-- Each fixture carries its own SKU. KNOWN FAILURE APX-TBD (found 2026-11-23
+-- when this file first ran, on CI's local stack): inventory_sku_uq is
+-- `unique nulls not distinct (org_id, project_id, sku)`, so a project can hold
+-- only ONE item without a SKU, and five SKU-less fixtures abort on the second
+-- insert. This file is about search, not SKUs, so it sidesteps that here;
+-- the bug itself is pinned by a skipped test in
+-- tests/integration/stock-and-inventory.test.ts. SKUs are not searched
+-- (name and category only), so they cannot change a count below.
+insert into public.inventory_items (org_id, project_id, name, category, sku, unit, qty_on_hand, reorder_level, unit_cost) values
+  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Pgtapq M_20 grade',   null,          'T12-1', 'bag', 10, 5, 100),
+  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Pgtapq M120 grade',   null,          'T12-2', 'bag',  2, 5, 100),
+  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Pgtapq 100% acrylic', null,          'T12-3', 'can',  0, 5, 100),
+  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Pgtapq back\slash',   null,          'T12-4', 'len', 10, 5, 100),
+  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Plain widget',        'PGTAPQ cat',  'T12-5', 'nos', 10, 5, 100);
 
 set local role authenticated;
 
@@ -135,6 +146,24 @@ select is(
   (select total_value from public.rpc_inventory_stats(p_search => 'pgtapq')),
   null::numeric,
   'site still gets a null total_value with a search (D40)'
+);
+
+select is(
+  (select total_items::int from public.rpc_inventory_stats(p_search => 'pgtapq')),
+  5,
+  'site still counts its project''s items, though it can no longer read the base table'
+);
+
+-- ── client (d6) ──────────────────────────────────────────────────────────────
+select set_config('request.jwt.claims', json_build_object(
+  'sub', '00000000-0000-4000-8000-0000000000d6',
+  'app_metadata', json_build_object('app_role', 'client', 'org_id', '00000000-0000-4000-8000-0000000000a0')
+)::text, true);
+
+select is(
+  (select total_items::int from public.rpc_inventory_stats(p_search => 'pgtapq')),
+  0,
+  'a client counts nothing — the definer body scopes to admin and site'
 );
 
 select * from finish();

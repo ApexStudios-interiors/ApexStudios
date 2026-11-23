@@ -217,7 +217,7 @@ describe("POST /api/mobile/v1/stock-requests/:requestId/transition", () => {
   it.each([
     ["a missing toStatus", {}],
     ["pending — not a transition target", { toStatus: "pending" }],
-    ["an unknown status", { toStatus: "cancelled" }],
+    ["an unknown status", { toStatus: "withdrawn" }],
     ["a status in another case", { toStatus: "APPROVED" }],
     ["a note that is not text", { toStatus: "rejected", note: 42 }],
   ])("returns 400 for %s, with the schema's own message", async (_label, body) => {
@@ -287,5 +287,44 @@ describe("POST /api/mobile/v1/stock-requests/:requestId/transition", () => {
     await expectError(res, 500, "INTERNAL", /^Something went wrong\. Reference: [0-9a-f-]{36}$/);
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();
+  });
+});
+
+describe("POST …/transition — 20261124400002 additions", () => {
+  it("passes an approval's rate and a part delivery's quantity to the shared helper", async () => {
+    await call({ toStatus: "approved", rate: "410.5" });
+    expect(h.transitionStockRequestFor.mock.calls.at(-1)?.[1]).toMatchObject({
+      toStatus: "approved",
+      rate: 410.5,
+    });
+
+    await call({ toStatus: "delivered", deliveredQty: 6 });
+    expect(h.transitionStockRequestFor.mock.calls.at(-1)?.[1]).toMatchObject({
+      toStatus: "delivered",
+      deliveredQty: 6,
+    });
+  });
+
+  it("accepts cancelled as a target", async () => {
+    const res = await call({ toStatus: "cancelled", note: "Vendor withdrew" });
+    expect(res.status).toBe(200);
+    expect(h.transitionStockRequestFor.mock.calls.at(-1)?.[1]).toMatchObject({ toStatus: "cancelled" });
+  });
+
+  it.each([
+    ["a negative rate", { toStatus: "approved", rate: -1 }],
+    ["a zero delivered quantity", { toStatus: "delivered", deliveredQty: 0 }],
+  ])("returns 400 for %s", async (_label, body) => {
+    const res = await call(body);
+    expect(res.status).toBe(400);
+  });
+
+  it("maps RATE_REQUIRED to 422", async () => {
+    h.transitionStockRequestFor.mockRejectedValue(
+      new Error("RATE_REQUIRED: a rate is required to approve this request")
+    );
+    const res = await call({ toStatus: "approved" });
+    expect(res.status).toBe(422);
+    expect((await res.json()).error).toBe("RATE_REQUIRED");
   });
 });

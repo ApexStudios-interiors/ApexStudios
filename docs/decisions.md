@@ -229,6 +229,17 @@ real Supabase infrastructure rather than a local approximation.
 Supersedes the "Local" row in `architecture.md` §5.2 and `01-hld.md` §13, and the Docker
 prerequisites in `build/01-foundations.md` §0.4 and `build/02-database.md`.
 
+**Amended 2026-11-23 (APX-13): Docker inside the GitHub-hosted CI runner only.** CI's `database`
+job (`.github/workflows/ci.yml`) now runs `supabase start` on the `ubuntu-latest` runner, which
+has Docker. That gives the job a throwaway local Postgres + GoTrue + PostgREST stack: an empty
+database, every migration and `supabase/seed.sql` applied, the pgTAP suite, the integration suite
+and the Drizzle drift check run against `127.0.0.1`, and the whole stack destroyed with the runner.
+It is no second Supabase project, uses no secret and has no route to production. **Nothing changes
+for a developer machine:** Docker is still not part of the local toolchain, and `supabase start`,
+`supabase stop` and `supabase db reset` are still not used outside CI. The guard in
+`scripts/lib/db-target.mjs` now accepts an unset `SUPABASE_PROD_PROJECT_REF` only when every
+target is a loopback URL with no project ref in it; a configured ref is still refused everywhere.
+
 ---
 
 ### ADR-016 — Vercel Pro and Supabase Pro at go-live?
@@ -1252,6 +1263,30 @@ superseded and is not merged.
   exists, "CI has its own database" remains unfunded, which is precisely why CI is paused instead of
   re-pointed.
 
+**Amended 2026-11-23 (APX-13): CI is re-enabled, against an ephemeral local stack.** The condition
+above — "the `database` job has a database that is not the live project" — is now met without a
+second project and without paying for branching. The `database` job starts a throwaway local
+Supabase stack inside the GitHub runner (`supabase start`, using the runner's Docker; see the D14
+amendment), which applies every migration and the seed to an empty database, then runs
+`pnpm test:rls`, `pnpm test:integration` and `pnpm db:check-drift` against `127.0.0.1`. The job no
+longer reads `secrets.SUPABASE_DB_URL` or any other Supabase secret, so it has no production
+access. The `pull_request` and `push: branches: [main]` triggers are restored, and
+`workflow_dispatch` is kept so any branch can be tested by hand
+(`gh workflow run ci.yml --ref <branch>`). The answer itself stands: there is still exactly one
+Supabase project and it is production, and `pnpm dev`, `pnpm db:push` and `.env.local` still point
+at it.
+
+Two deliberate differences from a stock local stack, both made on the runner's copy of
+`supabase/config.toml` only: GoTrue's sign-in rate limits are raised (the integration suite signs
+in far more than 30 times in five minutes from one IP), and the custom access token hook is left
+**unregistered**, matching production, where it has never been registered. Registered as written,
+the hook returns NULL and fails every sign-in, because `profiles` forces RLS and has no policy for
+`supabase_auth_admin` (confirmed on the CI stack: that role sees 0 profiles). That must be fixed
+before anyone runs `supabase config push`. The first runs also found tests that had never run and
+had drifted from the product; each was either brought in line with the migrations or marked
+`KNOWN FAILURE` (pgTAP: a first-line marker that `scripts/run-pgtap.mjs` honours; Vitest:
+`it.skip`). Both kinds are listed in the APX-13 pull request.
+
 ---
 
 ### Findings from Build 09 (Billing)
@@ -2083,6 +2118,60 @@ be force-updated the way a web page can. A breaking change ships as `v2` alongsi
 web-only.
 
 **First endpoint:** `GET /api/mobile/v1/notifications`, which reuses `getNotifications()`.
+
+---
+
+### D68 — Stock and inventory corrections: rate on approval, cancel and edit, usage and part deliveries, one item per material
+
+**Question:** The 2026-11 audit found the stock workflow could not be corrected and inventory could
+not be trusted: a supervisor could read `unit_cost` (APX-03), Site-raised requests reached bills at
+₹0 (APX-14), every delivery created a new inventory item and nothing set minimum stock (APX-15),
+nothing could be cancelled or edited (APX-42), a retried submit raised a second request (APX-44),
+stock only ever went up and deliveries always booked the full quantity (APX-69). What are the rules?
+**Answered:** 2026-11-24 by Voola
+**Answer:** Migrations `20261124400001` and `20261124400002`:
+
+- **`unit_cost` is withheld by column privilege (APX-03).** `authenticated` has SELECT on every
+  `inventory_items` column except `unit_cost`; rows stay visible to admin and site as before
+  (`inventory_select`), so names and quantities — and the bell's low-stock branch — keep working. An
+  admin reads cost through `v_inventory_status` (now a definer view filtered to `is_admin()` and the
+  org) and `rpc_inventory_stats` (now security definer, same scoping in its body).
+  `stock_movements` is admin-only by row policy. A **new** `inventory_items` column must be granted
+  by its own migration — deliberately, so a money column can never leak by default.
+- **A rate is required to approve (APX-14).** Approve opens a dialog; `rpc_transition_stock_request`
+  takes an admin-only `p_rate` on pending → approved and refuses a rate-less approval
+  (`RATE_REQUIRED`). An admin may set or correct the rate up to delivery with
+  `rpc_set_stock_request_rate` (audited); from delivery it is fixed. The mobile transition route
+  accepts `rate`; an app build that does not send one gets a 422 when approving a rate-less request.
+- **One inventory item per material (APX-15).** The New Request form resolves a typed material to
+  this project's existing item (same normalised name and unit). Delivery of an unlinked request
+  reuses the project's oldest live item with the same normalised name and unit before creating one,
+  under an advisory lock. The supporting index is **not unique**: production already holds duplicate
+  items from before this rule, and they are left as they are (merging them is two compensating
+  movements per row — Adjust). An item created at ₹0 takes the first real delivered rate.
+  `inventory_sku_uq` becomes a partial unique index over rows **with** a SKU, so a project can hold
+  more than one SKU-less item. Minimum stock is set by `rpc_set_inventory_reorder_level` (admin,
+  audited). The web Adjust dialog is PR #81's.
+- **Opening balances (APX-34).** A direct `inventory_items` insert must have `qty_on_hand = 0`; the
+  balance is then entered with Adjust, so the ledger explains every unit.
+- **Cancel and edit (APX-42).** New terminal status `cancelled`. Pending → cancelled by the person
+  who raised it (no reason needed); approved/ordered → cancelled by an admin with a required reason,
+  kept in `cancelled_reason`. `rpc_edit_stock_request` changes quantity, needed-by and note while
+  pending, for the requester or an admin. A pending **approval** may be withdrawn by its requester
+  (`rpc_withdraw_approval`, a soft delete — it leaves the client's list and bell).
+- **Retries (APX-44).** The form sends a client-generated id; a second submit with the same id is
+  `ALREADY_SUBMITTED` and the form says "already submitted".
+- **Usage and part deliveries (APX-69).** "Record usage" (admin or site) writes an `out` movement
+  against a package (`ref_type 'usage'`), never more than on hand. Mark Delivered takes an optional
+  delivered quantity: **less than ordered splits the request** — this one is delivered for what
+  arrived, and the remainder becomes a new request, status Ordered, with its own number,
+  `split_from_id` pointing back, and the same rate, package and approval. Chosen over a
+  `delivered_qty` column because every reader (committed budget, Billable Now, MAS, the bell, mobile)
+  already reads `qty` with `status` and stays correct unchanged.
+
+The low-stock rule everywhere is the page's: **Critical** at `qty_on_hand = 0`, **Low** when
+`qty_on_hand < reorder_level`; an item is "low stock" for the bell when either holds. Purchase
+orders and GRNs remain out of scope (HLD §2.2).
 
 ---
 

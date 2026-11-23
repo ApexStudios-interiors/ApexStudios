@@ -9,12 +9,16 @@ import { useApp } from "@/context/AppContext";
 import { createStockRequestSchema } from "@/features/stock/schema";
 import {
   createStockRequest,
-  getMaterialSuggestions,
+  getMaterialOptions,
   getPackageOptions,
   getUnitOptions,
   hasDeliveredDuplicate,
 } from "@/features/stock/actions";
-import { DUPLICATE_DELIVERED_WARNING } from "@/features/stock/service";
+import {
+  DUPLICATE_DELIVERED_WARNING,
+  resolveMaterialOption,
+  type MaterialOption,
+} from "@/features/stock/service";
 import { getProjectRateVisibility } from "@/features/projects/actions";
 import { siteMayEnterRate, siteMaySeeRateField, type RateVisibility } from "@/features/projects/service";
 import { getPhaseOptions } from "@/features/schedule/actions";
@@ -66,7 +70,10 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
 
   const [packages, setPackages] = useState<{ id: string; name: string }[] | null>(null);
   const [phases, setPhases] = useState<{ id: string; name: string }[] | null>(null);
-  const [materials, setMaterials] = useState<string[]>([]);
+  const [materials, setMaterials] = useState<MaterialOption[]>([]);
+  // APX-44: one id for this dialog's whole life, sent with every Submit — so a
+  // retry after a lost response is "already submitted", never a second request.
+  const [requestId] = useState(() => crypto.randomUUID());
   const [units, setUnits] = useState<{ code: string; label: string }[] | null>(null);
   // D55 — this project's Rate-visibility mode. `hidden` until the real value
   // arrives, so the field can never flash into view on a project that has not
@@ -80,7 +87,7 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
     getProjectRateVisibility(projectId)
       .then(setRateVisibility)
       .catch(() => toast("Could not load this project's rate setting."));
-    getMaterialSuggestions()
+    getMaterialOptions(projectId)
       .then(setMaterials)
       .catch(() => toast("Could not load material suggestions."));
     getUnitOptions()
@@ -101,6 +108,7 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
       projectId,
       packageId: moduleId ?? "",
       phaseId: "",
+      id: requestId,
       materialName: "",
       qty: 0,
       unit: "",
@@ -146,10 +154,22 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
   // The non-blocking "already delivered" warning. `useWatch` returns VALUES,
   // not the `watch` function this file's own note explains the React Compiler
   // cannot memoize.
-  const [materialName, qty, neededBy, inventoryItemId] = useWatch({
+  const [materialName, qty, neededBy, unit] = useWatch({
     control,
-    name: ["materialName", "qty", "neededBy", "inventoryItemId"],
+    name: ["materialName", "qty", "neededBy", "unit"],
   });
+  // APX-15: the typed material resolved to this project's existing item (same
+  // normalised name, and the same unit once one is chosen) — derived, never a
+  // separate field the user has to keep in step. Undefined = a new material;
+  // the delivery RPC still matches by name and unit before creating an item.
+  const matched = resolveMaterialOption(materialName ?? "", unit || undefined, materials);
+  const inventoryItemId = matched?.id;
+  // A known material with no unit picked yet: take the item's own unit, so the
+  // request lands on the same stock line rather than a new one in another unit.
+  const matchedUnit = matched?.unit;
+  useEffect(() => {
+    if (matchedUnit && !unit) setValue("unit", matchedUnit, { shouldValidate: true });
+  }, [matchedUnit, unit, setValue]);
   // The three matched fields as one key. `null` until all three are filled in,
   // which is also what clears the warning — the effect below only ever records
   // a POSITIVE answer, so a changed field makes the stored key stale and the
@@ -186,16 +206,22 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
     : [];
   const unitItems = units?.map((u) => ({ value: u.code, label: u.code })) ?? [];
 
+  const done = (message: string) => {
+    closeDialog();
+    toast(message);
+    router.push(`${base}/stock`);
+    router.refresh();
+  };
   const create = useAction(createStockRequest, {
-    onSuccess: ({ data }) => {
-      closeDialog();
-      toast(`Request ${data?.refNo ?? ""} submitted`);
-      router.push(`${base}/stock`);
-      router.refresh();
-    },
+    // APX-44: `alreadySubmitted` — the first Submit landed and only its answer
+    // was lost. Not an error from the user's point of view: say so, show the list.
+    onSuccess: ({ data }) =>
+      done(data?.alreadySubmitted ? "Request already submitted" : `Request ${data?.refNo ?? ""} submitted`),
   });
 
-  const onSubmit = handleSubmit((values) => create.execute(values));
+  const onSubmit = handleSubmit((values) =>
+    create.execute({ ...values, id: requestId, inventoryItemId: inventoryItemId ?? "" })
+  );
 
   return (
     <DialogShell
@@ -304,13 +330,19 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
               {...register("materialName")}
             />
             <datalist id="materials">
-              {materials.map((m) => (
-                <option key={m} value={m} />
+              {[...new Set(materials.map((m) => m.name))].map((name) => (
+                <option key={name} value={name} />
               ))}
             </datalist>
           </Field>
-          {errors.materialName && (
+          {errors.materialName ? (
             <p className="text-xs text-destructive mt-1">{errors.materialName.message}</p>
+          ) : (
+            matched && (
+              <p className="text-xs text-muted-foreground mt-1">
+                In this project&apos;s inventory ({matched.unit}) — the delivery adds to that item.
+              </p>
+            )
           )}
         </div>
         <Field label="Quantity" htmlFor="nr-qty">

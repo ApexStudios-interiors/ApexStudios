@@ -479,16 +479,18 @@ describe("rpc_inventory_stats — p_search matches the Inventory table's own fil
     // count against the very PostgREST filter the table sends.
     const tag = `Srch${Date.now()}`;
     const names = [`${tag} M_20 grade`, `${tag} M120 grade`, `${tag} 100% acrylic`, `${tag} back\\slash`];
-    for (const name of names) {
+    // Explicit SKUs: a project cannot yet hold two SKU-less items (see the
+    // KNOWN FAILURE test at the foot of this file). SKUs are not searched.
+    for (const [i, name] of names.entries()) {
       const rows = await sql`
-        insert into public.inventory_items (org_id, project_id, name, category, unit, qty_on_hand, reorder_level, unit_cost, created_by)
-        values (${SEED.org}, ${SEED.project}, ${name}, null, 'bag', 0, 5, 100, ${SEED.adminProfile})
+        insert into public.inventory_items (org_id, project_id, name, category, sku, unit, qty_on_hand, reorder_level, unit_cost, created_by)
+        values (${SEED.org}, ${SEED.project}, ${name}, null, ${`${tag}-${i}`}, 'bag', 0, 5, 100, ${SEED.adminProfile})
         returning id`;
       trackedItemIds.push(one(rows, "inserted search item").id);
     }
     const rows = await sql`
-      insert into public.inventory_items (org_id, project_id, name, category, unit, qty_on_hand, reorder_level, unit_cost, created_by)
-      values (${SEED.org}, ${SEED.project}, 'Plain widget', ${`${tag} category`}, 'bag', 0, 5, 100, ${SEED.adminProfile})
+      insert into public.inventory_items (org_id, project_id, name, category, sku, unit, qty_on_hand, reorder_level, unit_cost, created_by)
+      values (${SEED.org}, ${SEED.project}, 'Plain widget', ${`${tag} category`}, ${`${tag}-cat`}, 'bag', 0, 5, 100, ${SEED.adminProfile})
       returning id`;
     trackedItemIds.push(one(rows, "inserted category item").id);
 
@@ -943,5 +945,35 @@ describe("stock_requests — inventory_item_id belongs to this request's org and
     );
     expect(linked.inventory_item_id).not.toBeNull();
     trackedItemIds.push(linked.inventory_item_id);
+  });
+});
+
+describe("inventory_sku_uq", () => {
+  // Was a KNOWN FAILURE: inventory_sku_uq was `unique nulls not distinct
+  // (org_id, project_id, sku)` (migration 20260909170006), so two items with
+  // no SKU collided in the same project — and every new-material delivery
+  // creates a SKU-less item. 20261124400002 replaced it with a partial unique
+  // index over rows that have a SKU.
+  it("lets one project hold two items that have no SKU", async () => {
+    for (const name of ["SKU-less item A", "SKU-less item B"]) {
+      const rows = await sql`
+        insert into public.inventory_items (org_id, project_id, name, unit, qty_on_hand, reorder_level, unit_cost, created_by)
+        values (${SEED.org}, ${SEED.project}, ${name}, 'bag', 0, 5, 100, ${SEED.adminProfile})
+        returning id`;
+      trackedItemIds.push(one(rows, "inserted SKU-less item").id);
+    }
+    expect(trackedItemIds).toHaveLength(2);
+  });
+
+  it("still refuses two items with the same SKU in one project", async () => {
+    const sku = `SKU-DUP-${Date.now()}`;
+    const first = await sql`
+      insert into public.inventory_items (org_id, project_id, name, sku, unit, created_by)
+      values (${SEED.org}, ${SEED.project}, 'SKU dup A', ${sku}, 'bag', ${SEED.adminProfile}) returning id`;
+    trackedItemIds.push(one(first, "first SKU item").id);
+    await expect(
+      sql`insert into public.inventory_items (org_id, project_id, name, sku, unit, created_by)
+           values (${SEED.org}, ${SEED.project}, 'SKU dup B', ${sku}, 'bag', ${SEED.adminProfile})`
+    ).rejects.toThrow(/inventory_sku_uq/);
   });
 });
