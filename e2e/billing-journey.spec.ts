@@ -50,19 +50,29 @@ async function insertBillableFixtures(sql: ReturnType<typeof dbConnect>, suffix:
     insert into public.phases (id, org_id, project_id, package_id, seq_no, name, allocated_amount, internal_amount, billing_status, manual_complete_at, manual_complete_by)
     values (${phaseId}, ${ORG_ID}, ${PROJECT_ID}, ${PACKAGE_ID}, ${900 + Math.floor(Math.random() * 1_000_000)},
             ${"E2E billing phase " + suffix}, 40000, 24000, 'billable', now(), ${ADMIN_UID})`;
+  // The material belongs to a second phase that is NOT yet complete: material
+  // at site is billable only while tied to an unbilled phase, and never on
+  // the same bill as its own phase (MAS rules R4/R2, migration
+  // 20261124200001). An incomplete phase does not itself show in Billable Now.
+  const materialPhaseId = randomUUID();
+  await sql`
+    insert into public.phases (id, org_id, project_id, package_id, seq_no, name, allocated_amount, internal_amount, billing_status)
+    values (${materialPhaseId}, ${ORG_ID}, ${PROJECT_ID}, ${PACKAGE_ID}, ${900 + Math.floor(Math.random() * 1_000_000)},
+            ${"E2E billing material phase " + suffix}, 30000, 20000, 'unresolved')`;
   const srId = randomUUID();
   await sql`
-    insert into public.stock_requests (id, org_id, project_id, package_id, ref_no, material_name, qty, unit, rate, status, requested_by, created_by)
-    values (${srId}, ${ORG_ID}, ${PROJECT_ID}, ${PACKAGE_ID}, ${"SR-E2E-BILL-" + suffix},
+    insert into public.stock_requests (id, org_id, project_id, package_id, phase_id, ref_no, material_name, qty, unit, rate, status, requested_by, created_by)
+    values (${srId}, ${ORG_ID}, ${PROJECT_ID}, ${PACKAGE_ID}, ${materialPhaseId}, ${"SR-E2E-BILL-" + suffix},
             ${"E2E billing material " + suffix}, 3, 'bag', 800, 'delivered', ${ADMIN_UID}, ${ADMIN_UID})`;
-  return { phaseId, srId };
+  return { phaseId, srId, materialPhaseId };
 }
 
 async function cleanupBill(
   sql: ReturnType<typeof dbConnect>,
   billId: string | null,
   phaseId: string,
-  srId: string
+  srId: string,
+  extraPhaseId?: string
 ) {
   if (billId) {
     // A material fixture billed onto this bill leaves stock_requests
@@ -85,6 +95,7 @@ async function cleanupBill(
   }
   if (srId) await sql`delete from public.stock_requests where id = ${srId}`;
   await sql`delete from public.phases where id = ${phaseId}`;
+  if (extraPhaseId) await sql`delete from public.phases where id = ${extraPhaseId}`;
 }
 
 test.describe("admin: Billable Now selection, Create Bill, Submit, PDF job enqueued", () => {
@@ -96,7 +107,7 @@ test.describe("admin: Billable Now selection, Create Bill, Submit, PDF job enque
 
     const sql = dbConnect();
     const suffix = Date.now().toString(36);
-    const { phaseId, srId } = await insertBillableFixtures(sql, suffix);
+    const { phaseId, srId, materialPhaseId } = await insertBillableFixtures(sql, suffix);
     let billId: string | null = null;
 
     try {
@@ -108,15 +119,21 @@ test.describe("admin: Billable Now selection, Create Bill, Submit, PDF job enque
       await expect(phaseRow).toBeVisible();
       await expect(materialRow).toBeVisible();
 
-      // Both start checked (Billable Now selects everything by default) —
-      // the running total already reflects them; assert it changes when
-      // one is unchecked, then re-check it for the actual bill.
+      // APX-17: nothing starts ticked. Ticking a row changes the running
+      // total; Create Bill is disabled until something is chosen.
+      await expect(phaseRow.locator('input[type="checkbox"]')).not.toBeChecked();
+      await expect(materialRow.locator('input[type="checkbox"]')).not.toBeChecked();
+      await expect(page.getByRole("button", { name: "Create Bill" })).toBeDisabled();
       const beforeText = await page.getByText(/selected ·/).textContent();
-      await phaseRow.locator('input[type="checkbox"]').uncheck();
-      await expect(page.getByText(/selected ·/)).not.toHaveText(beforeText ?? "");
       await phaseRow.locator('input[type="checkbox"]').check();
+      await expect(page.getByText(/selected ·/)).not.toHaveText(beforeText ?? "");
+      await materialRow.locator('input[type="checkbox"]').check();
 
+      // Create Bill confirms first, with the preview totals.
       await page.getByRole("button", { name: "Create Bill" }).click();
+      const confirm = page.getByRole("dialog", { name: "Create a draft bill?" });
+      await expect(confirm.getByText("Net payable")).toBeVisible();
+      await confirm.getByRole("button", { name: /^Create draft/ }).click();
       await expect(page.getByText(/^Bill /)).toBeVisible({ timeout: 10_000 });
 
       const rows =
@@ -148,6 +165,10 @@ test.describe("admin: Billable Now selection, Create Bill, Submit, PDF job enque
       // this journey ran live.
       const billRow = page.locator("tr", { hasText: billNo });
       await billRow.getByRole("button", { name: "Submit" }).click();
+      // Submit confirms first, stating the amounts (APX-39).
+      const submitDialog = page.getByRole("dialog", { name: /^Submit / });
+      await expect(submitDialog.getByText(/net payable/)).toBeVisible();
+      await submitDialog.getByRole("button", { name: "Submit bill" }).click();
       await expect(billRow.getByText("Submitted", { exact: true })).toBeVisible({ timeout: 10_000 });
 
       // The PDF job was enqueued (application layer, on submit).
@@ -181,7 +202,49 @@ test.describe("admin: Billable Now selection, Create Bill, Submit, PDF job enque
       const billAfter = await sql`select status from public.bills where id = ${billId}`;
       expect(billAfter[0]?.status).toBe("submitted");
     } finally {
-      await cleanupBill(sql, billId, phaseId, srId);
+      await cleanupBill(sql, billId, phaseId, srId, materialPhaseId);
+      await sql.end({ timeout: 5 });
+    }
+  });
+
+  test("a draft can be cancelled, and its lines return to Billable Now (APX-17)", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "admin", "admin-only journey");
+    test.setTimeout(60_000);
+
+    const sql = dbConnect();
+    const suffix = Date.now().toString(36) + "c";
+    const { phaseId, srId, materialPhaseId } = await insertBillableFixtures(sql, suffix);
+    let billId: string | null = null;
+    try {
+      await page.goto(`/projects/${PROJECT_ID}/billing`);
+      await page.waitForLoadState("networkidle");
+      const phaseRow = page.locator("tr", { hasText: `E2E billing phase ${suffix}` });
+      await phaseRow.locator('input[type="checkbox"]').check();
+      await page.getByRole("button", { name: "Create Bill" }).click();
+      await page
+        .getByRole("dialog", { name: "Create a draft bill?" })
+        .getByRole("button", { name: /^Create draft/ })
+        .click();
+      await expect(page.getByText(/^Bill /)).toBeVisible({ timeout: 10_000 });
+      await page.getByRole("button", { name: "Cancel" }).click();
+      await expect(phaseRow).toHaveCount(0, { timeout: 10_000 });
+
+      const rows =
+        await sql`select id, bill_no from public.bills where project_id = ${PROJECT_ID} order by created_at desc limit 1`;
+      billId = rows[0]?.id ?? null;
+      const billRow = page.locator("tr", { hasText: rows[0]?.bill_no });
+      await billRow.getByRole("button", { name: "Cancel draft" }).click();
+      await page
+        .getByRole("dialog", { name: /^Cancel draft / })
+        .getByRole("button", { name: "Cancel draft" })
+        .click();
+
+      await expect(billRow.getByText("Cancelled", { exact: true })).toBeVisible({ timeout: 10_000 });
+      await expect(phaseRow).toBeVisible({ timeout: 10_000 });
+    } finally {
+      await cleanupBill(sql, billId, phaseId, srId, materialPhaseId);
       await sql.end({ timeout: 5 });
     }
   });

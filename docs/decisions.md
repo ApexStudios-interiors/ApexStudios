@@ -2200,6 +2200,69 @@ trusted the caller more than the product's rules allow. What does each rule beco
 `attachments.kind`, the one-argument `rpc_check_rate_limit`; the database revokes the `projects`
 columns). Apply the migrations immediately after the merge deploy goes live; until then the
 portfolio, the admin Billing page, Download PDF and search error.
+### D69 — Billing correctness: material-at-site double billing, one preview definition, IST bill dates
+
+**Question:** The 2026-11 audit (APX-07, -14, -17, -22, -30, -31, -32, -33, -39, -49, -60) found that
+material at site (MAS) could be billed twice in four orderings, the Billable Now preview could disagree
+with the issued bill, a bill raised before 05:30 IST carried the previous day's date, and several smaller
+totals, rounding and confirmation gaps.
+**Decided:** 2026-11-24, by Voola (owner), on the audit's recommended fixes. **The MAS treatment and the
+date rules below are the conservative choice pending CA review — see "Open".**
+
+**Answer — the MAS rules** (migration `20261124200001_billing_mas_rules.sql`; enforced in
+`rpc_create_bill`, mirrored by the selector in `features/billing/service.ts`). Each is chosen so that it
+can never over-invoice; where one can under-invoice instead, it says so.
+
+| Rule | What it does | Ordering it closes |
+| --- | --- | --- |
+| R1 | A material is billable only while its phase is not on any bill (draft included). Once the phase is billed, its value covers the material, which leaves Billable Now. | Phase billed, material delivered later |
+| R2 | A material and its own phase cannot go on the same bill (`MAS_SAME_BILL`). Select-all leaves such materials out. | Both ticked together (was the default) |
+| R3 | A phase cannot be billed while one of its materials is on a draft (`MAS_DRAFT_PENDING`). Submit the draft (its advance is then recovered) or cancel it. | Material on a draft, phase billed, draft submitted |
+| R4 | Package-level material (no phase) is **not billed as an advance at all** — it is paid for when the package's phases are billed. | Package-level material never recovered |
+| R5 | Recovery larger than the bill's gross is refused (`MAS_EXCEEDS_GROSS`) instead of flooring taxable at 0 and silently losing the remainder. Add more lines to the bill. | APX-31 |
+| R6 | A delivered material with no rate (null or 0) is not billable — a ₹0 line would mark it billed for nothing. Billable Now says how many are left out and why. | APX-14 (billing part) |
+
+**Answer — one definition (APX-30).** `v_billable_now` now carries `mas_recovery` (committed advance to
+recover, per phase), `blocked_by_bill_no` (R3) and `phase_id`. `rpc_create_bill` sums those columns and
+the preview reads the same ones, so the figures in the Create Bill confirmation are the figures the draft
+stores. Material `amount` is computed from the rounded client value, so a line reconciles to the paisa
+(APX-60).
+
+**Answer — dates (APX-22).** `createBill` always passes today in Asia/Kolkata (the browser can no longer
+send a date); the column default and the RPC's own default are the IST date too. On a bill's **first**
+submission a trigger (`20261124200002_bill_date_at_submit.sql`) re-dates it to that day in IST — a draft
+is not an invoice. A bill a client rejected and that is then resubmitted **keeps its first date**. The
+optional billing period (both dates or neither, start ≤ end) is entered in the Create Bill confirmation.
+
+**Answer — the rest.**
+- Billable Now starts with nothing ticked; a header checkbox selects all; Create Bill opens a
+  confirmation with the full A–K preview; a draft has **Cancel draft** (with confirmation), which returns
+  its lines to Billable Now; Billable Now reloads after create and after cancel (APX-17, open-issues 9).
+- Submit, Cancel draft, Mark Complete and Mark all complete confirm first with the ₹ amount and hold a
+  pending state, so a double click sends one request (APX-39, billing part).
+- Billed to Date counts issued bills only (submitted, certified, paid); Received is the sum of payments,
+  part-payments included; a client's lists and totals never show a draft or a cancelled draft (APX-32).
+- Record Payment keeps its idempotency key when an attempt's answer was lost and renews it after any
+  definite answer or any edit, so a retry cannot record a payment twice and a corrected amount is never
+  swallowed (APX-33).
+- `rpc_record_payment` rounds to the paisa before comparing; the form refuses a third decimal (APX-60).
+- A phase whose tasks are all done reads **Billable**, not "In progress", on the package Billing tab
+  (APX-49).
+
+**Consequences.** Package-level material earns no advance (cash-flow cost, never a tax risk). A
+material advance recovered on a phase bill is not reversed if the material's own bill is later rejected
+and cancelled — the client is then under-invoiced by that advance, never over-invoiced; correcting it is
+an adjustment on the next bill. Bills issued before this migration are untouched (immutable); billing is
+still behind `BILLING_ENABLED`.
+
+**Open — CA review (not decided in code):**
+1. Package-level material: should it be advanced at all, and if so recovered against which phase bill?
+2. Recovery above gross: carry the remainder to the next bill, or issue a credit note? (Refused today.)
+3. A resubmitted (rejected) bill: keep its first date, take a new date, or be re-issued as a fresh invoice
+   with a credit note against the first?
+4. Bill date = first submission date, and the billing period: confirm against the GST invoice-date rule
+   and the return period.
+5. The existing D4 question (MAS as secured advance vs sale) still governs all of the above.
 
 ---
 
@@ -2209,6 +2272,7 @@ portfolio, the admin Billing page, Download PDF and search error.
 |---|---|---|---|
 | **Apex Studios' legal identity — ON HOLD at Voola's request (2026-09-10).** legal_name, GSTIN, PAN and registered address are placeholders in the seed. `pnpm check:release` reports it; it is a hard gate on any production deploy, and deliberately not a failing unit test, because development is not blocked by it. | Voola | First real bill (Build 09), production deploy | 2026-09-10 |
 | CA confirmation: material-at-site as secured advance (D4) | Voola → CA | First real bill | 2026-09-09 |
+| CA review of D68's conservative choices: package-level material not advanced, recovery above gross refused, a resubmitted bill keeps its first date, bill dated at first submission, billing period | Voola → CA | First real bill | 2026-11-24 |
 | CA confirmation: statutory retention period (A-5) | Voola → CA | Build 10 R2 lifecycle rules | 2026-09-09 |
 | CA sign-off: the five tax questions in `01-hld.md` §8.4 | Voola → CA | Build 09 go-live | 2026-09-09 |
 | DPDP Act 2023 obligation set (`architecture.md` §12) | Voola → counsel | Launch | 2026-09-09 |

@@ -147,8 +147,28 @@ test.describe("full stock lifecycle across three roles", () => {
          where ref_type = 'stock_request' and ref_id = ${requestId}`;
       expect(Number(movement?.qty)).toBe(7);
 
+      // A delivered material is billable as material at site only with a
+      // rate and a phase that is not yet billed (MAS rules R1/R4/R6,
+      // migration 20261124200001). Assert the rule, whichever this request
+      // ended up with.
+      const [req] = await sql2`
+        select sr.rate, sr.phase_id, ph.billing_status,
+               exists (select 1 from public.bill_lines bl
+                        where bl.source_type = 'phase' and bl.source_id = sr.phase_id) as phase_on_bill
+          from public.stock_requests sr
+          left join public.phases ph on ph.id = sr.phase_id
+         where sr.id = ${requestId}`;
+      const shouldBeBillable =
+        req !== undefined &&
+        req.rate !== null &&
+        Number(req.rate) > 0 &&
+        req.phase_id !== null &&
+        (req.billing_status === "unresolved" || req.billing_status === "billable") &&
+        !req.phase_on_bill;
       const [billable] = await sql2`select 1 from public.v_billable_now where source_id = ${requestId}`;
-      expect(billable, "delivered material should appear in v_billable_now").toBeDefined();
+      expect(Boolean(billable), "v_billable_now lists a delivered material exactly when it is billable").toBe(
+        shouldBeBillable
+      );
     } finally {
       await sql2.end({ timeout: 5 });
     }
