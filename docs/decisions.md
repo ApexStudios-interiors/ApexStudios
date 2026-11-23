@@ -229,6 +229,17 @@ real Supabase infrastructure rather than a local approximation.
 Supersedes the "Local" row in `architecture.md` §5.2 and `01-hld.md` §13, and the Docker
 prerequisites in `build/01-foundations.md` §0.4 and `build/02-database.md`.
 
+**Amended 2026-11-23 (APX-13): Docker inside the GitHub-hosted CI runner only.** CI's `database`
+job (`.github/workflows/ci.yml`) now runs `supabase start` on the `ubuntu-latest` runner, which
+has Docker. That gives the job a throwaway local Postgres + GoTrue + PostgREST stack: an empty
+database, every migration and `supabase/seed.sql` applied, the pgTAP suite, the integration suite
+and the Drizzle drift check run against `127.0.0.1`, and the whole stack destroyed with the runner.
+It is no second Supabase project, uses no secret and has no route to production. **Nothing changes
+for a developer machine:** Docker is still not part of the local toolchain, and `supabase start`,
+`supabase stop` and `supabase db reset` are still not used outside CI. The guard in
+`scripts/lib/db-target.mjs` now accepts an unset `SUPABASE_PROD_PROJECT_REF` only when every
+target is a loopback URL with no project ref in it; a configured ref is still refused everywhere.
+
 ---
 
 ### ADR-016 — Vercel Pro and Supabase Pro at go-live?
@@ -1251,6 +1262,19 @@ superseded and is not merged.
   needs a paid plan and a `SUPABASE_ACCESS_TOKEN` that this repository does not have. Until one
   exists, "CI has its own database" remains unfunded, which is precisely why CI is paused instead of
   re-pointed.
+
+**Amended 2026-11-23 (APX-13): CI is re-enabled, against an ephemeral local stack.** The condition
+above — "the `database` job has a database that is not the live project" — is now met without a
+second project and without paying for branching. The `database` job starts a throwaway local
+Supabase stack inside the GitHub runner (`supabase start`, using the runner's Docker; see the D14
+amendment), which applies every migration and the seed to an empty database, then runs
+`pnpm test:rls`, `pnpm test:integration` and `pnpm db:check-drift` against `127.0.0.1`. The job no
+longer reads `secrets.SUPABASE_DB_URL` or any other Supabase secret, so it has no production
+access. The `pull_request` and `push: branches: [main]` triggers are restored, and
+`workflow_dispatch` is kept so any branch can be tested by hand
+(`gh workflow run ci.yml --ref <branch>`). The answer itself stands: there is still exactly one
+Supabase project and it is production, and `pnpm dev`, `pnpm db:push` and `.env.local` still point
+at it.
 
 ---
 
