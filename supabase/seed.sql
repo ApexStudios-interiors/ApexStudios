@@ -417,9 +417,11 @@ update public.stock_requests set billed_on_bill_id = '00000000-0000-4000-8000-00
  where id = '00000000-0000-4000-8000-000000000213' and billed_on_bill_id is null;
 
 -- Phase 1 is on RA-2, so its billing status reflects that rather than staying
--- 'unresolved' and reappearing in Billable Now.
+-- 'unresolved' and reappearing in Billable Now. 'billable' too: since
+-- 20261124600002 the task trigger maintains billing_status, so a phase whose
+-- seeded tasks are all at 100% is already 'billable' by the time this runs.
 update public.phases set billing_status = 'billed'
- where id = '00000000-0000-4000-8000-0000000000f1' and billing_status = 'unresolved';
+ where id = '00000000-0000-4000-8000-0000000000f1' and billing_status in ('unresolved', 'billable');
 
 insert into public.payments (id, org_id, bill_id, amount, paid_on, mode, reference_no, created_by) values
   ('00000000-0000-4000-8000-000000000801', '00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-000000000401', 101561.86, date '2026-09-04', 'neft', 'NEFT-2026-09-04-001', '00000000-0000-4000-8000-0000000000d2')
