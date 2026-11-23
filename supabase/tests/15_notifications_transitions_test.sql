@@ -87,11 +87,13 @@ values
 
 -- Zero on hand with no reorder level: Critical on the Inventory page, so in
 -- the bell too now. One on the project, one in the central store.
-insert into public.inventory_items (id, org_id, project_id, name, unit, qty_on_hand, reorder_level, unit_cost) values
+-- Each carries its own SKU: inventory_sku_uq is `nulls not distinct`, so a
+-- second SKU-less item in one project would abort the insert (see 12_).
+insert into public.inventory_items (id, org_id, project_id, name, sku, unit, qty_on_hand, reorder_level, unit_cost) values
   ('00000000-0000-4000-8000-00000a1806a1', '00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1',
-   'Pgtap zero item', 'nos', 0, 0, 10),
+   'Pgtap zero item', 'T15-1', 'nos', 0, 0, 10),
   ('00000000-0000-4000-8000-00000a1806b1', '00000000-0000-4000-8000-0000000000a0', null,
-   'Pgtap central zero item', 'nos', 0, 0, 10);
+   'Pgtap central zero item', 'T15-2', 'nos', 0, 0, 10);
 
 -- The seeded submitted bill (RA-2), certified a moment ago.
 update public.bills set status = 'certified', certified_at = now() - interval '1 hour',
