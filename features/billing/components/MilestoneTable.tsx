@@ -6,7 +6,7 @@ import { useApp } from "@/context/AppContext";
 import { markPackagePhasesComplete, markPhaseComplete } from "@/features/billing/actions";
 import type { PhaseBillingRow, MaterialAtSiteRow } from "@/features/billing/queries";
 import { PhaseStatusBadge } from "@/components/shared/StatusBadges";
-import type { PhaseStatus } from "@/lib/logic";
+import type { PhaseStatus } from "@/components/shared/StatusBadges";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/button";
 import { formatINR } from "@/lib/money";

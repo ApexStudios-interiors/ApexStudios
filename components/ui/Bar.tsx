@@ -1,4 +1,4 @@
-import { pct } from "@/lib/logic";
+import { pct } from "@/lib/format";
 
 /** Ratio progress bar with a percentage label; flags values over 100%. */
 export function Bar({ value, of, size = "md" }: { value: number; of: number; size?: "sm" | "md" }) {

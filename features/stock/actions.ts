@@ -1,7 +1,7 @@
 "use server";
 
 import "server-only";
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { siteAction } from "@/lib/safe-action";
 import { requireSession } from "@/lib/auth/session";
@@ -28,7 +28,6 @@ export const createStockRequest = siteAction
     // the mobile API so both write paths behave identically.
     const created = await createStockRequestFor(ctx.session, parsedInput);
 
-    updateTag(`project:${parsedInput.projectId}`);
     revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
     return created;
   });
@@ -40,7 +39,6 @@ export const transitionStockRequest = siteAction
     // both write paths behave identically.
     const moved = await transitionStockRequestFor(ctx.session, parsedInput);
 
-    updateTag(`project:${moved.projectId}`);
     revalidatePath(`/projects/${moved.projectId}`, "layout");
     revalidatePath("/inventory");
     return { id: moved.id, status: moved.status };

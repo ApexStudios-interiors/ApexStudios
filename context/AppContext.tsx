@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
-import type { Role } from "@/lib/types";
+import type { Role } from "@/lib/rbac/roles";
 
 export type DialogState =
   | { kind: "addProject" }
@@ -45,19 +45,14 @@ export type DialogState =
   | null;
 
 /**
- * Client-side UI state only. The prototype's `data` (a clone of
- * `lib/data.ts`'s fixture) and the five `setData` mutations left on it —
- * addModule, editModule, addProject, inviteUser, updateTeamRole — are gone
- * with their last reader: every dialog that once called one now calls a real
- * Server Action, and the Sidebar and Header now read the real project list
- * the app shell passes them. What is left is genuinely client-side: the
- * effective role, the open dialog, the toast and the last project visited.
+ * Client-side UI state only. The prototype's `data` fixture and its `setData`
+ * mutations went first; `setRole` (no caller since the Sidebar's free-form
+ * role switcher was removed) and `lastProjectId` (written by ProjectShell,
+ * never read) followed in APX-67. What is left is genuinely client-side: the
+ * effective role, the open dialog and the toast.
  */
 interface AppContextValue {
   role: Role;
-  setRole: (r: Role) => void;
-  lastProjectId: string;
-  setLastProjectId: (id: string) => void;
   dialog: DialogState;
   openDialog: (d: DialogState) => void;
   closeDialog: () => void;
@@ -76,14 +71,12 @@ export function AppProvider({
    * The EFFECTIVE role: the real session's role, or the previewed role while
    * an owner/admin has impersonation active (D20). Locked in from the real
    * session at app/(app)/layout.tsx — build/03-auth-and-rbac.md §2.8 step 2.
-   * `setRole` stays on the context (nothing calls it any more; the Sidebar's
-   * old free-form switcher is gone) so no component's imports change until
-   * Build 09 deletes the field for good.
+   * Read straight from the prop rather than copied into state, so a server
+   * re-render (starting or ending a preview) cannot leave a stale role here.
    */
   initialRole: Role;
 }) {
-  const [role, setRole] = useState<Role>(initialRole);
-  const [lastProjectId, setLastProjectId] = useState("bhel");
+  const role = initialRole;
   const [dialog, setDialog] = useState<DialogState>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -100,16 +93,13 @@ export function AppProvider({
   const value = useMemo<AppContextValue>(
     () => ({
       role,
-      setRole,
-      lastProjectId,
-      setLastProjectId,
       dialog,
       openDialog,
       closeDialog,
       toastMsg,
       toast,
     }),
-    [role, lastProjectId, dialog, toastMsg, toast, openDialog, closeDialog]
+    [role, dialog, toastMsg, toast, openDialog, closeDialog]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

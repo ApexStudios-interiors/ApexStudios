@@ -12,7 +12,7 @@ import { startPreview } from "@/features/auth/impersonation-actions";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import type { PreviewRole } from "@/lib/auth/impersonation";
 import type { NavProject } from "@/components/layout/nav-project";
-import { initials } from "@/lib/logic";
+import { initials } from "@/lib/format";
 import { ALLOWED_SECTIONS, type Section, sectionFromPath } from "@/lib/rbac/nav";
 import { ROLE_LABEL } from "@/lib/rbac/roles";
 import { packagePath, projectPath, withAmbiguityFlags } from "@/lib/routing/paths";

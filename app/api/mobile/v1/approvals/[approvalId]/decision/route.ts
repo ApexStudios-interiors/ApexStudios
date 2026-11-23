@@ -22,8 +22,8 @@ import { decideApprovalSchema } from "@/features/approvals/schema";
  * pending, the decision is approve/reject, a rejection has a reason, and a
  * decision is final. requireRole(["client"]) here only gives admin/site a
  * clean 403 before the round trip, as the web action's clientAction does —
- * the RPC refuses them regardless. No web cache refresh (revalidatePath,
- * updateTag) is copied: nothing a mobile client reads is cached by Next.
+ * the RPC refuses them regardless. No web cache refresh (revalidatePath) is
+ * copied: nothing a mobile client reads is cached by Next.
  */
 export const dynamic = "force-dynamic";
 

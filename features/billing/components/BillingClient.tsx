@@ -3,7 +3,7 @@
 import { useApp } from "@/context/AppContext";
 import type { BillDTO } from "@/features/billing/queries";
 import { formatINR, formatINRCompact } from "@/lib/money";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import type { Page } from "@/lib/pagination";
 import { TablePagination } from "@/components/shared/TablePagination";
 import { StatBar } from "@/components/ui/StatBar";

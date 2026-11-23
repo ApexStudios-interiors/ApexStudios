@@ -21,13 +21,9 @@ export function ProjectShell({ children }: { children: React.ReactNode }) {
   const params = useParams<{ projectId: string }>();
   const pathname = usePathname();
   const router = useRouter();
-  const { role, setLastProjectId } = useApp();
+  const { role } = useApp();
   const projectId = params.projectId;
   const base = useProjectBase(projectId);
-
-  useEffect(() => {
-    setLastProjectId(projectId);
-  }, [projectId, setLastProjectId]);
 
   // Redirect away from a section this role isn't allowed to view (e.g. after
   // switching roles while parked on a page the new role can't access).

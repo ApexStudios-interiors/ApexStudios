@@ -16,7 +16,7 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/env", () => ({ env: h.env }));
 vi.mock("@/lib/auth/session", () => ({ requireSession: h.requireSession, requireRole: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
