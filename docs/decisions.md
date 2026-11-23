@@ -1502,6 +1502,9 @@ owner/admin.
   none of it was kept. `middleware.ts`'s public paths are now `/login` and `/api/health` only.
 - **Add User is staff only** — Admin or Site Supervisor. `client` is out of `addUserSchema`'s enum,
   so a crafted request cannot create one there either; `owner` stays non-creatable as before.
+  _Amended 2026-11-23 by Voola:_ Add User also offers **Client**, with a required **Project** select.
+  That path calls `createClientLogin` — the Client access card's own action — not `addUser`, so
+  `addUserSchema` stays staff-only and a client login still always has a project.
 - **Client logins are created from the project.** The project dashboard has a **Client access** card
   (owner/admin only): the project's client logins; **Create client login** (username + optional name
   → auth user, `profiles` row with role `client`, `project_members` row for this project, password

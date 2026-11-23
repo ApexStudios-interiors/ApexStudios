@@ -427,3 +427,23 @@ export async function getProjectClientAccess(projectId: string): Promise<Project
   }
   return result;
 }
+
+/** A project as a form's Project select lists it. */
+export type ProjectOptionDTO = { id: string; name: string };
+
+/**
+ * The org's live projects, for the Project select in Add User's Client role
+ * (D51 amendment, 2026-11-23). Owner/admin only — the Users page is guarded to
+ * those roles — and RLS-scoped as every projects read is. id and name only:
+ * no money column is selected.
+ */
+export async function listProjectOptions(): Promise<ProjectOptionDTO[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("projects")
+    .select("id, name")
+    .is("deleted_at", null)
+    .order("name", { ascending: true });
+  if (error) throw new Error(error.message);
+  return data;
+}

@@ -80,7 +80,7 @@ export function DialogHost() {
     case "certifyBill":
       return <CertifyBillDialog billId={dialog.billId} refNo={dialog.refNo} />;
     case "inviteUser":
-      return <InviteUserDialog />;
+      return <InviteUserDialog projects={dialog.projects} />;
     case "createClientLogin":
       return <CreateClientLoginDialog projectId={dialog.projectId} projectName={dialog.projectName} />;
     case "grantClientAccess":

@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { requireRole } from "@/lib/auth/session";
 import { countActiveOwners, listUsers } from "@/features/users/queries";
+import { listProjectOptions } from "@/features/projects/queries";
 import { UserRoleSelect } from "@/features/users/components/UserRoleSelect";
 import { DeactivateUserButton } from "@/features/users/components/DeactivateUserButton";
 import { ResetPasswordButton } from "@/features/users/components/ResetPasswordButton";
@@ -37,9 +37,10 @@ export default async function UsersPage({
   const session = await requireRole(["admin"]);
   // The REAL role, as the actions use: a preview never changes who may do what.
   const actor = { userId: session.userId, role: session.role };
-  const [users, activeOwners] = await Promise.all([
+  const [users, activeOwners, projects] = await Promise.all([
     listUsers(parsePageRequest(await searchParams)),
     countActiveOwners(),
+    listProjectOptions(),
   ]);
 
   return (
@@ -48,19 +49,9 @@ export default async function UsersPage({
         <div>
           <h1 className="text-[26px] font-bold tracking-tight">Users</h1>
           <p className="mt-1 text-muted-foreground text-[13.5px]">{users.total} users</p>
-          {/* D51 discoverability: Add User offers Admin and Site Supervisor
-              only, on purpose — a client's access is defined by the projects
-              they are on, so their login is created from the project. */}
-          <p className="mt-1 text-muted-foreground text-[12.5px]">
-            Client logins are created per project, from the project&apos;s{" "}
-            <Link href="/" className="underline underline-offset-2">
-              Client access
-            </Link>{" "}
-            card.
-          </p>
         </div>
         <div className="ml-auto flex gap-2">
-          <OpenDialogButton dialog={{ kind: "inviteUser" }} variant="primary">
+          <OpenDialogButton dialog={{ kind: "inviteUser", projects }} variant="primary">
             <Icon name="plus" className="w-[15px] h-[15px]" />
             Add User
           </OpenDialogButton>
