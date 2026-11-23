@@ -949,16 +949,12 @@ describe("stock_requests — inventory_item_id belongs to this request's org and
 });
 
 describe("inventory_sku_uq", () => {
-  // KNOWN FAILURE APX-TBD: inventory_sku_uq is `unique nulls not distinct
+  // Was a KNOWN FAILURE: inventory_sku_uq was `unique nulls not distinct
   // (org_id, project_id, sku)` (migration 20260909170006), so two items with
-  // no SKU collide in the same project. Nothing in the app sets a SKU, and
-  // rpc_transition_stock_request creates a SKU-less item whenever it delivers
-  // a material that was never in inventory, so the second such delivery on a
-  // project fails with a unique violation. Found 2026-11-23, the first time
-  // this suite ran (on CI's local stack). The fix is a migration (e.g. a
-  // partial unique index `where sku is not null`) and an owner sign-off, not a
-  // CI change. Un-skip this when it lands.
-  it.skip("lets one project hold two items that have no SKU", async () => {
+  // no SKU collided in the same project — and every new-material delivery
+  // creates a SKU-less item. 20261124400002 replaced it with a partial unique
+  // index over rows that have a SKU.
+  it("lets one project hold two items that have no SKU", async () => {
     for (const name of ["SKU-less item A", "SKU-less item B"]) {
       const rows = await sql`
         insert into public.inventory_items (org_id, project_id, name, unit, qty_on_hand, reorder_level, unit_cost, created_by)
@@ -967,5 +963,17 @@ describe("inventory_sku_uq", () => {
       trackedItemIds.push(one(rows, "inserted SKU-less item").id);
     }
     expect(trackedItemIds).toHaveLength(2);
+  });
+
+  it("still refuses two items with the same SKU in one project", async () => {
+    const sku = `SKU-DUP-${Date.now()}`;
+    const first = await sql`
+      insert into public.inventory_items (org_id, project_id, name, sku, unit, created_by)
+      values (${SEED.org}, ${SEED.project}, 'SKU dup A', ${sku}, 'bag', ${SEED.adminProfile}) returning id`;
+    trackedItemIds.push(one(first, "first SKU item").id);
+    await expect(
+      sql`insert into public.inventory_items (org_id, project_id, name, sku, unit, created_by)
+           values (${SEED.org}, ${SEED.project}, 'SKU dup B', ${sku}, 'bag', ${SEED.adminProfile})`
+    ).rejects.toThrow(/inventory_sku_uq/);
   });
 });
