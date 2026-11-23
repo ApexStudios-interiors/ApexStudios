@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
-import { capResults, type SearchResultDTO } from "./service";
+import { capResults, ilikeAnyFilter, type SearchResultDTO } from "./service";
 import { packagePath, projectPath } from "@/lib/routing/paths";
 
 /**
@@ -35,8 +35,8 @@ export async function searchAll(session: Session, query: string): Promise<Search
   const [projects, packages, stockRequests, approvals, bills, inventory, users] = await Promise.all([
     searchProjects(supabase, q),
     searchPackages(supabase, q, isAdmin, isClient),
-    isClient ? Promise.resolve([]) : searchStockRequests(supabase, q, isAdmin),
-    searchApprovals(supabase, q),
+    isClient ? Promise.resolve([]) : searchStockRequests(supabase, query, isAdmin),
+    searchApprovals(supabase, query),
     isSite ? Promise.resolve([]) : searchBills(supabase, q, isAdmin),
     isClient ? Promise.resolve([]) : searchInventory(supabase, q, isAdmin),
     isAdmin ? searchUsers(supabase, q) : Promise.resolve([]),
@@ -169,18 +169,29 @@ async function searchPackages(
   }));
 }
 
-async function searchStockRequests(supabase: Supa, q: string, isAdmin: boolean): Promise<SearchResultDTO[]> {
+/**
+ * APX-64: matched on the material name OR the ref number ("SR-BHEL-NCH-014"),
+ * since staff quote the ref on calls. Takes the RAW query: `ilikeAnyFilter`
+ * does its own escaping for the `or=` syntax, which differs from `pattern`'s.
+ */
+async function searchStockRequests(
+  supabase: Supa,
+  query: string,
+  isAdmin: boolean
+): Promise<SearchResultDTO[]> {
   type Row = { id: string; ref_no: string; material_name: string; project_id: string };
+  const filter = ilikeAnyFilter(["material_name", "ref_no"], query);
   const { data, error } = isAdmin
     ? await supabase
         .from("stock_requests")
         .select("id, ref_no, material_name, project_id")
-        .ilike("material_name", q)
+        .or(filter)
+        .is("deleted_at", null)
         .limit(5)
     : await supabase
         .from("v_stock_request_site")
         .select("id, ref_no, material_name, project_id")
-        .ilike("material_name", q)
+        .or(filter)
         .limit(5);
   if (error) throw new Error(error.message);
   const rows = data as Row[];
@@ -198,11 +209,13 @@ async function searchStockRequests(supabase: Supa, q: string, isAdmin: boolean):
   }));
 }
 
-async function searchApprovals(supabase: Supa, q: string): Promise<SearchResultDTO[]> {
+/** APX-64: matched on the item OR the ref number ("AP-BHEL-NCH-007"). */
+async function searchApprovals(supabase: Supa, query: string): Promise<SearchResultDTO[]> {
   const { data, error } = await supabase
     .from("approvals")
-    .select("id, item, project_id")
-    .ilike("item", q)
+    .select("id, ref_no, item, project_id")
+    .or(ilikeAnyFilter(["item", "ref_no"], query))
+    .is("deleted_at", null)
     .limit(5);
   if (error) throw new Error(error.message);
   const refs = await projectRefs(
@@ -213,7 +226,7 @@ async function searchApprovals(supabase: Supa, q: string): Promise<SearchResultD
     id: a.id,
     category: "Approvals" as const,
     text: a.item,
-    sub: refs.get(a.project_id)?.name ?? "",
+    sub: `${a.ref_no} · ${refs.get(a.project_id)?.name ?? ""}`,
     href: sectionHref(refs.get(a.project_id), a.project_id, "/approvals"),
     projectId: a.project_id,
   }));

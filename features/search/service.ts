@@ -45,3 +45,20 @@ export function capResults(
   );
   return capped.slice(0, OVERALL_CAP);
 }
+
+/**
+ * A PostgREST `or=(…)` filter matching the user's LITERAL text, as a
+ * substring, against any of `columns` (APX-64: a stock request by material OR
+ * by its ref number, an approval by item OR by ref number — staff quote
+ * "SR-BHEL-NCH-014" on the phone).
+ *
+ * The same three layers of escaping as inventory's `inventorySearchFilter`,
+ * in the same order: drop PostgREST's own `*` wildcard; escape LIKE's `\ % _`
+ * so "M_20" matches only "M_20"; then double-quote the value so `, . ( ) "`
+ * are literal inside `or=`, backslash-escaping `"` and `\` within the quotes.
+ */
+export function ilikeAnyFilter(columns: readonly string[], term: string): string {
+  const likeEscaped = term.replace(/\*/g, "").replace(/[\\%_]/g, (c) => `\\${c}`);
+  const quoted = `"${`%${likeEscaped}%`.replace(/[\\"]/g, (c) => `\\${c}`)}"`;
+  return columns.map((c) => `${c}.ilike.${quoted}`).join(",");
+}
