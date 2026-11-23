@@ -48,6 +48,9 @@ export const projects = pgTable(
      *  stock request for THIS project — 'hidden' | 'readonly' | 'editable'.
      *  Defaults to hidden; see migration 20260921090001 for the full rule. */
     rateVisibility: text("rate_visibility").notNull().default("hidden"),
+    /** When the project last became 'completed' — trigger-maintained
+     *  (migration 20260912100002), read by the project.archive job. */
+    completedAt: tsz("completed_at"),
     ...auditColumns,
   },
   (t) => [index("idx_projects_org_status").on(t.orgId, t.status), index("idx_projects_client").on(t.clientId)]

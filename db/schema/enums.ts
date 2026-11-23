@@ -4,7 +4,11 @@ import { pgEnum } from "drizzle-orm/pg-core";
  * Mirrors migration 0001. Postgres enums cannot drop values, only add them, so
  * these lists are load-bearing rather than descriptive.
  */
-export const appRole = pgEnum("app_role", ["admin", "site", "client"]);
+/** 'owner' is retired (D66, migration 20261005090001) but NOT dropped from the
+ *  database enum: audit_log.actor_role holds historical rows that carry it.
+ *  No profile can hold it any more. Listed here because this file mirrors the
+ *  database, and the drift check compares enum values too. */
+export const appRole = pgEnum("app_role", ["owner", "admin", "site", "client"]);
 export const projectStatus = pgEnum("project_status", [
   "planning",
   "active",

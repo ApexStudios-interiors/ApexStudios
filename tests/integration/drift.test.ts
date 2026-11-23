@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { getTableConfig } from "drizzle-orm/pg-core";
+import { getTableConfig, isPgEnum } from "drizzle-orm/pg-core";
 import { connect } from "./db";
 import * as schema from "@/db/schema";
 
@@ -81,6 +81,72 @@ describe("drizzle drift", () => {
       }
     }
 
+    expect(problems.join("\n")).toBe("");
+  });
+
+  // APX-53: the first test only walks db/schema, so a column added by a
+  // migration and never mirrored (projects.completed_at was one) passed
+  // silently. This is the other direction, column by column.
+  it("every column in the database exists in db/schema", async () => {
+    const live = (await sql`
+      select c.table_name, c.column_name
+        from information_schema.columns c
+        join information_schema.tables t
+          on t.table_schema = c.table_schema and t.table_name = c.table_name
+       where c.table_schema = 'public' and t.table_type = 'BASE TABLE'`) as unknown as Pick<
+      Col,
+      "table_name" | "column_name"
+    >[];
+
+    const declared = new Map<string, Set<string>>();
+    for (const value of Object.values(schema)) {
+      let config;
+      try {
+        config = getTableConfig(value as never);
+      } catch {
+        continue;
+      }
+      declared.set(config.name, new Set(config.columns.map((c) => c.name)));
+    }
+
+    const missing = live
+      .filter((c) => {
+        const cols = declared.get(c.table_name);
+        // A table missing outright is the next test's failure, not this one's.
+        return cols !== undefined && !cols.has(c.column_name);
+      })
+      .map((c) => `${c.table_name}.${c.column_name}`);
+    expect(missing.join(", "), "columns exist in the database but not in db/schema").toBe("");
+  });
+
+  it("every enum in db/schema has exactly the database's values, in order", async () => {
+    const live = (await sql`
+      select t.typname as name, array_agg(e.enumlabel order by e.enumsortorder) as labels
+        from pg_type t
+        join pg_enum e on e.enumtypid = t.oid
+        join pg_namespace n on n.oid = t.typnamespace
+       where n.nspname = 'public'
+       group by t.typname`) as unknown as { name: string; labels: string[] }[];
+    const liveByName = new Map(live.map((e) => [e.name, e.labels]));
+
+    const problems: string[] = [];
+    const declared = new Set<string>();
+    for (const value of Object.values(schema)) {
+      if (!isPgEnum(value)) continue;
+      declared.add(value.enumName);
+      const labels = liveByName.get(value.enumName);
+      if (labels === undefined) {
+        problems.push(`enum "${value.enumName}" is in db/schema but not in the database`);
+      } else if (labels.join(",") !== value.enumValues.join(",")) {
+        problems.push(
+          `enum "${value.enumName}" is [${value.enumValues.join(", ")}] in db/schema ` +
+            `but [${labels.join(", ")}] in the database`
+        );
+      }
+    }
+    for (const name of liveByName.keys()) {
+      if (!declared.has(name)) problems.push(`enum "${name}" is in the database but not in db/schema`);
+    }
     expect(problems.join("\n")).toBe("");
   });
 
