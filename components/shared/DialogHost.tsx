@@ -20,6 +20,10 @@ import { RejectBillDialog } from "@/features/billing/components/RejectBillDialog
 import { CertifyBillDialog } from "@/features/billing/components/CertifyBillDialog";
 import { InviteUserDialog } from "@/features/auth/components/InviteUserDialog";
 import { GrantClientAccessDialog } from "@/features/projects/components/GrantClientAccessDialog";
+import { EditProjectDialog } from "@/features/projects/components/EditProjectDialog";
+import { ProjectStatusDialog } from "@/features/projects/components/ProjectStatusDialog";
+import { AddPhaseDialog } from "@/features/packages/components/AddPhaseDialog";
+import { EditPhaseDialog } from "@/features/packages/components/EditPhaseDialog";
 
 export function DialogHost() {
   const { dialog } = useApp();
@@ -88,6 +92,35 @@ export function DialogHost() {
           clients={dialog.clients}
         />
       );
+    case "grantSiteAccess":
+      return (
+        <GrantClientAccessDialog
+          role="site"
+          projectId={dialog.projectId}
+          projectName={dialog.projectName}
+          clients={dialog.supervisors}
+        />
+      );
+    case "editProject":
+      return <EditProjectDialog projectId={dialog.projectId} />;
+    case "projectStatus":
+      return (
+        <ProjectStatusDialog
+          projectId={dialog.projectId}
+          projectName={dialog.projectName}
+          status={dialog.status}
+        />
+      );
+    case "addPhase":
+      return (
+        <AddPhaseDialog
+          projectId={dialog.projectId}
+          moduleId={dialog.moduleId}
+          thenAddTask={dialog.thenAddTask ?? false}
+        />
+      );
+    case "editPhase":
+      return <EditPhaseDialog phaseId={dialog.phaseId} />;
     default:
       return null;
   }

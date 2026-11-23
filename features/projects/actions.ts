@@ -18,8 +18,11 @@ import {
 import {
   isSameProjectName,
   normalisePackageNames,
+  parseProjectStatus,
   parseRateVisibility,
   projectCodeBase,
+  projectEditRefusal,
+  type ProjectStatus,
   type RateVisibility,
 } from "./service";
 import { deleteProjectMember, insertProjectMember } from "./members";
@@ -106,43 +109,145 @@ export const createClientRecord = adminAction
     return data;
   });
 
-export const updateProject = adminAction.inputSchema(updateProjectSchema).action(async ({ parsedInput }) => {
-  const { id, ...patch } = parsedInput;
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("projects")
-    .update({
-      ...(patch.name !== undefined && { name: patch.name }),
-      ...(patch.location !== undefined && { location: patch.location }),
-      ...(patch.targetEndDate !== undefined && { target_end_date: patch.targetEndDate }),
-      ...(patch.contractValue !== undefined && { contract_value: Number(patch.contractValue) }),
-    })
-    .eq("id", id);
-  if (error) throw new Error(error.message);
+/**
+ * The Edit Project dialog (APX-11). Guard → parse (updateProjectSchema: money
+ * and percentages as strict strings, so NaN or a negative never reaches
+ * Number()) → the checks that need the current row (projectEditRefusal, on
+ * the field they concern) → one update scoped to the live row, where zero
+ * rows back means it was deleted meanwhile (NOT_FOUND), never a silent
+ * "saved". Status is not here: it goes through setProjectStatus and its RPC.
+ */
+export const updateProject = adminAction
+  .inputSchema(updateProjectSchema)
+  .action(async ({ parsedInput, ctx }) => {
+    const { id, ...patch } = parsedInput;
+    const supabase = await createClient();
 
-  updateTag(`project:${id}`);
-  revalidatePath("/");
-  // 'layout': every route under this project (dashboard, packages,
-  // package detail) can render fields this action changes.
-  revalidatePath(`/projects/${id}`, "layout");
-  return { ok: true as const };
-});
+    const { data: current, error: readErr } = await supabase
+      .from("projects")
+      .select("status, start_date, mobilisation_recovered")
+      .eq("id", id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (readErr) throw new Error(readErr.message);
+    if (!current) throw new Error("NOT_FOUND: project");
 
+    const refusal = projectEditRefusal(
+      {
+        status: current.status,
+        startDate: current.start_date,
+        mobilisationRecovered: current.mobilisation_recovered,
+      },
+      patch
+    );
+    if (refusal) return { status: "invalid" as const, ...refusal };
+
+    const { data, error } = await supabase
+      .from("projects")
+      .update({
+        ...(patch.name !== undefined && { name: patch.name }),
+        ...(patch.location !== undefined && { location: patch.location || null }),
+        ...(patch.targetEndDate !== undefined && { target_end_date: patch.targetEndDate || null }),
+        ...(patch.contractValue !== undefined && { contract_value: Number(patch.contractValue) }),
+        ...(patch.gstRatePct !== undefined && { gst_rate_pct: Number(patch.gstRatePct) }),
+        ...(patch.retentionPct !== undefined && { retention_pct: Number(patch.retentionPct) }),
+        ...(patch.masBillablePct !== undefined && { mas_billable_pct: Number(patch.masBillablePct) }),
+        ...(patch.tdsPct !== undefined && { tds_pct: Number(patch.tdsPct) }),
+        ...(patch.mobilisationAdvance !== undefined && {
+          mobilisation_advance: Number(patch.mobilisationAdvance),
+        }),
+        ...(patch.mobilisationRecoveryPct !== undefined && {
+          mobilisation_recovery_pct: Number(patch.mobilisationRecoveryPct),
+        }),
+        updated_by: ctx.session.userId,
+      })
+      .eq("id", id)
+      .is("deleted_at", null)
+      .select("id");
+    if (error) throw new Error(error.message);
+    if (data.length === 0) throw new Error("NOT_FOUND: project");
+
+    updateTag(`project:${id}`);
+    revalidatePath("/");
+    // 'layout': every route under this project (dashboard, packages,
+    // package detail) can render fields this action changes.
+    revalidatePath(`/projects/${id}`, "layout");
+    return { status: "saved" as const };
+  });
+
+/**
+ * The status control (APX-11). rpc_set_project_status decides everything —
+ * the legal transitions, that only an admin may move it, that a reopen needs
+ * a reason — and writes the audit row in the same transaction; this only
+ * passes it on. completed_at is stamped by trg_projects_completed_at.
+ */
 export const setProjectStatus = adminAction
   .inputSchema(setProjectStatusSchema)
   .action(async ({ parsedInput }) => {
     const supabase = await createClient();
-    const { error } = await supabase
-      .from("projects")
-      .update({ status: parsedInput.status })
-      .eq("id", parsedInput.id);
+    const { data, error } = await supabase.rpc("rpc_set_project_status", {
+      p_project_id: parsedInput.id,
+      p_status: parsedInput.status,
+      ...(parsedInput.reason ? { p_reason: parsedInput.reason } : {}),
+    });
     if (error) throw new Error(error.message);
 
     updateTag(`project:${parsedInput.id}`);
     revalidatePath("/");
     revalidatePath(`/projects/${parsedInput.id}`, "layout");
-    return { ok: true as const };
+    return { status: data };
   });
+
+/** What the Edit Project dialog loads on open. Admin only; money as strings
+ *  (code-standards §6) so the form shows exactly what is stored. */
+export type ProjectForEdit = {
+  id: string;
+  name: string;
+  location: string;
+  startDate: string;
+  targetEndDate: string;
+  contractValue: string;
+  gstRatePct: string;
+  retentionPct: string;
+  masBillablePct: string;
+  tdsPct: string;
+  mobilisationAdvance: string;
+  mobilisationRecovered: string;
+  mobilisationRecoveryPct: string;
+  status: ProjectStatus;
+};
+
+export async function getProjectForEdit(projectId: string): Promise<ProjectForEdit | null> {
+  "use server";
+  await requireRole(["admin"]);
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("projects")
+    .select(
+      "id, name, location, start_date, target_end_date, contract_value, gst_rate_pct, retention_pct, mas_billable_pct, tds_pct, mobilisation_advance, mobilisation_recovered, mobilisation_recovery_pct, status"
+    )
+    .eq("id", projectId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return {
+    id: data.id,
+    name: data.name,
+    location: data.location ?? "",
+    startDate: data.start_date,
+    targetEndDate: data.target_end_date ?? "",
+    contractValue: String(data.contract_value),
+    gstRatePct: String(data.gst_rate_pct),
+    retentionPct: String(data.retention_pct),
+    masBillablePct: String(data.mas_billable_pct),
+    tdsPct: String(data.tds_pct),
+    mobilisationAdvance: String(data.mobilisation_advance),
+    mobilisationRecovered: String(data.mobilisation_recovered),
+    mobilisationRecoveryPct: String(data.mobilisation_recovery_pct),
+    status: parseProjectStatus(data.status) ?? "planning",
+  };
+}
 
 /**
  * D55 — whether a Site Supervisor may see and enter the per-unit Rate on a
@@ -217,32 +322,38 @@ export async function findProjectWithName(name: string): Promise<{ id: string; n
 }
 
 /**
- * Grants an existing profile access to a project (CAN.manageProjectMembers).
- * The project dashboard's Client access card uses it to give an existing
- * client login a further project (D51) — one client company often has
- * several. Returns `already_member` rather than an error for a repeat grant.
+ * Grants an existing profile access to a project (CAN.manageProjectMembers):
+ * the Client access card (an existing client login, D51), the Site team card
+ * (a Site Supervisor, APX-12) and Projects on a Users-page row. Returns
+ * `already_member` rather than an error for a repeat grant, and
+ * `{ status: "refused", reason }` for an admin (implicit member) or a profile
+ * of the other role than the card manages.
  */
 export const addProjectMember = adminAction
   .inputSchema(addProjectMemberSchema)
   .action(async ({ parsedInput, ctx }) => {
     const supabase = await createClient();
-    const status = await insertProjectMember(supabase, {
+    const result = await insertProjectMember(supabase, {
       projectId: parsedInput.projectId,
       profileId: parsedInput.profileId,
       addedBy: ctx.session.userId,
+      expectedRole: parsedInput.expectedRole,
     });
+    if (typeof result === "object") return result;
 
     updateTag(`project:${parsedInput.projectId}`);
     revalidatePath("/");
     revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
-    return { status };
+    revalidatePath("/users");
+    return { status: result };
   });
 
 /**
- * Takes a client login off one project (the Client access card's Remove, and
- * the Users page's client Projects list). Their other projects and the login
- * itself are untouched. A refusal (not a client, not a member, their last
- * project) comes back as `{ status: "refused", reason }`, not an error.
+ * Takes a client login or a Site Supervisor off one project (Remove on the
+ * Client access and Site team cards, and in Projects on a Users-page row).
+ * Their other projects and the login itself are untouched. A refusal (an
+ * admin, not a member, the other role) comes back as
+ * `{ status: "refused", reason }`, not an error.
  */
 export const removeProjectMember = adminAction
   .inputSchema(removeProjectMemberSchema)

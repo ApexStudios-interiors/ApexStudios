@@ -3,6 +3,8 @@ import { requireSession } from "@/lib/auth/session";
 import { getScheduleForPackage } from "@/features/schedule/queries";
 import { Gantt } from "@/features/schedule/components/Gantt";
 import { Card } from "@/components/ui/Card";
+import { getProjectStatus } from "@/features/projects/queries";
+import { projectWriteRefusal } from "@/features/projects/service";
 
 /** build/05-schedule-and-progress.md §3.5 step 2: the same Gantt, scoped to
  *  one package, now a real route with its own loading.tsx (Build 04 §4.4). */
@@ -17,7 +19,9 @@ export default async function PackageScheduleTab({
   if (!schedule) notFound();
 
   const effectiveRole = session.impersonating?.role ?? session.role;
-  const canEdit = effectiveRole !== "client";
+  // APX-41: an archived project's schedule is read-only.
+  const canEdit =
+    effectiveRole !== "client" && !projectWriteRefusal(await getProjectStatus(projectId), "edit");
 
   return (
     <Card>

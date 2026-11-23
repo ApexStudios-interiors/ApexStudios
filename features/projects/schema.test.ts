@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createProjectSchema, updateProjectSchema } from "./schema";
+import { createProjectSchema, setProjectStatusSchema, updateProjectSchema } from "./schema";
 
 /**
  * The form applies these rules too, but the form is a convenience: this is the
@@ -81,5 +81,41 @@ describe("updateProjectSchema", () => {
 
   it("rejects a name that is only whitespace, as create does", () => {
     expect(updateProjectSchema.safeParse({ id, name: "   " }).success).toBe(false);
+  });
+
+  // APX-11: contractValue used to be any string, so "abc" became NaN and
+  // "-5" a negative contract value on the way to Number().
+  it.each(["abc", "-5", "1e6", "12.345", ""])("rejects contract value %j", (contractValue) => {
+    expect(updateProjectSchema.safeParse({ id, contractValue }).success).toBe(false);
+  });
+
+  it("accepts a contract value like the package budgets", () => {
+    expect(updateProjectSchema.safeParse({ id, contractValue: "5880000.50" }).success).toBe(true);
+  });
+
+  it.each(["gstRatePct", "retentionPct", "masBillablePct", "tdsPct", "mobilisationRecoveryPct"])(
+    "keeps %s between 0 and 100",
+    (field) => {
+      expect(updateProjectSchema.safeParse({ id, [field]: "18.000" }).success).toBe(true);
+      expect(updateProjectSchema.safeParse({ id, [field]: "100.5" }).success).toBe(false);
+      expect(updateProjectSchema.safeParse({ id, [field]: "-1" }).success).toBe(false);
+    }
+  );
+
+  it("lets an empty target end date clear it", () => {
+    expect(updateProjectSchema.safeParse({ id, targetEndDate: "" }).success).toBe(true);
+    expect(updateProjectSchema.safeParse({ id, targetEndDate: "2026-13-40" }).success).toBe(false);
+  });
+});
+
+describe("setProjectStatusSchema", () => {
+  const id = "22222222-2222-4222-8222-222222222222";
+
+  it("takes the five statuses and an optional reason", () => {
+    expect(setProjectStatusSchema.safeParse({ id, status: "on_hold" }).success).toBe(true);
+    expect(setProjectStatusSchema.safeParse({ id, status: "active", reason: "Snag visit" }).success).toBe(
+      true
+    );
+    expect(setProjectStatusSchema.safeParse({ id, status: "closed" }).success).toBe(false);
   });
 });

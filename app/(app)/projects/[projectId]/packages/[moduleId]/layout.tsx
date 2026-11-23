@@ -5,6 +5,8 @@ import { BudgetStatBar } from "@/features/billing/components/BudgetStatBar";
 import { LinkTabs } from "@/components/ui/LinkTabs";
 import { PackageDetailActions } from "./PackageDetailActions";
 import { packageBase } from "@/lib/routing/current";
+import { getProjectStatus } from "@/features/projects/queries";
+import { projectWriteRefusal } from "@/features/projects/service";
 
 /**
  * The header, stat row and tab bar shared by every tab route (ui-guide.md
@@ -31,6 +33,8 @@ export default async function PackageDetailLayout({
   const isMoney = effectiveRole === "admin";
   const isClient = effectiveRole === "client";
   const base = await packageBase(projectId, moduleId);
+  // APX-41: which of the buttons a finished project still allows.
+  const projectStatus = await getProjectStatus(projectId);
 
   const tabs = [
     { key: "budget", label: isMoney ? "Budget" : "Phases", href: `${base}/budget` },
@@ -59,6 +63,11 @@ export default async function PackageDetailLayout({
           moduleId={moduleId}
           isMoney={isMoney}
           isClient={isClient}
+          refusals={{
+            edit: projectWriteRefusal(projectStatus, "edit"),
+            stockRequest: projectWriteRefusal(projectStatus, "stock_request"),
+            dailyUpdate: projectWriteRefusal(projectStatus, "daily_update"),
+          }}
         />
       </div>
 
