@@ -64,14 +64,15 @@ Top to bottom:
 
 1. **Brand** — "Apex Projects" / app.beapex.in, static.
 2. **All Projects** — a button, not a link. Click opens a dropdown:
+   - a **Filter projects** box at the top, focused on open — type part of a project's name, its client or its code to narrow the list; ↑/↓ move, Enter opens, Escape closes. "No matching project" when nothing matches.
    - "View all projects" (goes to `/`)
-   - every project listed by name + client, click jumps straight to that project's Dashboard
+   - every project listed by name, with its client underneath; click jumps straight to that project's Dashboard
    - highlights the project you're currently in
 3. **Inventory** *(Admin, Site only)* — standalone link to the business-wide `/inventory` view, tagged **ALL** on the right so it's not confused with the per-project Inventory page below.
 4. **Project name** — plain text header, *only rendered once you're inside a project* (hidden on Home/Users/business Inventory, by design — the sidebar shouldn't imply a project is "selected" when you're looking at the portfolio).
 5. **Project navigation** *(only when inside a project, filtered by role — see §13)*:
    - Dashboard
-   - Packages — expandable (chevron toggle); expands into every package as a numbered sub-item (01, 02, 03…)
+   - Packages — expandable: the chevron at the right of the row is its own button ("Package list", announces expanded/collapsed), separate from the Packages link; expands into every package as a numbered sub-item (01, 02, 03…)
    - Schedule
    - Daily Updates
    - Inventory
@@ -190,6 +191,8 @@ See §8 — documented together since they're the same table, just scoped differ
 ## 7. The Gantt chart (Schedule)
 
 Each package's schedule renders as a 14-week grid, grouped by phase (collapsible), with month headers and a **today column highlighted in red**. Task bars show progress as a filled portion; a task running past its week without hitting 100% gets a dashed outline and a **late** flag. Clicking a bar opens the *Task Detail* dialog to edit progress/dates — except for Client, who gets a read-only toast (`"{task}: {progress}% complete"`) instead, since Client can't edit schedules.
+
+Keyboard: for anyone who can edit the schedule, each **task name** in the left column is a button that opens *Task Detail* (the bar is a pointer shortcut to the same thing). Each **phase row** and each package card's header on the Schedule page is a button that collapses/expands it and announces whether it is expanded. On a phone the task-name column narrows to 160px so the bars keep most of the screen; the chart scrolls sideways inside its own card.
 
 ---
 
@@ -405,11 +408,11 @@ flowchart TD
 
 | Dialog | Opened from | Fields | On submit |
 |---|---|---|---|
-| **New Project** | All Projects → "+ New Project" | Project Name, Client, Location, Start Date, Packages (comma-separated) | Creates project, navigates to its Dashboard |
+| **New Project** | All Projects → "+ New Project" | Project Name, Client, Location, Start Date (defaults to today), Packages (comma-separated) | Creates project, navigates to its Dashboard |
 | **Add Package** | Dashboard/Packages → "+ Add Package" | Package Name, Allocated Budget, Internal Budget, Lead | Adds package to the project |
 | **Edit Package** | Package detail → "Edit" | Package Name, Allocated Budget, Internal Budget, Lead, Status | Updates the package |
 | **Add Task** | Schedule tab / Schedule page → "+ Add Task" | Task, Phase, Owner, Start Week, Duration (weeks) | Adds a task to the Gantt |
-| **Task Detail** | Click a Gantt bar | Progress (slider), Start Week, Duration (weeks), Note | Updates the task |
+| **Task Detail** | Click a Gantt bar, or a task name | Progress (slider + 0/25/50/75/100 picks — **saves immediately**), Start Week, Duration (weeks), Note | Progress is saved on release, after a short pause on the keyboard, or on leaving the slider; Save updates the other fields |
 | **New Stock Request** | "+ Stock Request" (several pages) | Package, Phase, Material (with suggestions), Quantity + unit, Needed By, Rate *(Admin only)*, Note | Creates request, goes to Stock Requests |
 | **Request Approval** | Approvals → "+ Request Approval" | Package, Phase, Type, Needed By, Item, Note, Sample Photos | Creates approval, goes to Approvals |
 | **Add Sample Photos** | Approvals table → "Add photos" | Photos | Appends photo count to that approval |
@@ -417,6 +420,38 @@ flowchart TD
 | **Upload Bill Copy** | Billing → "Upload" | Bill PDF / image (multi-file) | Attaches file(s) to the bill |
 | **View Bill** | Billing → "View" | *(read-only)* | Download PDF/Excel (toast only, demo) |
 | **Invite User** | Users → "+ Invite User" | Name, Email or Phone, Role | Adds the person to the team table |
+
+### How every dialog behaves
+
+- It is a real modal: announced as a dialog with its title, keyboard focus stays inside it while it is open, and goes back to the button that opened it when it closes.
+- **Escape**, a tap outside it, the **×** and **Cancel** all close it — except while it is saving (the button shows a spinner), when none of them do, so a slow save is never abandoned half-way.
+- If you have typed or attached anything, closing asks **"Discard changes?"** first — **Keep editing** returns to the form with everything still there; **Discard** closes it.
+- On a phone it fills the screen, with the title at the top, the form scrolling in the middle and Cancel / the action button always visible at the bottom. Two-column forms become one column.
+
+### Form fields
+
+- Every field that is wrong says so underneath itself; nothing fails silently. Task duration: "Enter a whole number of weeks from 1 to 104".
+- **Money fields** (package budgets, payment amount, stock rate) accept amounts the way they are written — `1,80,00,000`, `₹45,000.50` — and show the amount back underneath as you type (`₹1,80,00,000.00`), so a missing zero is visible before saving. The phone keypad opens in number mode.
+- **Add / Edit Package:** if Internal Budget is more than Allocated Budget, an amber note says so (the package would run at a loss). It does not stop you saving.
+- **New Stock Request → unit** is chosen from the fixed unit list (bag, sft, kit, len, can, sqm, rft, nos, set).
+- Free-text fields have length limits (task name 120, note 2,000, update 4,000, approval item 200, material name 120); the box stops accepting text at the limit.
+- **Add User:** submitting with no username says "Enter a username".
+
+---
+
+## 17. Phones, keyboard and screen readers
+
+**Phone layout (below 768px wide).** The sidebar is replaced by a top bar: **☰** (opens the same navigation — project switcher, project sections, packages, Studio, Docs, your account — as a panel from the left; Escape, a tap outside it or following any link closes it), the breadcrumb, a **search** icon (opens a full-width search bar over the top bar; **Cancel** or Escape closes it), notifications and the theme toggle. Pages use 16px side padding. No page scrolls sideways: a wide table or the Gantt chart scrolls inside its own card, and tab strips scroll inside their own strip.
+
+**Lists that become cards on a phone.** Approvals, Stock Requests and the client's Bills show one card per row instead of a table — the item or material, status badge, key dates and the action buttons (Approve/Reject, Mark Ordered, …) at the bottom of the card. Daily Updates is already a timeline and keeps that shape. From 768px up they are the tables described in §6.
+
+**Search** is a labelled combobox: type at least 2 characters, ↑/↓ move through the results, Enter opens the highlighted one, Escape closes the list.
+
+**Notices (toasts).** A success message is announced politely and hides itself after 4 seconds. An **error** is announced immediately and **stays until you dismiss it** (× on the notice).
+
+**Why is this button greyed out?** A disabled button that has a reason — Reset password / Deactivate / Remove on the Users page, Create Bill, Add photos on a decided approval — can be focused (Tab) or hovered to show the reason, and a screen reader reads it.
+
+**Other labels.** Photo thumbnails are announced as "View photo N of M …"; Billable Now checkboxes as "Include {item} in the next bill"; an at-risk Needed By date on a stock request says **At risk** next to the red date.
 
 ---
 
