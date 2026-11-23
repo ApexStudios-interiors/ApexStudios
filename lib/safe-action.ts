@@ -25,6 +25,7 @@ const ERROR_MESSAGES = {
   NEGATIVE_STOCK: "Not enough stock on hand.",
   REASON_REQUIRED: "Please give a reason.",
   RATE_LIMITED: "Too many requests. Please wait a moment and try again.",
+  PREVIEW_READ_ONLY: "Preview is read-only. Exit preview to make changes.",
 } as const;
 
 /** Postgres RAISE EXCEPTION messages the RPCs use are prefixed with their code
@@ -63,9 +64,33 @@ export const actionClient = createSafeActionClient({
   handleServerError: mapDomainError,
 });
 
-export const authedAction = actionClient.use(async ({ next }) => {
+/**
+ * A signed-in session, preview or not. Only for the allow-list of actions a
+ * "preview as" session may still run (APX-25): stopping or switching the
+ * preview itself, marking a notification read, and pure reads (search, a
+ * download URL). Everything else starts from `authedAction` below, which
+ * refuses while previewing.
+ */
+export const previewAllowedAction = actionClient.use(async ({ next }) => {
   const session = await requireSession();
   return next({ ctx: { session } });
+});
+
+/**
+ * APX-25: the preview banner promises every write is refused, so it is — here,
+ * for every guarded action, rather than by each action remembering to. The
+ * preview cookie only ever shaped READS (lib/auth/session.ts); without this an
+ * admin previewing as Site could still Mark Delivered, as themselves.
+ */
+export function assertNotPreviewing(session: Session): void {
+  if (session.impersonating) {
+    throw new Error("PREVIEW_READ_ONLY: writes are refused while previewing another role");
+  }
+}
+
+export const authedAction = previewAllowedAction.use(async ({ next, ctx }) => {
+  assertNotPreviewing(ctx.session);
+  return next({ ctx });
 });
 
 function roleGuarded(roles: Role[]) {
