@@ -20,6 +20,7 @@ import { RejectBillDialog } from "@/features/billing/components/RejectBillDialog
 import { CertifyBillDialog } from "@/features/billing/components/CertifyBillDialog";
 import { InviteUserDialog } from "@/features/auth/components/InviteUserDialog";
 import { GrantClientAccessDialog } from "@/features/projects/components/GrantClientAccessDialog";
+import { AdjustInventoryDialog } from "@/features/inventory/components/AdjustInventoryDialog";
 
 export function DialogHost() {
   const { dialog } = useApp();
@@ -88,6 +89,8 @@ export function DialogHost() {
           clients={dialog.clients}
         />
       );
+    case "adjustInventory":
+      return <AdjustInventoryDialog item={dialog.item} />;
     default:
       return null;
   }
