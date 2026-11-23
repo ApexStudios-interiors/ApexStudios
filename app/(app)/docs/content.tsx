@@ -292,7 +292,7 @@ export const ROLE_STORIES: RoleStory[] = [
       "raise stock requests, approve or reject them, mark them Ordered and mark them Delivered",
       "request an approval from the client and add sample photos while it is pending",
       "create a bill from Billable Now, submit it, and record payments once the client has certified it",
-      "add staff users (Admin or Site Supervisor), create client logins per project and grant an existing client access to another project",
+      "add users from the Users page — Admin, Site Supervisor, or Client (with the project they will see) — and grant an existing client access to another project",
       "edit a project's billing constants (GST, retention, material-at-site and TDS percentages)",
       "change the role of, deactivate or reset the password of ANY user except myself — including another Admin",
       "preview a project as a Site Supervisor or Client",
