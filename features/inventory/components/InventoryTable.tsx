@@ -20,6 +20,11 @@ import type { Role } from "@/lib/rbac/roles";
  * regardless (features/inventory/queries.ts's own boundary) — the Value
  * column is simply not rendered at all for that role, rather than rendered
  * as "–" (AGENTS.md: never fetch or expose the column in the first place).
+ *
+ * `role` adds the last column, InventoryRowActions: Record usage (admin and
+ * site), and for an admin Adjust (AdjustInventoryDialog, #81 — the same
+ * admin-only write the mobile app offers) and Minimum stock. Every action and
+ * RPC refuses anyone else regardless.
  */
 export function InventoryTable({
   items,
@@ -54,7 +59,11 @@ export function InventoryTable({
           {isAdmin && <th className={thNum}>Value</th>}
           <th className={th}>Location</th>
           <th className={th}>Status</th>
-          {showActions && <th className={th}></th>}
+          {showActions && (
+            <th className={th}>
+              <span className="sr-only">Actions</span>
+            </th>
+          )}
         </tr>
       </thead>
       <tbody>
