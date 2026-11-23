@@ -266,7 +266,12 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "Notifications",
         definition:
-          "The bell in the header. It lists open WORK across all your projects — pending requests, submitted bills, low stock, pending approvals, depending on your role. The number on the bell counts the ones you have NOT opened yet, so it drops as you read them. Items you have already opened stay in the list, in grey without a dot, because reading something does not finish it — they leave only when the work is actually done. If the same thing comes up again (a request goes back to pending, stock drops low a second time), it counts as new again.",
+          "The bell in the header. It lists open WORK across all your projects — pending requests, submitted bills, low stock, pending approvals, depending on your role. The number on the bell counts the ones you have NOT opened yet, so it drops as you read them. Items you have already opened stay in the list, in grey without a dot, because reading something does not finish it — they leave only when the work is actually done. If the same thing comes up again (a request goes back to pending, stock drops low a second time), it counts as new again. It also tells you when something you care about CHANGES, for 14 days afterwards: your stock request was approved, ordered or rejected (with the reason); a delivery arrived (Admin); the client approved or rejected an approval (Admin, and whoever requested it) or certified or rejected a bill (Admin). Nothing from an archived project is shown, and no entry ever shows an amount.",
+      },
+      {
+        term: "Needs my action",
+        definition:
+          "One list of everything waiting on YOU across all your projects, oldest first, with how many days each has waited — open it from the sidebar or the foot of the bell. Admin: stock requests to decide, draft bills to submit, certified bills to record payment against, rejected approvals to revise. Site Supervisor: ordered materials to receive, and your rejected requests. Client: approvals and bills waiting for your decision. An item leaves the list the moment the work is done.",
       },
       {
         term: "Audit log",

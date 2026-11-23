@@ -2086,6 +2086,70 @@ web-only.
 
 ---
 
+### D68 — Status changes notify the people they concern; a "Needs my action" inbox per role
+
+**Question:** The bell had four kinds only (APX-18). A client rejecting a sample told no staff
+member; a request being approved, ordered, delivered or rejected told nobody — the rejection reason
+was never seen. Admins were not told a bill was certified or rejected (APX-62). Archived projects
+stayed in every bell (APX-41). Previewing a client showed every project's items (APX-65). And there
+was no single place to see what is waiting on me (APX-72).
+**Answered:** 2026-11-24 by Voola
+**Answer:** `v_notifications` gains branches and two recipient columns (migration
+`20261124500001`); the app gains a `/inbox` page. Still no notifications table (ADR-014): every row
+exists exactly as long as its source row says so, and read state stays in `notification_reads`
+(D60).
+
+**Who is told (HLD §8.1–§8.3).** Status changes are news, so each is windowed to the **last 14
+days** and dated by the transition itself (`approved_at`, `ordered_at`, `delivered_at`, the
+rejection event, `decided_at`, `certified_at`). That keeps D60's timestamp read receipts correct,
+and each transition is its own kind, so reading "approved" never silences the later "ordered".
+
+| Kind | Who |
+|---|---|
+| `stock_approved` | the request's requester |
+| `stock_ordered` | Site Supervisors on the project, and the requester |
+| `stock_delivered` | Admins |
+| `stock_rejected` (with reason) | the requester |
+| `approval_approved` / `approval_rejected` (with reason) | Admins, and the approval's requester |
+| `bill_certified` / `bill_rejected` (with reason) | Admins |
+
+"The requester" is a named recipient: `for_profile_id` (and `for_profile_role`, so a preview can
+show what that role would receive). A row is a session's when its role is in `for_roles` OR it
+names that person — a display rule applied by the app, as `for_roles` always was. What a session
+may read at all is still each source's RLS. Admin-only branches also check `is_admin()` in the view,
+so a non-admin reading it directly gets none of them.
+
+**The inbox ("Needs my action", `/inbox`, linked from the bell and the sidebar).** Everything waiting
+on the current user across projects, oldest first, with the days it has waited, paginated:
+
+| Role | Waiting on them |
+|---|---|
+| Admin | pending stock requests · draft bills to submit · certified bills awaiting payment · rejected approvals not yet revised |
+| Site | ordered deliveries to receive · their own rejected requests (14 days) |
+| Client | pending approvals · submitted bills |
+
+The four inbox-only kinds (`bill_draft`, `bill_unpaid`, `approval_revision`, `delivery_due`) are
+state, not news: they are not windowed and never appear in the bell.
+
+**Also decided here.**
+- **Archived projects are excluded from every branch** (APX-41). Central-store inventory, which has
+  no project, is kept.
+- **Low stock is `qty_on_hand = 0 or qty_on_hand < reorder_level`** — the Inventory page's own
+  rule, so an item at zero with no reorder level is Critical in the bell too.
+- **Preview is scoped to the previewed project** (APX-65), for the bell, search and the inbox. A
+  preview is of a role, not a person: named rows count when their recipient holds the previewed
+  role.
+- **Role boundaries are unchanged.** No title carries an amount; bill kinds never reach Site;
+  stock kinds never reach a client, and the new `v_stock_request_notify` (no `rate`, no
+  `billed_on_bill_id`) returns nothing to a client session.
+
+**Not done here.** Showing the rejection reason in the stock requests table (APX-18's second half)
+belongs to the stock module and is left to it. The mobile app receives the new bell kinds from
+`GET /api/mobile/v1/notifications` unchanged in shape; it should treat an unknown `kind` as a plain
+link.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |
