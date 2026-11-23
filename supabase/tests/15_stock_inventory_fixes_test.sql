@@ -1,9 +1,11 @@
 -- 20261124400001 / 20261124400002 — stock and inventory fixes.
 --
--- APX-03: a Site Supervisor reads no unit_cost from inventory_items or
--- stock_movements (the base tables are admin-only) but still reads quantities
--- through v_inventory_site. APX-34: a direct inventory insert must start at
--- zero. Shape of the new RPCs. Like 12_inventory_stats_search_test.sql this
+-- APX-03: no signed-in role can SELECT inventory_items.unit_cost (a column
+-- privilege), a Site Supervisor reads no stock_movements row (admin-only), yet
+-- site still reads quantities — from the base table, v_inventory_site and
+-- rpc_inventory_stats — and an admin still reads cost through
+-- v_inventory_status. APX-34: a direct inventory insert must start at zero.
+-- Shape of the new RPCs. Like 12_inventory_stats_search_test.sql this
 -- simulates the caller's JWT with set_config, because the policies read the
 -- claim; the behavioural RPC tests run from real SDK sessions in
 -- tests/integration/stock-and-inventory-fixes.test.ts.
@@ -13,7 +15,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(25);
+select plan(30);
 
 -- ── shape ────────────────────────────────────────────────────────────────────
 select ok(
@@ -65,6 +67,21 @@ select is(
   'all five new RPCs are executable by authenticated'
 );
 
+-- ── APX-03: the column privilege ─────────────────────────────────────────────
+select ok(
+  not has_column_privilege('authenticated', 'public.inventory_items', 'unit_cost', 'SELECT'),
+  'authenticated cannot SELECT inventory_items.unit_cost'
+);
+select ok(
+  not has_column_privilege('anon', 'public.inventory_items', 'unit_cost', 'SELECT'),
+  'anon cannot SELECT inventory_items.unit_cost'
+);
+select is_empty(
+  $$ select column_name::text from information_schema.columns
+      where table_schema = 'public' and table_name = 'inventory_items' and column_name <> 'unit_cost'
+        and not has_column_privilege('authenticated', 'public.inventory_items', column_name, 'SELECT') $$,
+  'every other inventory_items column is granted — a new column must be granted (or deliberately withheld) by its migration'
+);
 select ok(
   (select pg_get_expr(p.polqual, p.polrelid) like '%is_admin%'
           and pg_get_expr(p.polqual, p.polrelid) not like '%site%'
@@ -72,12 +89,17 @@ select ok(
     where c.relname = 'stock_movements' and p.polcmd = 'r'),
   'the stock_movements select policy is admin-only'
 );
-
 select ok(
   (select pg_get_expr(p.polwithcheck, p.polrelid) like '%qty_on_hand = %0%'
      from pg_policy p join pg_class c on c.oid = p.polrelid
     where c.relname = 'inventory_items' and p.polcmd = 'a'),
   'inventory_insert requires qty_on_hand = 0 (APX-34)'
+);
+select ok(
+  (select exists (select 1 from pg_index x join pg_class i on i.oid = x.indexrelid
+                   where i.relname = 'inventory_sku_uq' and x.indisunique and x.indpred is not null))
+  and not exists (select 1 from pg_constraint where conname = 'inventory_sku_uq'),
+  'inventory_sku_uq is a partial unique index over rows with a SKU, not a table constraint'
 );
 
 -- ── fixture: a movement as the migration owner, before switching role ────────
@@ -93,15 +115,20 @@ select set_config('request.jwt.claims', json_build_object(
   'app_metadata', json_build_object('app_role', 'site', 'org_id', '00000000-0000-4000-8000-0000000000a0')
 )::text, true);
 
-select is(
-  (select count(*)::int from public.inventory_items),
-  0,
-  'APX-03: site reads no row of inventory_items — so no unit_cost'
+select throws_ok(
+  $$ select name, unit_cost from public.inventory_items $$,
+  '42501',
+  null,
+  'APX-03: a site session asking for unit_cost is refused outright'
+);
+select ok(
+  (select count(*)::int from public.inventory_items where project_id = '00000000-0000-4000-8000-0000000000c1') >= 8,
+  'site still reads its project''s item rows (names, quantities) from the base table'
 );
 select is(
   (select count(*)::int from public.stock_movements),
   0,
-  'APX-03: site reads no row of stock_movements — so no unit_cost'
+  'APX-03: site reads no row of stock_movements'
 );
 select is(
   (select count(*)::int from public.v_inventory_status),
@@ -146,16 +173,16 @@ select set_config('request.jwt.claims', json_build_object(
 )::text, true);
 
 select ok(
-  (select count(*)::int from public.inventory_items where unit_cost > 0) >= 8,
-  'an admin still reads inventory_items with unit_cost'
+  (select count(*)::int from public.v_inventory_status where unit_cost > 0 and stock_value is not null) >= 8,
+  'an admin still reads unit_cost and stock_value through v_inventory_status'
 );
 select ok(
   (select count(*)::int from public.stock_movements where reason = 'pgtap 15 fixture') = 1,
   'an admin still reads stock_movements'
 );
 select ok(
-  (select count(*)::int from public.v_inventory_status) >= 8,
-  'an admin still reads v_inventory_status'
+  (select total_value from public.rpc_inventory_stats('00000000-0000-4000-8000-0000000000c1')) > 0,
+  'an admin still gets total_value from rpc_inventory_stats'
 );
 
 -- APX-34: a direct insert with stock on hand is refused; at zero it is allowed.

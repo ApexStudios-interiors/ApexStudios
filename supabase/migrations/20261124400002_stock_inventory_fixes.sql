@@ -27,30 +27,54 @@
 -- inventory_select and movements_select let the site role read the BASE
 -- tables, which carry unit_cost — and a delivery copies the request's rate
 -- into it, so D55's 'hidden' rate was one PostgREST call away
--- (GET /rest/v1/inventory_items?select=name,unit_cost). Both base tables
--- become admin-only. A supervisor reads inventory through v_inventory_site
--- (no unit_cost, no stock_value) and through the definer RPCs below, which
--- return quantities only. Nothing in the application reads stock_movements as
--- a user, so that table simply loses the site branch.
+-- (GET /rest/v1/inventory_items?select=name,unit_cost).
 --
--- Knock-on reads, each moved here or in the application:
---   * v_inventory_status (security_invoker) — admin-only now by construction;
---     it is the admin's view and carries cost.
---   * v_inventory_site (definer) — gains the org and role predicates it never
---     had (it relied on is_member_of alone, which is true for an admin of ANY
---     org, and true for a client member), and an `updated_at` column, so the
---     notifications view can read low stock from it (see the PR notes).
---   * rpc_inventory_stats — was security invoker over the base table, so a
---     supervisor's tiles would read 0. It becomes security definer with the
---     same predicates inventory_select used to apply.
---   * getMaterialSuggestions (features/stock/actions.ts) — reads
---     v_inventory_site now.
+-- inventory_items: a COLUMN-level fix, not a row-level one. A supervisor
+-- legitimately reads item rows (names, quantities, minimum stock — and the
+-- notifications view's inventory_low branch reads the base table under the
+-- caller's own rights), so the rows stay visible to admin and site exactly as
+-- inventory_select already scoped them; what goes is the privilege on the one
+-- money column. `authenticated` (every signed-in role — Postgres has no
+-- per-user column privilege) loses SELECT on the table and gets it back on
+-- every column EXCEPT unit_cost. An admin reads cost through the admin-only
+-- views and RPCs below, which run as their owner:
+--   * v_inventory_status — becomes a definer view filtered to is_admin() and
+--     the admin's own organisation (it was security_invoker, which would now
+--     fail on unit_cost for everyone);
+--   * rpc_inventory_stats — becomes security definer (it summed unit_cost
+--     under the caller's rights), with inventory_select's predicates in its
+--     body; total_value stays admin-only (D40);
+--   * rpc_adjust_inventory and the other inventory RPCs were already definer.
+-- No application code selects unit_cost from the base table (checked:
+-- features/inventory/adjust.ts selects only id).
+--
+-- A NEW inventory_items column is NOT selectable by authenticated until a
+-- migration grants it — column grants are explicit. That is deliberate (a
+-- money column can never leak by default) and is the first thing to check if
+-- a new column reads as "permission denied".
+--
+-- stock_movements: row-level, admin only. Nothing in the application reads the
+-- ledger as a supervisor, so the site branch simply goes.
+--
+-- v_inventory_site (definer) also gains the org and role predicates it never
+-- had (it relied on is_member_of alone, which is true for an admin of ANY org
+-- and for a client member) and an `updated_at` column, so the notifications
+-- view can read low stock from it if it moves off the base table.
+-- getMaterialSuggestions (features/stock/actions.ts) reads it now too.
 
+revoke select on public.inventory_items from authenticated, anon;
+grant select (
+  id, org_id, project_id, name, category, sku, unit, qty_on_hand, reorder_level,
+  location, created_at, created_by, updated_at, updated_by, deleted_at
+) on public.inventory_items to authenticated;
+
+-- Unchanged from 20261005090001 — restated so this file shows the whole rule.
 drop policy if exists inventory_select on public.inventory_items;
-create policy inventory_select on public.inventory_items for select to authenticated using (
+create policy inventory_select on public.inventory_items for select using (
   deleted_at is null
   and org_id = public.auth_org()
-  and public.is_admin()
+  and public.auth_role() = any (array['admin'::public.app_role, 'site'::public.app_role])
+  and (project_id is null or public.is_member_of(project_id))
 );
 
 drop policy if exists movements_select on public.stock_movements;
@@ -58,6 +82,25 @@ create policy movements_select on public.stock_movements for select to authentic
   org_id = public.auth_org()
   and public.is_admin()
 );
+
+-- The admin's inventory view, carrying unit_cost and stock_value: a definer
+-- view now (see above), so it filters to an admin of the item's own org
+-- itself. Same columns as 20260909170013 (i.* expands to the same list).
+create or replace view public.v_inventory_status
+with (security_invoker = off) as
+select
+  i.*,
+  case when i.qty_on_hand = 0                then 'critical'
+       when i.qty_on_hand < i.reorder_level  then 'low'
+       else 'ok' end                          as stock_status,
+  round(i.qty_on_hand * i.unit_cost, 2)       as stock_value
+from public.inventory_items i
+where i.deleted_at is null
+  and i.org_id = public.auth_org()
+  and public.is_admin();
+
+comment on view public.v_inventory_status is
+  'ADMIN ONLY. Carries unit_cost and stock_value. A definer view since 20261124400002 (authenticated has no SELECT on inventory_items.unit_cost), filtered in its own body to is_admin() and the caller''s org. stock_status is derived, never stored.';
 
 -- Same columns, same order, plus updated_at appended (CREATE OR REPLACE VIEW
 -- may only add columns at the end).

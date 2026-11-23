@@ -116,12 +116,16 @@ const qtyOf = async (id: string) =>
 
 // ── APX-03 ───────────────────────────────────────────────────────────────────
 describe("APX-03 — a site session cannot read unit_cost", () => {
-  it("gets no row of inventory_items or stock_movements, but still reads v_inventory_site", async () => {
+  it("is refused unit_cost on inventory_items, gets no stock_movements row, but still reads quantities", async () => {
     const site = await client(SITE_EMAIL);
 
-    const items = await site.from("inventory_items").select("name, unit_cost");
-    expect(items.error).toBeNull();
-    expect(items.data).toEqual([]);
+    const cost = await site.from("inventory_items").select("name, unit_cost");
+    expect(cost.error?.code).toBe("42501");
+    expect(cost.data).toBeNull();
+
+    const qty = await site.from("inventory_items").select("id, name, qty_on_hand, reorder_level");
+    expect(qty.error).toBeNull();
+    expect((qty.data ?? []).length).toBeGreaterThan(0);
 
     const moves = await site.from("stock_movements").select("qty, unit_cost");
     expect(moves.error).toBeNull();
@@ -138,11 +142,24 @@ describe("APX-03 — a site session cannot read unit_cost", () => {
     expect(row.total_value).toBeNull();
   });
 
-  it("an admin still reads unit_cost from the base table", async () => {
+  it("an admin reads unit_cost through v_inventory_status (the base column is withheld from every role)", async () => {
     const admin = await client(ADMIN_EMAIL);
-    const { data, error } = await admin.from("inventory_items").select("unit_cost").eq("id", SEED.cementItem);
+    const { data, error } = await admin
+      .from("v_inventory_status")
+      .select("unit_cost, stock_value")
+      .eq("id", SEED.cementItem);
     expect(error).toBeNull();
     expect(Number(one(data ?? [], "cement").unit_cost)).toBeGreaterThan(0);
+
+    const base = await admin.from("inventory_items").select("unit_cost").eq("id", SEED.cementItem);
+    expect(base.error?.code).toBe("42501");
+  });
+
+  it("the site bell still lists low stock (v_notifications reads the granted columns)", async () => {
+    const site = await client(SITE_EMAIL);
+    const { data, error } = await site.from("v_notifications").select("kind").eq("kind", "inventory_low");
+    expect(error).toBeNull();
+    expect((data ?? []).length).toBeGreaterThan(0);
   });
 
   it("a client reads nothing from v_inventory_site", async () => {

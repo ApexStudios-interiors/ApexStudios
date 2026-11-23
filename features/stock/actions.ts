@@ -29,7 +29,18 @@ export const createStockRequest = siteAction
   .action(async ({ parsedInput, ctx }) => {
     // The D55 rate rule and the RPC call live in ./create.ts, shared with
     // the mobile API so both write paths behave identically.
-    const created = await createStockRequestFor(ctx.session, parsedInput);
+    let created: { id: string; refNo: string | null; alreadySubmitted: boolean };
+    try {
+      created = { ...(await createStockRequestFor(ctx.session, parsedInput)), alreadySubmitted: false };
+    } catch (e) {
+      // APX-44: a retry of a Submit whose response was lost. The request
+      // exists; tell the form so, rather than showing an error.
+      if (e instanceof Error && e.message.startsWith("ALREADY_SUBMITTED") && parsedInput.id) {
+        created = { id: parsedInput.id, refNo: null, alreadySubmitted: true };
+      } else {
+        throw e;
+      }
+    }
 
     updateTag(`project:${parsedInput.projectId}`);
     revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
