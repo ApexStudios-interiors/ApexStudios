@@ -432,7 +432,7 @@ export async function getProjectClientAccess(projectId: string): Promise<Project
 export type ProjectOptionDTO = { id: string; name: string };
 
 /**
- * The org's live projects, for the Project select in Add User's Client role
+ * The org's non-archived projects, for the Project select in Add User's Client role
  * (D51 amendment, 2026-11-23). Owner/admin only — the Users page is guarded to
  * those roles — and RLS-scoped as every projects read is. id and name only:
  * no money column is selected.
@@ -443,6 +443,9 @@ export async function listProjectOptions(): Promise<ProjectOptionDTO[]> {
     .from("projects")
     .select("id, name")
     .is("deleted_at", null)
+    // An archived project is not one to start a new client on; its own
+    // Client access card still can, if that is ever really wanted.
+    .neq("status", "archived")
     .order("name", { ascending: true });
   if (error) throw new Error(error.message);
   return data;

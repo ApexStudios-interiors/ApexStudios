@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * D51: client logins are created and granted per project, from the project
- * dashboard's Client access card, by owner/admin only.
+ * D51: client logins are created and granted per project, by owner/admin only —
+ * from the project dashboard's Client access card, or from Add User with the
+ * Client role and a required Project (D51 amendment, 2026-11-23).
  *
  * Deliberately stops short of submitting. Creating a login writes a real
  * auth.users row, and there is one Supabase project, which is production
@@ -29,14 +30,20 @@ test.describe("admin: Client access card", () => {
     await page.getByRole("button", { name: "Cancel" }).click();
   });
 
-  test("Add User offers staff roles only", async ({ page }, testInfo) => {
+  test("Add User offers Client, which asks for a project", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "admin", "admin-only journey");
     await page.goto("/users");
     await page.getByRole("button", { name: "Add User" }).click();
+    // Staff roles: no Project field.
+    await expect(page.getByLabel("Project")).toHaveCount(0);
     await page.getByLabel("Role").click();
     await expect(page.getByRole("option", { name: "Admin" })).toBeVisible();
     await expect(page.getByRole("option", { name: "Site Supervisor" })).toBeVisible();
-    await expect(page.getByRole("option", { name: "Client" })).toHaveCount(0);
+    // D51 amendment (2026-11-23): Client is offered, and requires a project.
+    await page.getByRole("option", { name: "Client" }).click();
+    await expect(page.getByLabel("Project")).toBeVisible();
+    // Stops short of submitting — see the note at the top of this file.
+    await page.getByRole("button", { name: "Cancel" }).click();
   });
 });
 

@@ -36,7 +36,8 @@ describe("addUserSchema", () => {
     expect(addUserSchema.safeParse({ username: "boss", role: "owner" }).success).toBe(false);
   });
 
-  // D51: a client login is created from a project, never from Add User.
+  // D51: a client login always has a project, so it is created through
+  // createClientLogin (Client access card, or Add User's Client role), never addUser.
   it("refuses the client role", () => {
     expect(addUserSchema.safeParse({ username: "tvrao", role: "client" }).success).toBe(false);
   });
