@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
 import { Fragment, useRef, useState, useTransition } from "react";
 import { useAction } from "next-safe-action/hooks";
-import { BookOpenIcon } from "lucide-react";
+import { BookOpenIcon, InboxIcon } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { useSession } from "@/components/auth/SessionProvider";
 import { signOut } from "@/features/auth/actions";
@@ -146,6 +146,22 @@ export function Sidebar({
           </div>
         )}
       </div>
+
+      {/* D68: every role's aged list of what is waiting on them, across all
+          projects. Also linked from the bell's footer. */}
+      <Link
+        href="/inbox"
+        aria-current={pathname === "/inbox" ? "page" : undefined}
+        className={`shrink-0 flex items-center gap-2.5 w-full text-left border-0 rounded-md px-2 py-[7px] cursor-pointer text-[13.5px] ${
+          role === "client" ? "mb-2.5" : "mb-px"
+        } ${pathname === "/inbox" ? "bg-accent font-semibold text-foreground" : "font-medium text-foreground hover:bg-accent"}`}
+      >
+        <InboxIcon
+          aria-hidden
+          className={`w-4 h-4 flex-none ${pathname === "/inbox" ? "text-foreground" : "text-muted-foreground"}`}
+        />
+        Needs my action
+      </Link>
 
       {role !== "client" && (
         <Link

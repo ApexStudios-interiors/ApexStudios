@@ -48,6 +48,8 @@ export function Header({
     crumb = <b className="text-foreground font-semibold">Users</b>;
   } else if (pathname === "/inventory") {
     crumb = <b className="text-foreground font-semibold">Inventory</b>;
+  } else if (pathname === "/inbox") {
+    crumb = <b className="text-foreground font-semibold">Needs my action</b>;
   } else if (params?.projectId) {
     const project = projects.find((p) => p.id === params.projectId);
     const section = sectionFromPath(pathname, params.projectId);
