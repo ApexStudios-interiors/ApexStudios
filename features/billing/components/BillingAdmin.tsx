@@ -78,7 +78,7 @@ export function BillingAdmin({
         setItems(rows);
         setSelKeys(new Set(rows.map((r) => r.sourceId)));
       })
-      .catch(() => toast("Could not load Billable Now."));
+      .catch(() => toast("Could not load Billable Now.", "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
@@ -132,7 +132,7 @@ export function BillingAdmin({
     setPending(false);
     setIdempotencyKey(crypto.randomUUID());
     if (!result?.data) {
-      toast(result?.serverError ?? "Could not create this bill");
+      toast(result?.serverError ?? "Could not create this bill", "error");
       return;
     }
     // `router.refresh()` picks up createBill's own updateTag/revalidatePath
@@ -250,6 +250,8 @@ export function BillingAdmin({
                       type="checkbox"
                       checked={sel.has(i.sourceId)}
                       onChange={() => toggle(i.sourceId)}
+                      aria-label={`Include ${i.description} in the next bill`}
+                      className="size-4 accent-current"
                     />
                   </td>
                   <td className={td}>{i.description}</td>
@@ -313,7 +315,8 @@ export function BillingAdmin({
                       size="sm"
                       onClick={async () => {
                         const result = await transitionBill({ billId: b.id, toStatus: "submitted" });
-                        if (!result?.data) toast(result?.serverError ?? "Could not submit this bill");
+                        if (!result?.data)
+                          toast(result?.serverError ?? "Could not submit this bill", "error");
                         else {
                           router.refresh();
                           toast(`${b.refNo} submitted`);
@@ -343,7 +346,7 @@ export function BillingAdmin({
                 return (
                   <tr key={b.id}>
                     <td className={td}>
-                      {b.refNo}
+                      <span className="whitespace-nowrap">{b.refNo}</span>
                       <span className={sub}>
                         {b.paidAt
                           ? `Paid ${dmy(b.paidAt)}`
@@ -354,7 +357,7 @@ export function BillingAdmin({
                               : "Draft"}
                       </span>
                     </td>
-                    <td className={td}>{dmy(b.billDate)}</td>
+                    <td className={`${td} whitespace-nowrap`}>{dmy(b.billDate)}</td>
                     <td className={td + " text-muted-foreground"}>{b.packageLabels.join(", ")}</td>
                     <td className={tdNum}>{formatINR(b.taxableAmount)}</td>
                     <td className={tdNum}>{formatINR(b.netPayable)}</td>
