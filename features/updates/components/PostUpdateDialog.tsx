@@ -56,7 +56,7 @@ export function PostUpdateDialog({ projectId, moduleId }: { projectId: string; m
         setPackages(opts);
         setPackageId((current) => current || (opts[0]?.id ?? ""));
       })
-      .catch(() => toast("Could not load packages."));
+      .catch(() => toast("Could not load packages.", "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once for this dialog instance, matching the established AddTaskDialog pattern
   }, [projectId]);
 
@@ -95,10 +95,11 @@ export function PostUpdateDialog({ projectId, moduleId }: { projectId: string; m
       title="Post Daily Update"
       okLabel={pending ? "Posting…" : "Post"}
       okPending={pending}
+      dirty={body.trim() !== "" || attachmentIds.length > 0}
       onClose={closeDialog}
       onOk={onSubmit}
     >
-      <div className="grid grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         <Field label="Package" htmlFor="pu-package">
           {/* Base UI's "no selection" is `null`, not `""` — this dialog keeps
               `""` as its own empty state (the `!packageId` guard in onSubmit
@@ -131,7 +132,7 @@ export function PostUpdateDialog({ projectId, moduleId }: { projectId: string; m
         <Field label="Date" htmlFor="pu-date">
           <DatePicker id="pu-date" value={updateDate} onChange={setUpdateDate} required />
         </Field>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <Field label="Work Done" htmlFor="pu-body">
             <textarea
               id="pu-body"
@@ -142,7 +143,7 @@ export function PostUpdateDialog({ projectId, moduleId }: { projectId: string; m
             />
           </Field>
         </div>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <Field label="Photos">
             <FileUploader
               projectId={projectId}
@@ -155,7 +156,7 @@ export function PostUpdateDialog({ projectId, moduleId }: { projectId: string; m
             />
           </Field>
         </div>
-        {error && <p className="col-span-2 text-[12.5px] text-destructive">{error}</p>}
+        {error && <p className="sm:col-span-2 text-[12.5px] text-destructive">{error}</p>}
       </div>
     </DialogShell>
   );

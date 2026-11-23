@@ -6,7 +6,7 @@ import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
-import { createStockRequestSchema } from "@/features/stock/schema";
+import { MATERIAL_NAME_MAX, NOTE_MAX, createStockRequestSchema } from "@/features/stock/schema";
 import {
   createStockRequest,
   getMaterialSuggestions,
@@ -76,16 +76,16 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
   useEffect(() => {
     getPackageOptions(projectId)
       .then(setPackages)
-      .catch(() => toast("Could not load packages."));
+      .catch(() => toast("Could not load packages.", "error"));
     getProjectRateVisibility(projectId)
       .then(setRateVisibility)
-      .catch(() => toast("Could not load this project's rate setting."));
+      .catch(() => toast("Could not load this project's rate setting.", "error"));
     getMaterialSuggestions()
       .then(setMaterials)
-      .catch(() => toast("Could not load material suggestions."));
+      .catch(() => toast("Could not load material suggestions.", "error"));
     getUnitOptions()
       .then(setUnits)
-      .catch(() => toast("Could not load units."));
+      .catch(() => toast("Could not load units.", "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
@@ -94,7 +94,7 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
     control,
     handleSubmit,
     setValue,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm({
     resolver: zodResolver(createStockRequestSchema),
     defaultValues: {
@@ -103,7 +103,7 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
       phaseId: "",
       materialName: "",
       qty: 0,
-      unit: "",
+      unit: undefined,
       rate: undefined,
       neededBy: "",
       note: "",
@@ -126,7 +126,7 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
     if (!packageId) return;
     getPhaseOptions(packageId)
       .then(setPhases)
-      .catch(() => toast("Could not load phases."));
+      .catch(() => toast("Could not load phases.", "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [packageId]);
   const visiblePhases = packageId ? phases : null;
@@ -202,11 +202,12 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
       title="New Stock Request"
       okLabel={create.isPending ? "Submitting…" : "Submit"}
       okPending={create.isPending}
+      dirty={isDirty}
       onClose={closeDialog}
       onOk={onSubmit}
     >
-      <form onSubmit={onSubmit} className="grid grid-cols-2 gap-3.5">
-        <div className="col-span-2">
+      <form onSubmit={onSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        <div className="sm:col-span-2">
           <Field label="Package" htmlFor="nr-package">
             <Controller
               control={control}
@@ -245,7 +246,7 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
           </Field>
           {errors.packageId && <p className="text-xs text-destructive mt-1">{errors.packageId.message}</p>}
         </div>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <Field label="Phase" htmlFor="nr-phase">
             <Controller
               control={control}
@@ -255,7 +256,7 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
                   items={phaseItems}
                   disabled={!visiblePhases?.length}
                   value={visiblePhases?.length ? field.value || null : null}
-                  onValueChange={(v) => field.onChange(v ?? "")}
+                  onValueChange={(v) => field.onChange(v ?? undefined)}
                 >
                   <SelectTrigger
                     id="nr-phase"
@@ -294,13 +295,14 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
             />
           </Field>
         </div>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <Field label="Material" htmlFor="nr-material">
             <input
               id="nr-material"
               className={inputClass}
               placeholder="Pool-grade vitrified tile 300x300"
               list="materials"
+              maxLength={MATERIAL_NAME_MAX}
               {...register("materialName")}
             />
             <datalist id="materials">
@@ -325,8 +327,10 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
               // The schema still owns the real rule (`positive()`), which is
               // stricter than `min=0` — 0 is refused with a message.
               min={0}
+              inputMode="decimal"
               className={inputClass}
               placeholder="0"
+              aria-invalid={!!errors.qty}
               {...register("qty")}
             />
             <Controller
@@ -337,7 +341,7 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
                   items={unitItems}
                   disabled={!units}
                   value={units ? field.value || null : null}
-                  onValueChange={(v) => field.onChange(v ?? "")}
+                  onValueChange={(v) => field.onChange(v ?? undefined)}
                 >
                   <SelectTrigger
                     aria-label="Unit"
@@ -384,12 +388,11 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
           <Field label="Rate (₹ per unit)" htmlFor="nr-rate">
             <input
               id="nr-rate"
-              type="number"
-              step="any"
-              // Same reason as Quantity above: `rate` is `nonnegative()`, so
-              // the stepper cannot be allowed to reach a value the schema
-              // will only ever refuse.
-              min={0}
+              // Text, not number: a number input refuses "1,250" outright.
+              // The schema strips grouping commas before it validates
+              // (lib/money/input, APX-40), and refuses a negative rate.
+              inputMode="decimal"
+              autoComplete="off"
               className={inputClass}
               placeholder={rateDisabled ? "Set by admin" : "Optional"}
               disabled={rateDisabled}
@@ -401,21 +404,27 @@ export function NewRequestDialog({ projectId, moduleId }: { projectId: string; m
             {errors.rate && <p className="text-xs text-destructive mt-1">{errors.rate.message}</p>}
           </Field>
         )}
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <Field label="Note" htmlFor="nr-note">
-            <textarea id="nr-note" className={textareaClass} placeholder="Optional" {...register("note")} />
+            <textarea
+              id="nr-note"
+              className={textareaClass}
+              placeholder="Optional"
+              maxLength={NOTE_MAX}
+              {...register("note")}
+            />
           </Field>
         </div>
         {/* An alert, not a block: Submit stays enabled and the workflow is
             unchanged. Rendered with the status-destructive token, the same
             colour every other warning in this app uses. */}
         {duplicateWarning && (
-          <p role="status" className="col-span-2 text-[12.5px] text-status-destructive">
+          <p role="status" className="sm:col-span-2 text-[12.5px] text-status-destructive">
             {DUPLICATE_DELIVERED_WARNING}
           </p>
         )}
         {create.result.serverError && (
-          <p className="col-span-2 text-[12.5px] text-destructive">{create.result.serverError}</p>
+          <p className="sm:col-span-2 text-[12.5px] text-destructive">{create.result.serverError}</p>
         )}
       </form>
     </DialogShell>

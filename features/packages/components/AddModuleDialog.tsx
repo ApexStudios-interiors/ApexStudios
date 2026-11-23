@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
-import { createPackageSchema } from "@/features/packages/schema";
+import { PACKAGE_FIELD_NAME_MAX, createPackageSchema } from "@/features/packages/schema";
+import { MoneyEcho } from "@/components/shared/MoneyEcho";
+import { InternalOverAllocatedNote } from "./InternalOverAllocatedNote";
 import { createPackage, getStaffOptions } from "@/features/packages/actions";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
 import {
@@ -30,7 +32,7 @@ export function AddModuleDialog({ projectId }: { projectId: string }) {
   useEffect(() => {
     getStaffOptions()
       .then(setStaff)
-      .catch(() => toast("Could not load staff."));
+      .catch(() => toast("Could not load staff.", "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -49,7 +51,7 @@ export function AddModuleDialog({ projectId }: { projectId: string }) {
     register,
     control,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm({
     // No explicit generic — leadProfileId's "" -> undefined transform gives
     // the schema's input and output types different shapes for that field,
@@ -70,39 +72,62 @@ export function AddModuleDialog({ projectId }: { projectId: string }) {
   });
 
   const onSubmit = handleSubmit((values) => create.execute(values));
+  const [allocated, internal] = useWatch({ control, name: ["allocatedAmount", "internalAmount"] });
 
   return (
     <DialogShell
       title="Add Package"
       okLabel={create.isPending ? "Adding…" : "Add"}
       okPending={create.isPending}
+      dirty={isDirty}
       onClose={closeDialog}
       onOk={onSubmit}
     >
-      <form onSubmit={onSubmit} className="grid grid-cols-2 gap-3.5">
-        <div className="col-span-2">
+      <form onSubmit={onSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        <div className="sm:col-span-2">
           <Field label="Package Name" htmlFor="am-name">
-            <input id="am-name" className={inputClass} placeholder="Landscape" {...register("name")} />
+            <input
+              id="am-name"
+              className={inputClass}
+              placeholder="Landscape"
+              maxLength={PACKAGE_FIELD_NAME_MAX}
+              {...register("name")}
+            />
           </Field>
           {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
         </div>
         <div>
-          <Field label="Allocated Budget" htmlFor="am-alloc">
-            <input id="am-alloc" className={inputClass} placeholder="₹" {...register("allocatedAmount")} />
+          <Field label="Allocated Budget" htmlFor="am-alloc" error={errors.allocatedAmount?.message}>
+            <input
+              id="am-alloc"
+              className={inputClass}
+              placeholder="₹ e.g. 45,00,000"
+              inputMode="decimal"
+              autoComplete="off"
+              aria-invalid={!!errors.allocatedAmount}
+              aria-describedby="am-alloc-echo"
+              {...register("allocatedAmount")}
+            />
           </Field>
-          {errors.allocatedAmount && (
-            <p className="text-xs text-destructive mt-1">{errors.allocatedAmount.message}</p>
-          )}
+          <MoneyEcho id="am-alloc-echo" value={allocated} />
         </div>
         <div>
-          <Field label="Internal Budget" htmlFor="am-internal">
-            <input id="am-internal" className={inputClass} placeholder="₹" {...register("internalAmount")} />
+          <Field label="Internal Budget" htmlFor="am-internal" error={errors.internalAmount?.message}>
+            <input
+              id="am-internal"
+              className={inputClass}
+              placeholder="₹ e.g. 25,00,000"
+              inputMode="decimal"
+              autoComplete="off"
+              aria-invalid={!!errors.internalAmount}
+              aria-describedby="am-internal-echo"
+              {...register("internalAmount")}
+            />
           </Field>
-          {errors.internalAmount && (
-            <p className="text-xs text-destructive mt-1">{errors.internalAmount.message}</p>
-          )}
+          <MoneyEcho id="am-internal-echo" value={internal} />
         </div>
-        <div className="col-span-2">
+        <InternalOverAllocatedNote allocated={allocated} internal={internal} className="sm:col-span-2" />
+        <div className="sm:col-span-2">
           <Field label="Lead" htmlFor="am-lead">
             <Controller
               control={control}
@@ -136,7 +161,7 @@ export function AddModuleDialog({ projectId }: { projectId: string }) {
           </Field>
         </div>
         {create.result.serverError && (
-          <p className="col-span-2 text-[12.5px] text-destructive">{create.result.serverError}</p>
+          <p className="sm:col-span-2 text-[12.5px] text-destructive">{create.result.serverError}</p>
         )}
       </form>
     </DialogShell>
