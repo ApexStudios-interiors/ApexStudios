@@ -44,18 +44,14 @@ export async function insertProjectMember(
  * Runs through the caller's RLS-scoped client: `pm_delete` requires
  * is_admin(). As with the insert, the project and the profile are read first
  * through the same client (both reads org-scoped), and the rule is
- * clientAccessRemovalRefusal — so a site supervisor's membership, or a
- * client's last project, is refused rather than deleted.
- *
- * Two removals racing for the same client's last two projects could each see
- * a count of 2; that would leave a login with no project, which Add existing
- * client or Deactivate puts right. Not worth a lock for a two-admin org.
+ * clientAccessRemovalRefusal — so a site supervisor's membership is refused
+ * rather than deleted. A client's last project may be removed (2026-11-23).
  */
 export async function deleteProjectMember(
   supabase: Awaited<ReturnType<typeof createClient>>,
   input: { projectId: string; profileId: string }
 ): Promise<{ status: "removed" } | { status: "refused"; reason: ClientAccessRemovalRefusal }> {
-  const [project, profile, memberships] = await Promise.all([
+  const [project, profile, membership] = await Promise.all([
     supabase.from("projects").select("id").eq("id", input.projectId).is("deleted_at", null).maybeSingle(),
     supabase
       .from("profiles")
@@ -63,27 +59,21 @@ export async function deleteProjectMember(
       .eq("id", input.profileId)
       .is("deleted_at", null)
       .maybeSingle(),
-    supabase.from("project_members").select("project_id").eq("profile_id", input.profileId),
+    supabase
+      .from("project_members")
+      .select("project_id")
+      .eq("project_id", input.projectId)
+      .eq("profile_id", input.profileId)
+      .maybeSingle(),
   ]);
   if (project.error) throw new Error(project.error.message);
   if (profile.error) throw new Error(profile.error.message);
-  if (memberships.error) throw new Error(memberships.error.message);
+  if (membership.error) throw new Error(membership.error.message);
   if (!project.data || !profile.data) throw new Error("NOT_FOUND: project or profile");
-
-  const projectIds = memberships.data.map((m) => m.project_id);
-  // Count live projects only: a membership row on a soft-deleted project is
-  // not a project the client can actually use.
-  let projectCount = 0;
-  if (projectIds.length > 0) {
-    const live = await supabase.from("projects").select("id").in("id", projectIds).is("deleted_at", null);
-    if (live.error) throw new Error(live.error.message);
-    projectCount = live.data.length;
-  }
 
   const refusal = clientAccessRemovalRefusal({
     role: profile.data.role,
-    isMember: projectIds.includes(input.projectId),
-    projectCount,
+    isMember: membership.data !== null,
   });
   if (refusal) return { status: "refused", reason: refusal };
 

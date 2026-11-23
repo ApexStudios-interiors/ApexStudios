@@ -50,7 +50,8 @@ Accounts are created on the Users page (Add User: Admin, Site Supervisor, or Cli
 login always belongs to a project: choosing Client in Add User requires a Project. The project
 dashboard's Client access card lists a project's client logins, grants an existing one access to
 another project, and removes one from that project only (as does Projects on a client's row of the
-Users page). A client's last project cannot be removed — deactivate the login instead. It no longer
+Users page) — even their only project, which leaves a login that signs in to no project until one is
+given back or it is deactivated. It no longer
 creates logins (D51, amended 2026-11-23).
 
 ### The one rule that matters most

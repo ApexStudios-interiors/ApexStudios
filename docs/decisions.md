@@ -1509,8 +1509,10 @@ owner/admin.
   Add User is now the one place a client login is created; the card keeps the list and
   **Add existing client**. Also added the same day: **Remove** on each client row of the card, and
   **Projects** on a client's row of the Users page, to take a client off ONE project
-  (`removeProjectMember`, `pm_delete` — no migration). Refused for a client's last project
-  (`clientAccessRemovalRefusal`): the invariant above holds, and Deactivate is the tool for that.
+  (`removeProjectMember`, `pm_delete` — no migration). **Including a client's last project**
+  (Voola, same day): a client login is still always *created* with a project, but may later have
+  none — it can sign in, sees an empty All Projects page with a message, and gets access back via
+  Add existing client (or is ended with Deactivate). The confirm step warns when it is their last.
 - **Client logins are created from the project.** The project dashboard has a **Client access** card
   (owner/admin only): the project's client logins; **Create client login** (username + optional name
   → auth user, `profiles` row with role `client`, `project_members` row for this project, password

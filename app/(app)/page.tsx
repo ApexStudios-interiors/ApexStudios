@@ -93,11 +93,23 @@ export default async function HomePage() {
         />
       )}
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
-        {portfolio.projects.map((p) => (
-          <ProjectCard key={p.id} project={p} />
-        ))}
-      </div>
+      {portfolio.projects.length === 0 ? (
+        // A client can be left with no project (removed from their last one);
+        // a new site supervisor starts with none. Say so rather than show a blank grid.
+        <p className="rounded-xl border border-border px-5 py-8 text-center text-[13.5px] text-muted-foreground">
+          {portfolio.role === "client"
+            ? "You don't have access to any project yet. Contact Apex Studios to be given access."
+            : portfolio.role === "site"
+              ? "You haven't been added to any project yet. Ask an admin to add you."
+              : "No projects yet."}
+        </p>
+      ) : (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
+          {portfolio.projects.map((p) => (
+            <ProjectCard key={p.id} project={p} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
