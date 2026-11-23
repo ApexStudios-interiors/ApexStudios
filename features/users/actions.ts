@@ -133,11 +133,15 @@ export const createClientLogin = adminAction
         role: "client",
       }),
       afterProfile: async (userId) => {
-        await insertProjectMember(supabase, {
+        const added = await insertProjectMember(supabase, {
           projectId: parsedInput.projectId,
           profileId: userId,
           addedBy: ctx.session.userId,
+          expectedRole: "client",
         });
+        // The profile was just created as a client, so a refusal here means
+        // the role did not stick — fail, and provisionAccount rolls back.
+        if (typeof added === "object") throw new Error(`FORBIDDEN: ${added.reason}`);
       },
     };
 

@@ -25,6 +25,11 @@ const ERROR_MESSAGES = {
   NEGATIVE_STOCK: "Not enough stock on hand.",
   REASON_REQUIRED: "Please give a reason.",
   RATE_LIMITED: "Too many requests. Please wait a moment and try again.",
+  CONFLICT:
+    "Someone else changed this while you were editing. Close and reopen it to see the current values.",
+  PROJECT_ARCHIVED: "This project is archived, so it is read-only.",
+  PROJECT_COMPLETED: "This project is completed, so no new stock requests or daily updates can be added.",
+  PHASE_BILLED: "This phase is already on a bill, so its allocated amount can no longer change.",
 } as const;
 
 /** Postgres RAISE EXCEPTION messages the RPCs use are prefixed with their code
