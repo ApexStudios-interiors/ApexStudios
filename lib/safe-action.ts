@@ -25,6 +25,12 @@ const ERROR_MESSAGES = {
   NEGATIVE_STOCK: "Not enough stock on hand.",
   REASON_REQUIRED: "Please give a reason.",
   RATE_LIMITED: "Too many requests. Please wait a moment and try again.",
+  // rpc_create_bill's material-at-site rules (migration 20261124200001, D68).
+  MAS_SAME_BILL: "A material and its own phase can't go on the same bill — the phase already includes it.",
+  MAS_DRAFT_PENDING: "Material for a selected phase is on a draft bill. Submit or cancel that draft first.",
+  MAS_EXCEEDS_GROSS:
+    "The material advance to recover is more than this bill's value. Add more items, or check the phase's value.",
+  INVALID_PERIOD: "Give both billing period dates, with the start on or before the end.",
 } as const;
 
 /** Postgres RAISE EXCEPTION messages the RPCs use are prefixed with their code

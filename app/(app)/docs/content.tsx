@@ -142,7 +142,7 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "Billable Now",
         definition:
-          "The list of things ready to go on the next bill: phases whose tasks are all complete, and material that has been delivered.",
+          "The list of things ready to go on the next bill: phases whose tasks are all complete, and delivered material that has a rate and belongs to a phase not yet billed. Nothing starts ticked — tick each item, or use the box in the header to select all.",
       },
       {
         term: "Work value",
@@ -156,7 +156,7 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "MAS recovery",
         definition:
-          "Material-at-site recovery: the material advance already billed earlier that is now part of a phase being billed in full. It is taken off so the client is not charged twice.",
+          "Material-at-site recovery: the material advance already billed earlier that is now part of a phase being billed in full. It is taken off so the client is not charged twice. To keep that true, a material cannot go on the same bill as its own phase; a phase cannot be billed while one of its materials is on a draft (submit or cancel the draft first); material for a phase that is already billed is never billed again; and material not linked to a phase, or with no rate, is not billed as an advance at all. These rules await CA confirmation.",
       },
       {
         term: "Taxable value",
@@ -420,17 +420,19 @@ export const FLOWS: Flow[] = [
       { badge: <BillStatusBadge status="paid" />, who: "Automatic once recorded payments cover the net payable" },
     ],
     exits: [
-      { badge: <BillStatusBadge status="cancelled" />, who: "A draft can be abandoned; its lines return to Billable Now. There is no Cancel button on the Billing page yet" },
+      { badge: <BillStatusBadge status="cancelled" />, who: "An admin clicks Cancel draft on a draft bill and confirms; its lines return to Billable Now. The client never sees a cancelled draft" },
       { badge: <BillStatusBadge status="draft" />, who: "Client rejects a submitted bill with a reason; it returns to draft with a new revision number" },
     ],
     steps: [
-      "On the project's Billing page tick the items in Billable Now and click + Create Bill. The bill is a Draft with the project's GST, retention and material-at-site rates copied onto it.",
-      "Click Submit. The bill is locked from here on and a PDF is rendered in the background. If the client rejects it, fix the draft and submit again — a fresh PDF is rendered for the new revision.",
+      "On the project's Billing page tick the items in Billable Now (nothing starts ticked; the header box selects all) and click + Create Bill. A confirmation shows the full breakdown — gross, MAS recovery, taxable, GST, retention, TDS, advance recovery and net payable — and lets you enter an optional billing period (both dates or neither). Confirm, and the bill is a Draft with the project's GST, retention and material-at-site rates copied onto it.",
+      "Click Submit and confirm the amounts. The bill is locked from here on, dated that day (India time), and a PDF is rendered in the background. If the client rejects it, fix the draft and submit again — it keeps its first date, and a fresh PDF is rendered for the new revision.",
       "The client opens Bills, views the bill and clicks Approve. The status becomes certified, which the app labels Payment Pending.",
       "As money arrives, an admin clicks Record Payment and enters the amount, date, mode and reference. Partial payments are fine; the moment they add up to the net payable the bill turns Paid on its own, and its phases are marked Paid too.",
     ],
     notes: [
       "The phases on a bill move with it: Billable → Billed when the bill is created, and → Paid when it is paid.",
+      "A greyed-out line in Billable Now says why it cannot be ticked: its phase is already ticked (the phase's value includes the material), or one of its materials is on a draft bill. Under the table, a note counts delivered materials that are not listed — no rate, not linked to a phase, or covered by a phase already billed.",
+      "Billed to Date counts submitted, certified and paid bills only. Received is every payment recorded, part-payments included.",
     ],
   },
   {

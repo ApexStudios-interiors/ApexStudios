@@ -1254,6 +1254,9 @@ export type Database = {
           pct_billed: number | null;
           amount: number | null;
           internal_cost: number | null;
+          phase_id: string | null;
+          mas_recovery: number | null;
+          blocked_by_bill_no: string | null;
         };
         Relationships: [];
       };
@@ -1530,6 +1533,8 @@ export type Database = {
           p_bill_date?: string;
           p_notes?: string;
           p_idempotency_key?: string;
+          p_period_from?: string;
+          p_period_to?: string;
         };
         Returns: unknown;
       };

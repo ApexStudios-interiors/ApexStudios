@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
 import { parseRateVisibility, projectStatusLabel, type RateVisibility } from "./service";
+import { isIssuedBill, sumAmounts, type BillStatus } from "@/features/billing/service";
 
 /**
  * Three separate functions, not one with a role ternary on the select list
@@ -347,12 +348,16 @@ export async function getClientBillingStats(projectId: string): Promise<ClientBi
     .eq("project_id", projectId);
   if (error) throw new Error(error.message);
 
-  const billedNet = bills
-    .filter((b) => b.status !== "draft")
-    .reduce((a, b) => a + Number(b.net_payable ?? 0), 0);
-  const paidNet = bills
-    .filter((b) => b.status === "paid")
-    .reduce((a, b) => a + Number(b.net_payable ?? 0), 0);
+  // Issued bills only (APX-32): a cancelled draft was never sent. Summed in
+  // Decimal, never a float running total.
+  const netOf = (pred: (status: BillStatus) => boolean) =>
+    sumAmounts(
+      bills
+        .filter((b) => b.status != null && pred(b.status))
+        .map((b) => ({ amount: Number(b.net_payable ?? 0) }))
+    ).toNumber();
+  const billedNet = netOf(isIssuedBill);
+  const paidNet = netOf((s) => s === "paid");
   const billsSubmitted = bills.filter((b) => b.status === "submitted").length;
 
   const { count: approvalsPending, error: apErr } = await supabase

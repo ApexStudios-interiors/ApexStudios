@@ -75,14 +75,18 @@ Suggested order: **4 → 3 → 5** (1 and 2 resolved), then **6–9** before the
   not be verified. CA sign-off on a generated PDF is also outstanding.
 - **Fix:** Supply one real past RA bill, compare the generated equivalent, and get CA sign-off in writing.
 
-### 9. Small billing correctness gaps
+### 9. Small billing correctness gaps — partly resolved 2026-11-24 (D68)
 
 - **Issue:**
-  - Recording a payment does not regenerate the bill PDF, so it can be stale.
-  - `RecordPaymentDialog` does not regenerate its idempotency key after a failed submit.
-  - `BillingAdmin`'s "Billable Now" table does not refresh after a bill is created, which can cause a
-    confusing `ALREADY_BILLED` on resubmit.
-- **Fix:** Three small code fixes in `features/billing`.
+  - Recording a payment does not regenerate the bill PDF, so it can be stale. **Still open** (the bill
+    PDF job is outside D68).
+  - ~~`RecordPaymentDialog` does not regenerate its idempotency key after a failed submit.~~ Out of date:
+    it regenerated after *every* attempt, which could record a payment twice after a dropped connection.
+    **Resolved (APX-33):** the key is kept when an answer was lost and renewed after any definite answer
+    or edit.
+  - ~~`BillingAdmin`'s "Billable Now" table does not refresh after a bill is created.~~ **Resolved:** it
+    reloads after create and after Cancel draft.
+- **Fix:** The PDF-on-payment item remains.
 
 ---
 
