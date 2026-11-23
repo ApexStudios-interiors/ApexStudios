@@ -24,6 +24,7 @@ import { EditProjectDialog } from "@/features/projects/components/EditProjectDia
 import { ProjectStatusDialog } from "@/features/projects/components/ProjectStatusDialog";
 import { AddPhaseDialog } from "@/features/packages/components/AddPhaseDialog";
 import { EditPhaseDialog } from "@/features/packages/components/EditPhaseDialog";
+import { AdjustInventoryDialog } from "@/features/inventory/components/AdjustInventoryDialog";
 
 export function DialogHost() {
   const { dialog } = useApp();
@@ -121,6 +122,8 @@ export function DialogHost() {
       );
     case "editPhase":
       return <EditPhaseDialog phaseId={dialog.phaseId} />;
+    case "adjustInventory":
+      return <AdjustInventoryDialog item={dialog.item} />;
     default:
       return null;
   }

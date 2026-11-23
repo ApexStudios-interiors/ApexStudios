@@ -65,14 +65,34 @@ export async function projectSlugFromId(supabase: Client, id: string): Promise<s
 
 type Pkg = { id: string; name: string; seq_no: number };
 
+/**
+ * Every live package of the project the CALLER may see, whatever their role.
+ *
+ * `packages` itself is admin-only on select (its rows carry internal cost), so
+ * reading it alone resolved nothing for a Site Supervisor or a Client and every
+ * readable package link (`/packages/swimming-pool`) fell through to the page's
+ * notFound() — found live on 2026-11-23 (APX-08). The role-scoped views carry
+ * the same id, name and seq_no without the money: admin reads the table,
+ * a client `v_package_client`, a site supervisor `v_package_site`. All three
+ * are asked in parallel — the same latency as one query in this middleware
+ * path — and whichever ones the caller may read answer; the rest come back
+ * empty or with an RLS error, both of which are ignored here.
+ */
 async function livePackages(supabase: Client, projectId: string): Promise<Pkg[]> {
-  const { data, error } = await supabase
-    .from("packages")
-    .select("id, name, seq_no")
-    .eq("project_id", projectId)
-    .is("deleted_at", null);
-  if (error || !data) return [];
-  return data as Pkg[];
+  const sources = ["packages", "v_package_client", "v_package_site"] as const;
+  const results = await Promise.all(
+    sources.map((source) => {
+      const q = supabase.from(source).select("id, name, seq_no").eq("project_id", projectId);
+      // The views already exclude soft-deleted rows; the table needs the filter.
+      return source === "packages" ? q.is("deleted_at", null) : q;
+    })
+  );
+  const byId = new Map<string, Pkg>();
+  for (const { data, error } of results) {
+    if (error || !data) continue;
+    for (const p of data as Pkg[]) byId.set(p.id, p);
+  }
+  return [...byId.values()];
 }
 
 /**

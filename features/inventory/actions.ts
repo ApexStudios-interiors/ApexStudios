@@ -3,7 +3,9 @@
 import "server-only";
 import { revalidatePath } from "next/cache";
 import { adminAction } from "@/lib/safe-action";
+import { requireRole } from "@/lib/auth/session";
 import { adjustInventoryFor } from "./adjust";
+import { getAdjustmentHistory, type AdjustmentDTO } from "./queries";
 import { adjustInventorySchema } from "./schema";
 
 /** build §2.3: `adjustInventory` wraps `rpc_adjust_inventory`, admin only —
@@ -18,3 +20,10 @@ export const adjustInventory = adminAction
     revalidatePath("/inventory");
     return { id: item.id, qtyOnHand: item.qtyOnHand };
   });
+
+/** `AdjustInventoryDialog`'s own "recent adjustments" fetch. Admin only, the
+ *  same as the write it sits beside. */
+export async function getAdjustmentHistoryForDialog(itemId: string): Promise<AdjustmentDTO[]> {
+  const session = await requireRole(["admin"]);
+  return getAdjustmentHistory(session, itemId);
+}
