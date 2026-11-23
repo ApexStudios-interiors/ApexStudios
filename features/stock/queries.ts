@@ -36,12 +36,21 @@ export type StockRequestDTO = {
   neededBy: string | null;
   note: string | null;
   status: StockRequestStatus;
+  requestedById: string;
   requestedByName: string;
+  /** Whether the signed-in user raised it — the only person who may cancel
+   *  or (with an admin) edit it while pending. The REAL user, never the
+   *  previewed one: impersonation shapes reads, not identity. */
+  mine: boolean;
   createdAt: string;
   approvedAt: string | null;
   orderedAt: string | null;
   deliveredAt: string | null;
   rejectedReason: string | null;
+  cancelledAt: string | null;
+  cancelledReason: string | null;
+  /** Set on the remainder of a part delivery: the request it was split from. */
+  splitFromId: string | null;
 };
 
 type PackageInfo = { name: string; seqNo: number };
@@ -222,6 +231,9 @@ async function loadStockRequests(
     ordered_at: string | null;
     delivered_at: string | null;
     rejected_reason: string | null;
+    cancelled_at: string | null;
+    cancelled_reason: string | null;
+    split_from_id: string | null;
   };
 
   // Every matching row, or — with `req` — one page of them.
@@ -247,7 +259,7 @@ async function loadStockRequests(
       let q = supabase
         .from("stock_requests")
         .select(
-          "id, ref_no, project_id, package_id, material_name, qty, unit, rate, needed_by, note, status, requested_by, created_at, approved_at, ordered_at, delivered_at, rejected_reason",
+          "id, ref_no, project_id, package_id, material_name, qty, unit, rate, needed_by, note, status, requested_by, created_at, approved_at, ordered_at, delivered_at, rejected_reason, cancelled_at, cancelled_reason, split_from_id",
           { count: req ? "exact" : undefined }
         )
         .eq("project_id", projectId)
@@ -265,7 +277,7 @@ async function loadStockRequests(
       let q = supabase
         .from("v_stock_request_site")
         .select(
-          "id, ref_no, project_id, package_id, material_name, qty, unit, needed_by, note, status, requested_by, created_at, approved_at, ordered_at, delivered_at, rejected_reason",
+          "id, ref_no, project_id, package_id, material_name, qty, unit, needed_by, note, status, requested_by, created_at, approved_at, ordered_at, delivered_at, rejected_reason, cancelled_at, cancelled_reason, split_from_id",
           { count: req ? "exact" : undefined }
         )
         .eq("project_id", projectId)
@@ -304,12 +316,17 @@ async function loadStockRequests(
       neededBy: r.needed_by,
       note: r.note,
       status: r.status,
+      requestedById: r.requested_by,
       requestedByName: requesterNames.get(r.requested_by) ?? "—",
+      mine: r.requested_by === session.userId,
       createdAt: r.created_at,
       approvedAt: r.approved_at,
       orderedAt: r.ordered_at,
       deliveredAt: r.delivered_at,
       rejectedReason: r.rejected_reason,
+      cancelledAt: r.cancelled_at,
+      cancelledReason: r.cancelled_reason,
+      splitFromId: r.split_from_id,
     };
   });
   return { ...result, rows: dtos };

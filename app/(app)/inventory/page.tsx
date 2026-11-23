@@ -70,6 +70,7 @@ export default async function BusinessInventoryPage({
           items={items.rows}
           isAdmin={isAdmin}
           showProject
+          role={effectiveRole}
           empty={search ? `No items match “${search}”.` : undefined}
         />
         <TablePagination page={items.page} pageSize={items.pageSize} total={items.total} />

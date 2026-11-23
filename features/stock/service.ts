@@ -9,30 +9,114 @@ import type { Role } from "@/lib/rbac/roles";
  * drift — "Do not implement transitions in the UI" (build §5) is about the
  * DECISION, not about being unable to describe what the RPC would allow.
  */
-export type StockRequestStatus = "pending" | "approved" | "ordered" | "delivered" | "rejected";
+export type StockRequestStatus = "pending" | "approved" | "ordered" | "delivered" | "rejected" | "cancelled";
 
 export type StockTransition = { to: Exclude<StockRequestStatus, "pending">; label: string };
 
 const isAdminRole = (role: Role) => role === "admin";
 
-export function availableTransitions(status: StockRequestStatus, role: Role): StockTransition[] {
+/** What a caller knows about the row beyond its status. `isRequester` is
+ *  whether the signed-in user raised it (the only person who may cancel it
+ *  while it is still pending — 20261124400002). Optional, so every existing
+ *  caller keeps its answer. */
+export type TransitionContext = { isRequester?: boolean };
+
+/**
+ * The buttons a row offers. Mirrors rpc_transition_stock_request
+ * (20261124400002) exactly:
+ *   pending  → approved, rejected   admin
+ *   pending  → cancelled            the requester (any role that may raise one)
+ *   approved → ordered, cancelled   admin (cancel needs a reason)
+ *   ordered  → delivered            admin or site
+ *   ordered  → cancelled            admin (with a reason)
+ *   delivered, rejected, cancelled  terminal
+ */
+export function availableTransitions(
+  status: StockRequestStatus,
+  role: Role,
+  ctx: TransitionContext = {}
+): StockTransition[] {
+  const cancel: StockTransition = { to: "cancelled", label: "Cancel" };
   switch (status) {
-    case "pending":
-      return isAdminRole(role)
+    case "pending": {
+      const out: StockTransition[] = isAdminRole(role)
         ? [
             { to: "approved", label: "Approve" },
             { to: "rejected", label: "Reject" },
           ]
         : [];
+      if (ctx.isRequester && (isAdminRole(role) || role === "site")) out.push(cancel);
+      return out;
+    }
     case "approved":
-      return isAdminRole(role) ? [{ to: "ordered", label: "Mark Ordered" }] : [];
+      return isAdminRole(role) ? [{ to: "ordered", label: "Mark Ordered" }, cancel] : [];
     case "ordered":
-      return isAdminRole(role) || role === "site" ? [{ to: "delivered", label: "Mark Delivered" }] : [];
+      if (isAdminRole(role)) return [{ to: "delivered", label: "Mark Delivered" }, cancel];
+      return role === "site" ? [{ to: "delivered", label: "Mark Delivered" }] : [];
     case "delivered":
     case "rejected":
+    case "cancelled":
       // Terminal states are terminal (02-lld.md §5.4) — nothing to offer.
       return [];
   }
+}
+
+/** Cancelling a request an admin has already acted on needs a reason; the
+ *  requester withdrawing their own pending request does not. */
+export function cancelNeedsReason(status: StockRequestStatus): boolean {
+  return status === "approved" || status === "ordered";
+}
+
+/** rpc_edit_stock_request: pending only, by the requester or an admin. */
+export function canEditRequest(status: StockRequestStatus, role: Role, isRequester: boolean): boolean {
+  if (status !== "pending") return false;
+  return isAdminRole(role) || (role === "site" && isRequester);
+}
+
+/** rpc_set_stock_request_rate: admin, until the material is delivered. */
+export function canSetRate(status: StockRequestStatus, role: Role): boolean {
+  return isAdminRole(role) && (status === "pending" || status === "approved" || status === "ordered");
+}
+
+/**
+ * A partial delivery's split (rpc_transition_stock_request, APX-69): how much
+ * is delivered now, and how much stays Ordered as a new linked request.
+ * `delivered` omitted means the whole request. Returns null when the
+ * quantity is not one the RPC would accept (zero, negative, or more than was
+ * ordered) — the form shows its own message for that.
+ */
+export function splitDelivery(
+  ordered: number,
+  delivered?: number | null
+): { delivered: number; remainder: number } | null {
+  if (delivered == null) return { delivered: ordered, remainder: 0 };
+  if (!Number.isFinite(delivered) || delivered <= 0 || delivered > ordered) return null;
+  // Quantities are numeric(14,3): keep the remainder to three places so 10 − 6.1
+  // does not read 3.9000000000000004.
+  return { delivered, remainder: Math.round((ordered - delivered) * 1000) / 1000 };
+}
+
+/** An existing inventory item the New Request form can link to. */
+export type MaterialOption = { id: string; name: string; unit: string };
+
+/**
+ * APX-15: the inventory item a typed material refers to, or undefined for a
+ * new material. Matched on the same normal form the delivery RPC uses
+ * (`normalizeMaterialName` = public.fn_normalize_material_name) and — when a
+ * unit is chosen — the unit too, because 50 bags and 50 kg of cement are not
+ * the same stock line. With no unit chosen yet, a name that resolves to exactly
+ * one item still matches (the form then fills in that item's unit).
+ */
+export function resolveMaterialOption(
+  materialName: string,
+  unit: string | undefined,
+  options: readonly MaterialOption[]
+): MaterialOption | undefined {
+  const name = normalizeMaterialName(materialName);
+  if (!name) return undefined;
+  const byName = options.filter((o) => normalizeMaterialName(o.name) === name);
+  if (unit) return byName.find((o) => o.unit === unit);
+  return byName.length === 1 ? byName[0] : undefined;
 }
 
 // ── Deadlines ────────────────────────────────────────────────────────────────

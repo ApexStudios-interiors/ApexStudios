@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession, type Session } from "@/lib/auth/session";
 import { fetchPage, type Page, type PageRequest } from "@/lib/pagination";
 import { presignGet } from "@/lib/r2/presign";
-import { canAddPhotos, canDecide, canSupersede } from "./service";
+import { canAddPhotos, canDecide, canSupersede, canWithdraw } from "./service";
 import type { ApprovalType } from "./schema";
 
 /**
@@ -52,6 +52,8 @@ export type ApprovalDTO = {
   canAddPhotos: boolean;
   canDecide: boolean;
   canSupersede: boolean;
+  /** APX-42: this user raised it and it is still pending. */
+  canWithdraw: boolean;
   attachments: ApprovalAttachment[];
 };
 
@@ -307,6 +309,7 @@ async function toApprovalDTOs(
       canAddPhotos: canAddPhotos(r.status),
       canDecide: canDecide(r.status),
       canSupersede: canSupersede(r.status, supersededBy !== null),
+      canWithdraw: canWithdraw(r.status, r.requested_by === session.userId),
       attachments: attachmentDtosByApproval.get(r.id) ?? [],
     };
   });

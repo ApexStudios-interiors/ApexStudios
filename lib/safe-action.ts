@@ -25,6 +25,9 @@ const ERROR_MESSAGES = {
   NEGATIVE_STOCK: "Not enough stock on hand.",
   REASON_REQUIRED: "Please give a reason.",
   RATE_LIMITED: "Too many requests. Please wait a moment and try again.",
+  // 20261124400002 (APX-14, APX-44).
+  RATE_REQUIRED: "Enter a rate (₹ per unit) of 0 or more.",
+  ALREADY_SUBMITTED: "This was already submitted. Refresh to see it.",
 } as const;
 
 /** Postgres RAISE EXCEPTION messages the RPCs use are prefixed with their code

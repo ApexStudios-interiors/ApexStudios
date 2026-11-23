@@ -49,6 +49,8 @@ const STATUS_BY_CODE: Record<string, number> = {
   FORBIDDEN: 403,
   NOT_FOUND: 404,
   ILLEGAL_TRANSITION: 409,
+  // APX-44: a retried create carrying the same `id` — the first one landed.
+  ALREADY_SUBMITTED: 409,
   REASON_REQUIRED: 422,
 };
 
@@ -72,7 +74,14 @@ function mapError(e: unknown) {
   return errorResponse(500, "INTERNAL", message);
 }
 
-const STATUSES: readonly StockRequestStatus[] = ["pending", "approved", "ordered", "delivered", "rejected"];
+const STATUSES: readonly StockRequestStatus[] = [
+  "pending",
+  "approved",
+  "ordered",
+  "delivered",
+  "rejected",
+  "cancelled",
+];
 
 /** One of the web table's own page sizes (lib/pagination PAGE_SIZE_OPTIONS:
  *  10 / 25 / 50) — fixed, never the client's: enough rows per "Load more" on
@@ -87,7 +96,7 @@ const MAX_PAGE = 1000;
  * page of the project's requests, newest-deadline-first exactly as the web
  * table orders them, optionally filtered by `status` and `packageId`.
  *
- *   ?status=pending|approved|ordered|delivered|rejected   (omitted: all)
+ *   ?status=pending|approved|ordered|delivered|rejected|cancelled   (omitted: all)
  *   ?packageId=<uuid>                                     (omitted: all)
  *   ?page=1,2,…                                           (omitted: 1)
  *
@@ -173,7 +182,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ proj
       orderedAt: r.orderedAt,
       deliveredAt: r.deliveredAt,
       rejectedReason: r.rejectedReason,
-      actions: availableTransitions(r.status, session.role).map((t) => t.to),
+      // 20261124400002: a cancelled request's reason, and the request a
+      // part delivery's remainder was split from. Additive keys.
+      cancelledReason: r.cancelledReason,
+      splitFromId: r.splitFromId,
+      actions: availableTransitions(r.status, session.role, { isRequester: r.mine }).map((t) => t.to),
       atRisk: isDeadlineAtRisk(r.status, r.neededBy, today),
     });
 

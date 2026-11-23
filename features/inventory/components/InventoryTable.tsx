@@ -5,6 +5,8 @@ import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, sub } from "@/components/ui/table";
 import { Empty } from "@/components/ui/Empty";
 import { MinimumStockInfo } from "@/features/inventory/components/MinimumStockInfo";
+import { InventoryRowActions } from "@/features/inventory/components/InventoryRowActions";
+import type { Role } from "@/lib/rbac/roles";
 
 /**
  * build/07-stock-inventory-notifications.md §2.5 step 5: already props-driven
@@ -24,6 +26,7 @@ export function InventoryTable({
   isAdmin,
   showProject = false,
   empty = "No inventory recorded yet.",
+  role,
 }: {
   items: InventoryItemDTO[];
   isAdmin: boolean;
@@ -31,7 +34,12 @@ export function InventoryTable({
   /** The empty-state text. A search that matches nothing is not the same
    *  situation as an inventory with nothing in it, and should not say so. */
   empty?: string;
+  /** The EFFECTIVE role. When given (admin or site), each row gets its
+   *  actions: Record usage, and for an admin Adjust and Minimum stock
+   *  (APX-15, APX-69). Omitted, the table is read-only as before. */
+  role?: Role;
 }) {
+  const showActions = role === "admin" || role === "site";
   return (
     <TableWrap>
       <thead>
@@ -46,6 +54,7 @@ export function InventoryTable({
           {isAdmin && <th className={thNum}>Value</th>}
           <th className={th}>Location</th>
           <th className={th}>Status</th>
+          {showActions && <th className={th}></th>}
         </tr>
       </thead>
       <tbody>
@@ -78,6 +87,11 @@ export function InventoryTable({
               <td className={td}>
                 <StockLevelBadge status={i.status} />
               </td>
+              {showActions && role && (
+                <td className={td}>
+                  <InventoryRowActions item={i} role={role} />
+                </td>
+              )}
             </tr>
           ))
         ) : (
@@ -88,7 +102,7 @@ export function InventoryTable({
                 `isAdmin` was added, under-spanning the empty state for a
                 non-admin business-wide view and over-spanning it for a
                 non-admin project view. */}
-            <td className={td} colSpan={5 + (showProject ? 1 : 0) + (isAdmin ? 1 : 0)}>
+            <td className={td} colSpan={5 + (showProject ? 1 : 0) + (isAdmin ? 1 : 0) + (showActions ? 1 : 0)}>
               <Empty>{empty}</Empty>
             </td>
           </tr>

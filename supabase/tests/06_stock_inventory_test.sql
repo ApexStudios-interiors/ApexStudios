@@ -73,11 +73,14 @@ select ok(
     where c.relname = 'stock_requests' and p.polcmd = 'r'),
   'the stock_requests select policy is admin-only — client never reaches the base table'
 );
+-- 20261124400002 (APX-03): admin-only, like stock_requests. The base table
+-- carries unit_cost, so site reads v_inventory_site and the definer RPCs.
 select ok(
-  (select pg_get_expr(p.polqual, p.polrelid) like '%admin%site%' or pg_get_expr(p.polqual, p.polrelid) like '%site%admin%'
+  (select pg_get_expr(p.polqual, p.polrelid) like '%is_admin%'
+          and pg_get_expr(p.polqual, p.polrelid) not like '%site%'
      from pg_policy p join pg_class c on c.oid = p.polrelid
     where c.relname = 'inventory_items' and p.polcmd = 'r'),
-  'the inventory_items select policy is scoped to admin/site — client is excluded'
+  'the inventory_items select policy is admin-only — site and client never reach unit_cost'
 );
 
 -- ── D18: the ref_no counter exists ───────────────────────────────────────────

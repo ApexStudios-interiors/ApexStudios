@@ -6,7 +6,7 @@
 -- `inventorySearchFilter`; the behavioural equivalence against that exact
 -- PostgREST filter, from real client sessions, is in
 -- tests/integration/stock-and-inventory.test.ts. This file pins the shape
--- (one overload, invoker, search_path, grants) and the matching rules. Like
+-- (one overload, definer, search_path, grants) and the matching rules. Like
 -- 11_password_reset_test.sql it simulates the caller's JWT with set_config,
 -- because is_admin() and the inventory_items select policy read the claim.
 --
@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(16);
+select plan(18);
 
 -- ── shape ────────────────────────────────────────────────────────────────────
 select is(
@@ -38,10 +38,12 @@ select is(
   'both arguments default, so existing no-arg and project-only callers keep working'
 );
 
+-- 20261124400002 (APX-03): inventory_items is admin-only now, so the RPC is
+-- security definer and applies the org/role/membership scoping in its body.
 select ok(
-  (select not p.prosecdef from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  (select p.prosecdef from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname = 'rpc_inventory_stats'),
-  'rpc_inventory_stats is still security invoker'
+  'rpc_inventory_stats is security definer (inventory_items is admin-only since 20261124400002)'
 );
 
 select ok(
@@ -135,6 +137,24 @@ select is(
   (select total_value from public.rpc_inventory_stats(p_search => 'pgtapq')),
   null::numeric,
   'site still gets a null total_value with a search (D40)'
+);
+
+select is(
+  (select total_items::int from public.rpc_inventory_stats(p_search => 'pgtapq')),
+  5,
+  'site still counts its project''s items, though it can no longer read the base table'
+);
+
+-- ── client (d6) ──────────────────────────────────────────────────────────────
+select set_config('request.jwt.claims', json_build_object(
+  'sub', '00000000-0000-4000-8000-0000000000d6',
+  'app_metadata', json_build_object('app_role', 'client', 'org_id', '00000000-0000-4000-8000-0000000000a0')
+)::text, true);
+
+select is(
+  (select total_items::int from public.rpc_inventory_stats(p_search => 'pgtapq')),
+  0,
+  'a client counts nothing — the definer body scopes to admin and site'
 );
 
 select * from finish();
