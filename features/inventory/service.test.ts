@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { inventorySearchFilter, inventoryStatus, normalizeInventorySearch } from "./service";
+import {
+  inventorySearchFilter,
+  inventoryStatus,
+  normalizeInventorySearch,
+  parseInventoryStatusFilter,
+} from "./service";
 
 describe("normalizeInventorySearch", () => {
   it("treats a missing, empty or whitespace-only param as no search at all", () => {
@@ -66,5 +71,18 @@ describe("inventoryStatus", () => {
 
   it("is ok when the reorder level is zero and qty is positive", () => {
     expect(inventoryStatus(5, 0)).toBe("ok");
+  });
+});
+
+describe("parseInventoryStatusFilter (APX-51)", () => {
+  it("accepts the two drill-down statuses", () => {
+    expect(parseInventoryStatusFilter("low")).toBe("low");
+    expect(parseInventoryStatusFilter("critical")).toBe("critical");
+  });
+
+  it("treats anything else as no filter", () => {
+    expect(parseInventoryStatusFilter(undefined)).toBeUndefined();
+    expect(parseInventoryStatusFilter("ok")).toBeUndefined();
+    expect(parseInventoryStatusFilter("LOW")).toBeUndefined();
   });
 });
