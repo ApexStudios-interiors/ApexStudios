@@ -42,16 +42,17 @@ select set_config('request.jwt.claims', json_build_object(
   'app_metadata', json_build_object('app_role', 'admin', 'org_id', '00000000-0000-4000-8000-0000000000a0')
 )::text, true);
 
-select throws_like(
+-- D66: the owner role is retired and every admin is equal, so an admin may
+-- reset the former owner (d1, now an admin) and any other admin. Only the
+-- self-reset is refused.
+select lives_ok(
   $$ select public.rpc_record_password_reset('00000000-0000-4000-8000-0000000000d1') $$,
-  'FORBIDDEN%',
-  'admin → owner is refused'
+  'admin → the former owner (now an admin) is allowed (D66)'
 );
 
-select throws_like(
+select lives_ok(
   $$ select public.rpc_record_password_reset('00000000-0000-4000-8000-0000000000d3') $$,
-  'FORBIDDEN%',
-  'admin → another admin is refused'
+  'admin → another admin is allowed (D66)'
 );
 
 select throws_like(
@@ -148,8 +149,8 @@ reset role;
 select is(
   (select count(*)::int from public.audit_log where action = 'password_reset'
      and created_at >= now()),
-  2,
-  'exactly the two allowed resets were audited'
+  4,
+  'exactly the four allowed resets were audited (d1, d3, d5 by d2; d2 by d1)'
 );
 
 select * from finish();

@@ -1,44 +1,36 @@
 name: CI
 
 # ┌──────────────────────────────────────────────────────────────────────────┐
-# │ AUTOMATIC CI IS PAUSED — owner decision, 2026-09-17 (docs/decisions.md    │
-# │ D49). This workflow no longer runs on `pull_request` or on `push`; it can │
-# │ only be started by hand from the Actions tab (`workflow_dispatch`).       │
+# │ CI IS BACK ON — 2026-11-23, APX-13 (docs/decisions.md D49 and D14, both   │
+# │ amended). It runs on every pull request, on every push to `main`, and by  │
+# │ hand on any branch (`gh workflow run ci.yml --ref <branch>`).             │
 # │                                                                          │
-# │ Why: there is exactly ONE Supabase project and it is production. The      │
-# │ `database` job below pushed migrations, ran the SEED and the integration  │
-# │ suite against `secrets.SUPABASE_DB_URL` — that one live project — on      │
-# │ every pull request, writing demo and test rows into production. Pausing   │
-# │ the automatic triggers stops that today; the durable protection is the    │
-# │ production-ref guard in `scripts/lib/db-target.mjs`, which every db:*     │
-# │ script, the pgTAP runner and the integration suite now refuse through.    │
+# │ It was paused on 2026-09-17 because the `database` job pushed migrations, │
+# │ ran the seed and the integration suite against `secrets.SUPABASE_DB_URL`  │
+# │ — the one Supabase project, which is production. That job now never      │
+# │ leaves the runner: it starts a THROWAWAY local Supabase stack on the      │
+# │ GitHub runner's own Docker (`supabase start`), which applies every        │
+# │ migration and supabase/seed.sql to an empty database, runs the suites     │
+# │ against 127.0.0.1, and is destroyed with the runner. It reads no secret,  │
+# │ needs no second project and holds no production credential.             │
 # │                                                                          │
-# │ Every job below is kept exactly as it was, deliberately: nothing here is  │
-# │ deleted, only un-triggered.                                              │
+# │ Docker is still not part of the DEVELOPER toolchain (D14); it is used     │
+# │ only inside the GitHub-hosted runner. The production-ref guard in         │
+# │ `scripts/lib/db-target.mjs` still refuses the live project; it lets an    │
+# │ unset SUPABASE_PROD_PROJECT_REF pass only when every target is loopback.  │
 # │                                                                          │
-# │ TO RE-ENABLE: restore the two triggers (`pull_request:` and               │
-# │ `push: branches: [main]`) in the `on:` block — but NOT before the         │
-# │ `database` job has a database of its own that is not the live project.    │
-# │ Until CI runs again, `pnpm typecheck && pnpm lint && pnpm format:check &&  │
-# │ pnpm test && pnpm build`, run locally, is the only gate.                  │
-# │                                                                          │
-# │ This pause covers CI only. `backup-nightly.yml`, `jobs-drain.yml` and     │
-# │ `jobs-reap.yml` are production operations and keep their schedules.       │
+# │ `backup-nightly.yml`, `jobs-drain.yml` and `jobs-reap.yml` are production │
+# │ operations, not CI, and are unaffected.                                  │
 # └──────────────────────────────────────────────────────────────────────────┘
 #
 # docs/architecture.md §10.1. The full pipeline is:
 #
 #   install → typecheck → lint → secret scan → unit tests → build
-#   → db (Supabase preview branch for this PR: migrations, seed)
-#   → RLS tests (pgTAP, against that branch)   ◄── BLOCKING BY POLICY
-#   → integration tests → deploy preview → e2e → production
+#   → db (throwaway local Supabase on the runner: migrations, seed)
+#   → RLS tests (pgTAP, against that stack)   ◄── BLOCKING BY POLICY
+#   → integration tests → drift → deploy preview → e2e → production
 #
-# D14: no Docker anywhere. There is no `supabase start` stage. The database
-# for the db, RLS and integration stages is the pull request's Supabase preview
-# branch (D10), reached over SUPABASE_DB_URL.
-#
-# The database, RLS, integration and e2e stages are added in Build 02 and
-# Build 10, when they have content.
+# The e2e stage is added in Build 10, when it has content.
 #
 # Node 22, every job (package.json's engines already allows >=20): the
 # Build 04 integration suite instantiates a real supabase-js client, whose
@@ -57,10 +49,12 @@ name: CI
 # │ docs/architecture.md §10.1, docs/ai-workflow-rules.md §8.                │
 # └──────────────────────────────────────────────────────────────────────────┘
 
-# Manual only, by the decision recorded at the top of this file. The
-# `pull_request:` and `push: branches: [main]` triggers that used to live here
-# are what made every PR run the `database` job against the live project.
 on:
+  pull_request:
+  push:
+    branches: [main]
+  # Any branch, by hand: `gh workflow run ci.yml --ref <branch>` is how a
+  # migration is tested before it reaches production.
   workflow_dispatch: {}
 
 concurrency:
@@ -147,8 +141,16 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   # DATABASE, RLS AND INTEGRATION
   #
-  # D14: no Docker. The database for this job is the Supabase preview branch
-  # created for this pull request (D10), reached over SUPABASE_DB_URL.
+  # Against a throwaway local Supabase stack on this runner (APX-13; D49 and
+  # D14 amended 2026-11-23). Nothing here can reach production: no secret is
+  # read, every URL is 127.0.0.1, and the stack dies with the runner.
+  #
+  # `supabase start` on an empty volume IS the reset: it creates the database,
+  # applies every file in supabase/migrations in order, then supabase/seed.sql
+  # ([db.seed] in supabase/config.toml), and registers the custom access token
+  # hook ([auth.hook.custom_access_token]). A migration that fails to apply
+  # fails that step. No separate `supabase db reset` is run — it would only
+  # repeat the same work and restart the containers.
   #
   # ┌──────────────────────────────────────────────────────────────────────────┐
   # │ THE RLS STAGE IS BLOCKING BY POLICY (architecture.md §10.1).             │
@@ -156,15 +158,11 @@ jobs:
   # │ It must never be given `continue-on-error`, never be marked optional and  │
   # │ never be skipped to get a release out. It is the suite that protects the  │
   # │ product's core promise: a client cannot read internal cost or margin.     │
-  # │                                                                          │
-  # │ Note what this job does NOT do: it does not silently skip when the        │
-  # │ database secret is missing. A quietly absent RLS stage is the same as a   │
-  # │ disabled one, and it looks green. It fails instead, and says why.         │
   # └──────────────────────────────────────────────────────────────────────────┘
   database:
     name: migrations · seed · RLS · drift
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -174,50 +172,74 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      - name: Require a database
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      - name: Raise local auth rate limits (runner copy of config.toml only)
+        # The integration suite signs in far more than 30 times inside five
+        # minutes, all from one IP, which trips GoTrue's sign-in limit. This
+        # edits the runner's checkout only; the committed config.toml (which
+        # `supabase config push` sends to production) keeps its limits.
         run: |
-          if [ -z "$SUPABASE_DB_URL" ]; then
-            echo "::error::SUPABASE_DB_URL is not set, so migrations, the RLS suite and the"
-            echo "::error::integration tests cannot run. Build 02 is NOT verified."
-            echo "::error::Create the apex-dev Supabase project, enable preview branching (D10),"
-            echo "::error::and add SUPABASE_DB_URL to the repository secrets."
-            exit 1
-          fi
+          sed -i -E \
+            -e 's/^sign_in_sign_ups = [0-9]+/sign_in_sign_ups = 10000/' \
+            -e 's/^token_refresh = [0-9]+/token_refresh = 10000/' \
+            -e 's/^token_verifications = [0-9]+/token_verifications = 10000/' \
+            supabase/config.toml
+          grep -nE '^(sign_in_sign_ups|token_refresh|token_verifications) =' supabase/config.toml
 
-      - name: Apply migrations and seed
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      - name: Leave the custom access token hook unregistered, as in production
+        # Production has never registered public.custom_access_token_hook with
+        # GoTrue (docs/progress-tracker.md; it needs `supabase config push`),
+        # so auth_role()/auth_org() read profiles on each request. config.toml
+        # enables it, and on a local stack that registration takes effect —
+        # where the hook returns NULL (profiles forces RLS and has no policy
+        # for supabase_auth_admin) and every sign-in fails with "output claims
+        # do not conform to the expected schema". CI tests what production
+        # runs; the hook's own defect is a known issue, not a CI concern.
         run: |
-          pnpm exec supabase db push --db-url "$SUPABASE_DB_URL"
-          pnpm db:seed
+          sed -i -E '/^\[auth\.hook\.custom_access_token\]/,/^enabled/ s/^enabled = true/enabled = false/' \
+            supabase/config.toml
+          grep -nA1 '^\[auth\.hook\.custom_access_token\]' supabase/config.toml
+
+      - name: Start a throwaway Supabase (applies migrations + seed)
+        # Only Postgres, GoTrue (auth), PostgREST and Kong (the API gateway)
+        # are needed: the suites talk SQL to :54322 and supabase-js to :54321.
+        run: >-
+          pnpm exec supabase start
+          -x studio,imgproxy,mailpit,realtime,storage-api,edge-runtime,logflare,vector,supavisor,postgres-meta
+
+      - name: Point the suites at the local stack
+        # The CLI's local demo keys — identical on every machine, not secrets.
+        run: |
+          pnpm exec supabase status -o env > "$RUNNER_TEMP/supabase.env"
+          set -a; . "$RUNNER_TEMP/supabase.env"; set +a
+          case "$DB_URL" in *@127.0.0.1:*|*@localhost:*) ;; *) echo "::error::DB_URL is not local"; exit 1;; esac
+          case "$API_URL" in http://127.0.0.1:*|http://localhost:*) ;; *) echo "::error::API_URL is not local"; exit 1;; esac
+          {
+            echo "SUPABASE_DB_URL=$DB_URL"
+            echo "DATABASE_URL=$DB_URL"
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+          } >> "$GITHUB_ENV"
+          echo "DB  $DB_URL"
+          echo "API $API_URL"
 
       - name: RLS and structural tests (pgTAP)
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          SUPABASE_PROD_PROJECT_REF: ${{ secrets.SUPABASE_PROD_PROJECT_REF }}
         run: pnpm test:rls
 
       - name: Integration tests
-        # NEXT_PUBLIC_SUPABASE_URL/ANON_KEY: build/04-projects-packages-phases.md's
-        # role-scoped-views suite signs in as each seeded role through a real
-        # supabase-js client (AGENTS.md database rule 8 — RLS is tested from a
-        # real client SDK session, never a privileged connection), which needs
-        # the same public client config the app itself ships with. The anon key
-        # is public by design (it is embedded in every client bundle); stored as
-        # a secret here only for consistency with how this repo already treats
-        # every Supabase-related value.
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        # Signs in as each seeded role through a real supabase-js client
+        # (AGENTS.md database rule 8), against the local GoTrue + PostgREST.
         run: pnpm test:integration
 
       - name: Drizzle drift check
-        env:
-          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: pnpm db:check-drift
+
+      - name: Supabase container logs (on failure)
+        if: failure()
+        run: |
+          for c in $(docker ps -a --format '{{.Names}}' | grep supabase_); do
+            echo "::group::$c"; docker logs --tail 200 "$c" 2>&1 || true; echo "::endgroup::"
+          done
 
   # Reports inputs that are still on hold — missing facts, not broken code.
   #

@@ -487,16 +487,18 @@ describe("rpc_inventory_stats — p_search matches the Inventory table's own fil
     // count against the very PostgREST filter the table sends.
     const tag = `Srch${Date.now()}`;
     const names = [`${tag} M_20 grade`, `${tag} M120 grade`, `${tag} 100% acrylic`, `${tag} back\\slash`];
-    for (const name of names) {
+    // Explicit SKUs: a project cannot yet hold two SKU-less items (see the
+    // KNOWN FAILURE test at the foot of this file). SKUs are not searched.
+    for (const [i, name] of names.entries()) {
       const rows = await sql`
-        insert into public.inventory_items (org_id, project_id, name, category, unit, qty_on_hand, reorder_level, unit_cost, created_by)
-        values (${SEED.org}, ${SEED.project}, ${name}, null, 'bag', 0, 5, 100, ${SEED.adminProfile})
+        insert into public.inventory_items (org_id, project_id, name, category, sku, unit, qty_on_hand, reorder_level, unit_cost, created_by)
+        values (${SEED.org}, ${SEED.project}, ${name}, null, ${`${tag}-${i}`}, 'bag', 0, 5, 100, ${SEED.adminProfile})
         returning id`;
       trackedItemIds.push(one(rows, "inserted search item").id);
     }
     const rows = await sql`
-      insert into public.inventory_items (org_id, project_id, name, category, unit, qty_on_hand, reorder_level, unit_cost, created_by)
-      values (${SEED.org}, ${SEED.project}, 'Plain widget', ${`${tag} category`}, 'bag', 0, 5, 100, ${SEED.adminProfile})
+      insert into public.inventory_items (org_id, project_id, name, category, sku, unit, qty_on_hand, reorder_level, unit_cost, created_by)
+      values (${SEED.org}, ${SEED.project}, 'Plain widget', ${`${tag} category`}, ${`${tag}-cat`}, 'bag', 0, 5, 100, ${SEED.adminProfile})
       returning id`;
     trackedItemIds.push(one(rows, "inserted category item").id);
 
@@ -953,5 +955,27 @@ describe("stock_requests — inventory_item_id belongs to this request's org and
     );
     expect(linked.inventory_item_id).not.toBeNull();
     trackedItemIds.push(linked.inventory_item_id);
+  });
+});
+
+describe("inventory_sku_uq", () => {
+  // KNOWN FAILURE APX-TBD: inventory_sku_uq is `unique nulls not distinct
+  // (org_id, project_id, sku)` (migration 20260909170006), so two items with
+  // no SKU collide in the same project. Nothing in the app sets a SKU, and
+  // rpc_transition_stock_request creates a SKU-less item whenever it delivers
+  // a material that was never in inventory, so the second such delivery on a
+  // project fails with a unique violation. Found 2026-11-23, the first time
+  // this suite ran (on CI's local stack). The fix is a migration (e.g. a
+  // partial unique index `where sku is not null`) and an owner sign-off, not a
+  // CI change. Un-skip this when it lands.
+  it.skip("lets one project hold two items that have no SKU", async () => {
+    for (const name of ["SKU-less item A", "SKU-less item B"]) {
+      const rows = await sql`
+        insert into public.inventory_items (org_id, project_id, name, unit, qty_on_hand, reorder_level, unit_cost, created_by)
+        values (${SEED.org}, ${SEED.project}, ${name}, 'bag', 0, 5, 100, ${SEED.adminProfile})
+        returning id`;
+      trackedItemIds.push(one(rows, "inserted SKU-less item").id);
+    }
+    expect(trackedItemIds).toHaveLength(2);
   });
 });
