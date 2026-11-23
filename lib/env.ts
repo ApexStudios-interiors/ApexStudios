@@ -68,6 +68,15 @@ const serverSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((v) => v === "true"),
+
+  // APX-06: the weekly attachment.orphan_sweep only REPORTS what it would
+  // delete until the owner, having read a few weeks of its dry-run logs,
+  // opts in with ORPHAN_SWEEP_DELETE=true. Unset or "false" is a dry run.
+  // Same literal-enum parse as BILLING_ENABLED, for the same reason.
+  ORPHAN_SWEEP_DELETE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
 });
 
 export type ServerEnv = z.infer<typeof serverSchema>;
