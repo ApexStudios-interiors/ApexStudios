@@ -51,14 +51,22 @@ export default async function BillingPage({
   }
 
   const supabase = await createClient();
-  const { data: project, error } = await supabase
-    .from("projects")
-    .select(
-      "gst_rate_pct, retention_pct, tds_pct, mobilisation_advance, mobilisation_recovered, mobilisation_recovery_pct"
-    )
-    .eq("id", projectId)
-    .single();
+  // mobilisation_advance / _recovered are not selectable on projects
+  // (APX-09: site must never read them) — they come from v_project_finance.
+  const [{ data: project, error }, { data: finance, error: financeErr }] = await Promise.all([
+    supabase
+      .from("projects")
+      .select("gst_rate_pct, retention_pct, tds_pct, mobilisation_recovery_pct")
+      .eq("id", projectId)
+      .single(),
+    supabase
+      .from("v_project_finance")
+      .select("mobilisation_advance, mobilisation_recovered")
+      .eq("id", projectId)
+      .maybeSingle(),
+  ]);
   if (error) throw new Error(error.message);
+  if (financeErr) throw new Error(financeErr.message);
 
   const [bills, stats] = await Promise.all([
     getBillsPageForAdmin(projectId, pageRequest),
@@ -75,8 +83,8 @@ export default async function BillingPage({
         gstRatePct: Number(project.gst_rate_pct),
         retentionPct: Number(project.retention_pct),
         tdsPct: Number(project.tds_pct),
-        mobilisationAdvance: Number(project.mobilisation_advance),
-        mobilisationRecovered: Number(project.mobilisation_recovered),
+        mobilisationAdvance: Number(finance?.mobilisation_advance ?? 0),
+        mobilisationRecovered: Number(finance?.mobilisation_recovered ?? 0),
         mobilisationRecoveryPct: Number(project.mobilisation_recovery_pct),
       }}
     />

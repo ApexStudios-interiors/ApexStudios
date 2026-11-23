@@ -52,7 +52,9 @@ async function fetchProjectRows(effectiveRole: "admin" | "site" | "client") {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("projects")
-    .select("id, code, name, location, status, progress_pct, start_date, contract_value, client_id")
+    // No contract_value: authenticated has no SELECT on it (APX-09) — site
+    // must never see it. The client portfolio reads it from v_project_finance.
+    .select("id, code, name, location, status, progress_pct, start_date, client_id")
     .is("deleted_at", null)
     // start_date, not created_at: every row in supabase/seed.sql's multi-row
     // INSERT gets the identical now() (Postgres evaluates it once per
@@ -190,6 +192,15 @@ export async function getPortfolioForClient(): Promise<PortfolioClient> {
 
   const awaitingApproval = (pendingApprovals ?? 0) + (pendingBills ?? 0);
 
+  // contract_value lives behind v_project_finance (admin or client only,
+  // APX-09), not on projects, so a site session has no path to it at all.
+  const { data: finance, error: financeErr } = await supabase
+    .from("v_project_finance")
+    .select("id, contract_value")
+    .in("id", projectIds);
+  if (financeErr) throw new Error(financeErr.message);
+  const contractValue = new Map(finance.map((f) => [f.id, Number(f.contract_value ?? 0)]));
+
   const projectCards: ProjectCardDTO[] = projects.map((p) => ({
     id: p.id,
     code: p.code,
@@ -200,14 +211,14 @@ export async function getPortfolioForClient(): Promise<PortfolioClient> {
     progressPct: p.progress_pct,
     start: p.start_date,
     packageCount: packageCountByProject.get(p.id) ?? 0,
-    headlineAmount: String(p.contract_value),
+    headlineAmount: String(contractValue.get(p.id) ?? 0),
     budgetUsedPct: null,
   }));
 
   return {
     role: "client",
     stats: {
-      totalContractValue: String(projects.reduce((a, p) => a + Number(p.contract_value), 0)),
+      totalContractValue: String(projects.reduce((a, p) => a + (contractValue.get(p.id) ?? 0), 0)),
       activeProjects: projects.filter((p) => p.status === "active").length,
       awaitingApproval,
     },

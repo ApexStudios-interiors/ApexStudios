@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { connect } from "./db";
+import { connect, withLedgerMaintenance } from "./db";
 import { SEED } from "./db";
 import { one } from "./expect-row";
 import { inventorySearchFilter } from "@/features/inventory/service";
@@ -56,16 +56,22 @@ async function client(email: string) {
 const trackedRequestIds: string[] = [];
 const trackedItemIds: string[] = [];
 afterEach(async () => {
+  // stock_movements and stock_request_events are append-only
+  // (20261124100008) — see withLedgerMaintenance.
   if (trackedRequestIds.length) {
-    await sql`delete from public.stock_request_events where request_id = any(${trackedRequestIds})`;
-    await sql`delete from public.stock_movements where ref_type = 'stock_request' and ref_id = any(${trackedRequestIds})`;
-    await sql`update public.stock_requests set inventory_item_id = null where id = any(${trackedRequestIds})`;
-    await sql`delete from public.stock_requests where id = any(${trackedRequestIds})`;
+    await withLedgerMaintenance(sql, async (tx) => {
+      await tx`delete from public.stock_request_events where request_id = any(${trackedRequestIds})`;
+      await tx`delete from public.stock_movements where ref_type = 'stock_request' and ref_id = any(${trackedRequestIds})`;
+      await tx`update public.stock_requests set inventory_item_id = null where id = any(${trackedRequestIds})`;
+      await tx`delete from public.stock_requests where id = any(${trackedRequestIds})`;
+    });
     trackedRequestIds.length = 0;
   }
   if (trackedItemIds.length) {
-    await sql`delete from public.stock_movements where inventory_item_id = any(${trackedItemIds})`;
-    await sql`delete from public.inventory_items where id = any(${trackedItemIds})`;
+    await withLedgerMaintenance(sql, async (tx) => {
+      await tx`delete from public.stock_movements where inventory_item_id = any(${trackedItemIds})`;
+      await tx`delete from public.inventory_items where id = any(${trackedItemIds})`;
+    });
     trackedItemIds.length = 0;
   }
 });
@@ -289,8 +295,10 @@ describe("rpc_adjust_inventory — organisation scope (20261008090001)", () => {
 
   afterAll(async () => {
     if (created.length) {
-      await sql`delete from public.stock_movements where inventory_item_id = any(${created})`;
-      await sql`delete from public.inventory_items where id = any(${created})`;
+      await withLedgerMaintenance(sql, async (tx) => {
+        await tx`delete from public.stock_movements where inventory_item_id = any(${created})`;
+        await tx`delete from public.inventory_items where id = any(${created})`;
+      });
     }
     await sql`delete from public.projects where id = ${otherProject}`;
     await sql`delete from public.clients where id = ${otherClient}`;
@@ -566,8 +574,10 @@ describe("rpc_inventory_drift — T-10", () => {
       // there is nothing further to restore — this just confirms the drift
       // clears once the item (and its movements) is gone.
       // No cascade on this FK (migration 0006) — movements first, item second.
-      await sql`delete from public.stock_movements where inventory_item_id = ${itemId}`;
-      await sql`delete from public.inventory_items where id = ${itemId}`;
+      await withLedgerMaintenance(sql, async (tx) => {
+        await tx`delete from public.stock_movements where inventory_item_id = ${itemId}`;
+        await tx`delete from public.inventory_items where id = ${itemId}`;
+      });
       trackedItemIds.splice(trackedItemIds.indexOf(itemId), 1);
       const clean = await sql`select item_id from public.rpc_inventory_drift()`;
       expect(clean.some((d) => d.item_id === itemId)).toBe(false);
