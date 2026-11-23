@@ -1644,6 +1644,14 @@ export type Database = {
         };
         Returns: number;
       };
+      rpc_set_project_status: {
+        Args: {
+          p_project_id: string;
+          p_status: Database["public"]["Enums"]["project_status"];
+          p_reason?: string;
+        };
+        Returns: Database["public"]["Enums"]["project_status"];
+      };
       rpc_set_task_progress: {
         Args: {
           p_task_id: string;
