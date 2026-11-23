@@ -62,12 +62,21 @@ select ok(
 
 -- ── fixtures, as the migration owner, before switching role ──────────────────
 -- A prefix no seeded item carries, so every count below is exact.
-insert into public.inventory_items (org_id, project_id, name, category, unit, qty_on_hand, reorder_level, unit_cost) values
-  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Pgtapq M_20 grade',   null,          'bag', 10, 5, 100),
-  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Pgtapq M120 grade',   null,          'bag',  2, 5, 100),
-  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Pgtapq 100% acrylic', null,          'can',  0, 5, 100),
-  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Pgtapq back\slash',   null,          'len', 10, 5, 100),
-  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Plain widget',        'PGTAPQ cat',  'nos', 10, 5, 100);
+--
+-- Each fixture carries its own SKU. KNOWN FAILURE APX-TBD (found 2026-11-23
+-- when this file first ran, on CI's local stack): inventory_sku_uq is
+-- `unique nulls not distinct (org_id, project_id, sku)`, so a project can hold
+-- only ONE item without a SKU, and five SKU-less fixtures abort on the second
+-- insert. This file is about search, not SKUs, so it sidesteps that here;
+-- the bug itself is pinned by a skipped test in
+-- tests/integration/stock-and-inventory.test.ts. SKUs are not searched
+-- (name and category only), so they cannot change a count below.
+insert into public.inventory_items (org_id, project_id, name, category, sku, unit, qty_on_hand, reorder_level, unit_cost) values
+  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Pgtapq M_20 grade',   null,          'T12-1', 'bag', 10, 5, 100),
+  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Pgtapq M120 grade',   null,          'T12-2', 'bag',  2, 5, 100),
+  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Pgtapq 100% acrylic', null,          'T12-3', 'can',  0, 5, 100),
+  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Pgtapq back\slash',   null,          'T12-4', 'len', 10, 5, 100),
+  ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'Plain widget',        'PGTAPQ cat',  'T12-5', 'nos', 10, 5, 100);
 
 set local role authenticated;
 

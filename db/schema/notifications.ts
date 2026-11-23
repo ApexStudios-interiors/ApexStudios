@@ -3,10 +3,11 @@ import { profiles } from "./identity";
 import { tsz } from "./columns";
 
 /**
- * Mirrors migration 20260928090001 (D60): per-user read state for the bell.
- * Not a notifications table — `v_notifications` is still computed live; this
- * records only that a user has seen one. `kind` and `entity_id` are
- * deliberately neither an enum nor a foreign key (see the migration).
+ * Mirrors migration 20260928090001 (D60). Per-user read state for the bell:
+ * `v_notifications` is still computed live, and this records only that a user
+ * has seen one. `kind` and `entity_id` are deliberately not an enum or a
+ * foreign key — the view is a union over unrelated tables, so `entity_id` has
+ * no single referent (see that migration's own comment).
  */
 export const notificationReads = pgTable(
   "notification_reads",

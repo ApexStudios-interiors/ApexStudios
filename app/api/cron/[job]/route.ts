@@ -79,6 +79,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       summary = await selfEnqueueAndDrain("inventory.reconcile", {}, todayKey());
       break;
     case "weekly.maintenance": {
+      // No payload flag: the sweep is a dry run unless ORPHAN_SWEEP_DELETE is
+      // "true" (APX-06, lib/jobs/handlers/attachment.orphan-sweep.ts). It
+      // used to pass { dryRun: true } here as the interim guard; that would
+      // now override the owner's opt-in, so the env flag is the one switch.
       const sweep = await selfEnqueueAndDrain("attachment.orphan_sweep", {}, isoWeekKey());
       const archive = await selfEnqueueAndDrain("project.archive", {}, isoWeekKey());
       summary = {

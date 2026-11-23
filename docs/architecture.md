@@ -231,6 +231,12 @@ Production database changes only ever arrive through a merged, CI-verified migra
 > is the target state; it becomes true again when the `database` job has a non-production database
 > and the `pull_request`/`push` triggers are restored.
 >
+> **Amended 2026-11-23 (APX-13, D49/D14 amendments):** CI runs again on every pull request and push
+> to `main`. Its `database` job applies every migration and the seed to a throwaway local Supabase
+> stack inside the GitHub runner (`supabase start`) and runs pgTAP, the integration suite and the
+> drift check against it, so a migration is now executed against a real (empty, seeded) database
+> before it is merged. It is still first executed against **real data** when `pnpm db:push` runs.
+>
 > **The risk this creates:** the first execution of a migration is against real data. A migration
 > that fails halfway, locks a large table, or drops a column the deployed build still reads has no
 > rehearsal and no automatic rollback — the only recovery point is the nightly R2 backup, which
@@ -629,6 +635,12 @@ suite that protects the product's core promise.
 > Until then `pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build`, run
 > locally, is the gate. The scheduled production workflows (`backup-nightly.yml`, `jobs-drain.yml`,
 > `jobs-reap.yml`) are unaffected and still run.
+>
+> **Re-enabled, 2026-11-23 (APX-13).** The `pull_request` and `push: branches: [main]` triggers
+> are back, and `workflow_dispatch` remains for any branch. The `db → RLS → integration → drift`
+> stages now run against a throwaway local Supabase stack started on the GitHub runner's Docker
+> (`supabase start`, which applies the migrations and `supabase/seed.sql`), not against a preview
+> branch and never against production: the job reads no Supabase secret.
 
 ### 10.2 Release and rollback
 

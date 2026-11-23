@@ -163,7 +163,9 @@ describe("rpc_retry_job", () => {
     );
     expect(after.status).toBe("pending");
     expect(after.attempts).toBe(0);
-    expect(after.last_error).toBeNull();
+    // Kept on purpose since migration 20260929090001: a pending job that still
+    // carries an error is how the ops page shows "failed before, retrying now".
+    expect(after.last_error).toBe("boom");
     expect(after.finished_at).toBeNull();
   });
 

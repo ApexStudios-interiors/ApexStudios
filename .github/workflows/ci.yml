@@ -185,6 +185,20 @@ jobs:
             supabase/config.toml
           grep -nE '^(sign_in_sign_ups|token_refresh|token_verifications) =' supabase/config.toml
 
+      - name: Leave the custom access token hook unregistered, as in production
+        # Production has never registered public.custom_access_token_hook with
+        # GoTrue (docs/progress-tracker.md; it needs `supabase config push`),
+        # so auth_role()/auth_org() read profiles on each request. config.toml
+        # enables it, and on a local stack that registration takes effect —
+        # where the hook returns NULL (profiles forces RLS and has no policy
+        # for supabase_auth_admin) and every sign-in fails with "output claims
+        # do not conform to the expected schema". CI tests what production
+        # runs; the hook's own defect is a known issue, not a CI concern.
+        run: |
+          sed -i -E '/^\[auth\.hook\.custom_access_token\]/,/^enabled/ s/^enabled = true/enabled = false/' \
+            supabase/config.toml
+          grep -nA1 '^\[auth\.hook\.custom_access_token\]' supabase/config.toml
+
       - name: Start a throwaway Supabase (applies migrations + seed)
         # Only Postgres, GoTrue (auth), PostgREST and Kong (the API gateway)
         # are needed: the suites talk SQL to :54322 and supabase-js to :54321.
