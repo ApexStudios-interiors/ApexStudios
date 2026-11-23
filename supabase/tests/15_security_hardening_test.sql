@@ -352,7 +352,7 @@ select throws_like(
   'APX-34: an admin cannot rewind next_bill_seq directly'
 );
 select throws_like(
-  $$ update public.projects set mobilisation_recovered = 0 where id = '00000000-0000-4000-8000-0000000000c1' $$,
+  $$ update public.projects set mobilisation_recovered = 12345 where id = '00000000-0000-4000-8000-0000000000c1' $$,
   'FORBIDDEN%',
   'APX-34: an admin cannot rewrite mobilisation_recovered directly'
 );
