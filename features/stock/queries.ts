@@ -314,3 +314,59 @@ async function loadStockRequests(
   });
   return { ...result, rows: dtos };
 }
+
+/** One delivery as the site dashboard's Today card lists it. No money. */
+export type DeliveryDueDTO = {
+  id: string;
+  refNo: string;
+  materialName: string;
+  qty: number;
+  unit: string;
+  neededBy: string | null;
+};
+
+/** How far ahead "due" looks: today plus the next few days. */
+const DELIVERY_HORIZON_DAYS = 3;
+
+/**
+ * APX-48: ordered requests expected on site soon — `needed_by` on or before
+ * today + 3 days (overdue ones included), plus ordered requests with no date.
+ * Reads `v_stock_request_site` for EVERY role: it is the money-free view, and
+ * this card shows no money, so there is no reason to touch the admin table.
+ * A client never calls this (no stock visibility); it returns [] if one does.
+ */
+export async function getDeliveriesDue(
+  session: Session,
+  projectId: string,
+  today: string
+): Promise<DeliveryDueDTO[]> {
+  const effectiveRole = session.impersonating?.role ?? session.role;
+  if (effectiveRole === "client") return [];
+  const [y, m, d] = today.split("-").map(Number);
+  const h = new Date(Date.UTC(y ?? 0, (m ?? 1) - 1, (d ?? 1) + DELIVERY_HORIZON_DAYS));
+  const horizon = `${h.getUTCFullYear()}-${String(h.getUTCMonth() + 1).padStart(2, "0")}-${String(h.getUTCDate()).padStart(2, "0")}`;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("v_stock_request_site")
+    .select("id, ref_no, material_name, qty, unit, needed_by")
+    .eq("project_id", projectId)
+    .eq("status", "ordered")
+    .or(`needed_by.lte.${horizon},needed_by.is.null`)
+    .order("needed_by", { ascending: true, nullsFirst: false })
+    .limit(8);
+  if (error) throw new Error(error.message);
+  return data
+    .filter(
+      (r): r is typeof r & { id: string; ref_no: string; material_name: string; unit: string } =>
+        r.id != null && r.ref_no != null && r.material_name != null && r.unit != null
+    )
+    .map((r) => ({
+      id: r.id,
+      refNo: r.ref_no,
+      materialName: r.material_name,
+      qty: Number(r.qty ?? 0),
+      unit: r.unit,
+      neededBy: r.needed_by,
+    }));
+}

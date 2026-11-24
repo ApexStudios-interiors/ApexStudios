@@ -87,6 +87,7 @@ Top to bottom:
 ## 5. Header
 
 - **Breadcrumb** (left) — `{Project} / {Section}` or `{Project} / Packages / {Package}` for module pages; just "All Projects", "Users", or "Inventory" on those top-level pages.
+- **Search** (right) — finds projects, packages, stock requests, approvals, bills, inventory items and (Admin) users, each through the role's own scoped query. Stock requests match on material **or ref number** (`SR-BHEL-NCH-014`), approvals on item **or ref number** (`AP-BHEL-NCH-007`); an approval result shows its ref number.
 - **Notifications bell** (right) — badge = count of open items; click for a dropdown, role-scoped (see §9).
 - **Theme toggle** (far right) — sun/moon icon button, flips light ↔ dark, remembered via `localStorage`, defaults to your OS setting on first visit.
 
@@ -100,7 +101,14 @@ Top to bottom:
   - **Admin:** Total Allocated, Total Internal, Committed, Active Projects
   - **Client:** Total Contract Value, Active Projects, Awaiting Your Approval
   - **Site:** Active Projects, Packages in Progress, Pending Requests
-- A card per project: name, client, status badge, a Progress bar, a Budget-used bar (Admin only), footer line (`{n} packages · {value} allocated/contract · Started {date}`). Click anywhere on the card to open that project.
+- **Status tabs:** Current *(default — every project except Archived)* · Active · Planning · On Hold · Completed · Archived · All, and a **search** box matching project name, client, code or location. Both are URL state (`?status=`, `?q=`), so a filtered view survives a reload and can be shared. The subtitle reads `{shown} of {n} projects` while a filter narrows the list; a filter that matches nothing says so. On a phone the tabs scroll sideways inside their own strip.
+- A card per project: name, client, status badge, **attention badges**, a Progress bar, a Budget-used bar (Admin only), footer line (`{n} package(s) · {value} allocated/contract · Started {date}`, correctly singular for one) and, for a live project, `Last site update {today | yesterday | N days ago}` (marked *overdue* after 3 days; "No recent site update" when there has been none in 60 days). Click anywhere on the card to open that project.
+- **Attention badges** (only those that apply; a calm project shows none; Completed/Archived projects show none):
+  - **{n} late task(s)** — red; a task past its end date and under 100%. Every role.
+  - **{n} approval(s) pending · oldest {d}d** — amber once the oldest has waited 7 days, outlined before that. Every role.
+  - **₹{x} outstanding** — certified bills not yet fully paid. **Admin only**, and only while billing is enabled.
+  - **{n} item(s) low on stock** — amber; items at Low or Critical. Admin and Site (a client has no stock visibility).
+- **Cards are sorted by attention**: late tasks first, then waiting approvals (an aged one counts extra), outstanding money, low stock, and a live site with no recent update; ties keep the oldest-start-first order; Completed and Archived projects always sort last.
 
 ### 6.2 Project Dashboard (`/projects/:id`)
 - Heading = project name; subtitle = client · location · start date.
@@ -109,6 +117,10 @@ Top to bottom:
   - **Admin (5 stats):** Allocated Budget, Internal Budget, Committed, Remaining, Progress
   - **Client (4 stats):** Contract Value, Work Progress, Bills Raised, Awaiting Your Approval
   - **Site (3 stats):** Packages in Progress, Pending Requests, To Receive
+- **Attention block**, between the stat row and the Packages table, role-dependent:
+  - **Admin:** three linked tiles — **Billable Now** (₹ and items ready to bill), **Outstanding** (₹ certified but unpaid, with the count of such bills and how long ago the oldest was certified) and **Awaiting Certification** (₹ and bills submitted to the client) — each opens Billing. Shown only while billing is enabled. Then a **Late tasks** card (only when any are late): each task's name, package, *Late · {d}d* badge and % done, and an **Open schedule** link.
+  - **Site:** a **Today** card — *Tasks*: every late or under-way task (late ones first, with a *Late · {d}d* badge; others show their due date) and *Deliveries due*: ordered requests needed within the next 3 days, overdue ones flagged *Overdue*, plus any with no date. Links to Schedule and to Stock Requests (Ordered). No money is shown.
+  - **Client:** nothing extra — the stat row's *Awaiting Your Approval* already leads.
 - **Packages** table (always shown — see §6.4 for columns).
 - **Pending Approvals** card — only if any exist *and* role isn't Site; "View all" jumps to Approvals.
 - **Pending Requests** card — only if any exist *and* role isn't Client; "View all" jumps to Stock Requests.
@@ -153,13 +165,14 @@ Every row is clickable → opens that package's detail page.
 - "**+ Post Update**" button (not Client) → *Post Daily Update* dialog.
 - Package filter dropdown.
 - A timeline: date, package badge, author, free-text update, up to 4 photo placeholders per entry.
+- **Load more** under the timeline appends the next page in place — the updates already read stay where they are. It reads *Loading…* while fetching and *That’s every update.* once the end is reached; a failed load says so above the button and keeps the list. Changing the package filter starts again from the newest.
 
 ### 6.8 Inventory — project (`/projects/:id/inventory`) and business-wide (`/inventory`)
 See §8 — documented together since they're the same table, just scoped differently.
 
 ### 6.9 Stock Requests (`/projects/:id/stock`)
 - "**+ New Request**" button → *New Stock Request* dialog.
-- Status filter tabs: All / Pending / Approved / Ordered / Delivered / Rejected. Package filter dropdown.
+- Status filter tabs: All / Pending / Approved / Ordered / Delivered / Rejected. Package filter dropdown. **Admin opens on Pending** (the requests waiting on them, as Approvals opens on Pending); Site opens on All. Choosing All is remembered in the URL as an explicit `?status=`.
 - Columns: Request (id, date, requester) · Material (item + package) · Qty · Value *(Admin only)* · Needed By · Status · Actions.
 - Actions depend on current status: **Pending** → Approve/Reject (Admin only) · **Approved** → Mark Ordered (Admin) · **Ordered** → Mark Delivered (Admin or Site).
 
@@ -201,6 +214,8 @@ Two views over the same `InventoryItem` records (item, category, quantity on han
 - **Business-wide** (`/inventory`, sidebar-tagged **ALL**) — every project's stock in one table with a Project column and a project filter, for a studio-wide view.
 
 Both show the same stat row (Total Items, Total Value, Low Stock count, Critical count) and the same table (Item + category, On Hand, Reorder Level, Value, Location, Status).
+
+The **Low Stock** and **Critical** numbers are links: each opens the same page filtered to that status (`?status=low` / `?status=critical`). Status tabs **All / Low / Critical** above the table do the same and keep the project filter and search; the stat row always describes the unfiltered list.
 
 **Status is derived, not stored:**
 

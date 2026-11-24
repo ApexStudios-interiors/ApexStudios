@@ -9,6 +9,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/Icon";
 import { dmy } from "@/lib/logic";
+import { plural } from "@/lib/plural";
 
 /**
  * The one client boundary on this page: expand/collapse is UI state, the
@@ -101,7 +102,7 @@ export function ScheduleCards({
                 {String(pkg.seqNo).padStart(2, "0")} {pkg.packageName}
               </h3>
               <span className="text-muted-foreground text-sm">
-                {pkg.taskCount ? `${pkg.taskCount} tasks · ${pkg.progressPct}%` : "No plan yet"}
+                {pkg.taskCount ? `${plural(pkg.taskCount, "task")} · ${pkg.progressPct}%` : "No plan yet"}
               </span>
               <div className="ml-auto flex gap-2" onClick={(e) => e.stopPropagation()}>
                 {canEdit && (
