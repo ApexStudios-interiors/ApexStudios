@@ -14,7 +14,7 @@ export function RetryJobButton({ id }: { id: string }) {
       toast("Retry initiated. The job is queued and will be picked up by the runner.");
       router.refresh();
     },
-    onError: ({ error }) => toast(error.serverError ?? "Could not retry this job"),
+    onError: ({ error }) => toast(error.serverError ?? "Could not retry this job", "error"),
   });
 
   return (

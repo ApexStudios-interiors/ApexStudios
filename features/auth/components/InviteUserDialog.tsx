@@ -128,17 +128,18 @@ export function InviteUserDialog({ projects }: { projects: { id: string; name: s
       }
       okLabel={pending ? "Adding…" : "Add User"}
       okPending={pending}
+      dirty={username.trim() !== "" || fullName.trim() !== ""}
       onClose={closeDialog}
       onOk={submit}
     >
       <form
-        className="grid grid-cols-2 gap-3.5"
+        className="grid grid-cols-1 sm:grid-cols-2 gap-3.5"
         onSubmit={(e) => {
           e.preventDefault();
           submit();
         }}
       >
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <Field
             label="Username"
             hint={trimmed ? `Signs in as ${emailForUsername(trimmed)}` : undefined}
@@ -161,7 +162,7 @@ export function InviteUserDialog({ projects }: { projects: { id: string; name: s
           </Field>
           {fieldError && <p className="text-xs text-destructive mt-1">{fieldError}</p>}
         </div>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <Field label="Name" hint="Optional — defaults to the username" htmlFor="au-name">
             <input
               id="au-name"
@@ -171,7 +172,7 @@ export function InviteUserDialog({ projects }: { projects: { id: string; name: s
             />
           </Field>
         </div>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <Field label="Role" htmlFor="au-role">
             <Select
               items={ROLE_ITEMS}
@@ -196,7 +197,7 @@ export function InviteUserDialog({ projects }: { projects: { id: string; name: s
           </Field>
         </div>
         {isClient && (
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <Field
               label="Project"
               hint={projects.length === 0 ? "Create a project first — a client needs one to see" : undefined}
@@ -232,7 +233,7 @@ export function InviteUserDialog({ projects }: { projects: { id: string; name: s
             {projectError && <p className="text-xs text-destructive mt-1">{projectError}</p>}
           </div>
         )}
-        {serverError && <p className="col-span-2 text-[12.5px] text-destructive">{serverError}</p>}
+        {serverError && <p className="sm:col-span-2 text-[12.5px] text-destructive">{serverError}</p>}
       </form>
     </DialogShell>
   );

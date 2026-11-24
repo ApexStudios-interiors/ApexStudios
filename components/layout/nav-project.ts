@@ -20,6 +20,9 @@ export type NavProject = {
    *  `getUser()` and all, before the page starts. */
   code: string;
   name: string;
+  /** The client's display name, for the project switcher's filter (APX-51).
+   *  Empty when the viewer may not see it. */
+  client: string;
   /** In `seq_no` order — the sub-list under the Sidebar's Packages item, and
    *  what the Header's `/packages/[moduleId]` crumb resolves against. */
   packages: PackageNavItem[];

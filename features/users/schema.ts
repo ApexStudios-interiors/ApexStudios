@@ -10,6 +10,7 @@ export const usernameSchema = z
   .string()
   .trim()
   .toLowerCase()
+  .min(1, "Enter a username")
   .min(2, "At least 2 characters")
   .max(32, "At most 32 characters")
   .regex(

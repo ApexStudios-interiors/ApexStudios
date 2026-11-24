@@ -13,13 +13,21 @@ export const postDailyUpdateSchema = z.object({
   projectId: z.uuid(),
   packageId: z.uuid(),
   updateDate: z.iso.date(),
-  body: z.string().trim().min(1, "Please describe what happened today"),
+  body: z
+    .string()
+    .trim()
+    .min(1, "Please describe what happened today")
+    .max(4000, "Keep the update to 4,000 characters or fewer"),
   attachmentIds: z.array(z.uuid()).max(MAX_PHOTOS_PER_ENTITY).default([]),
 });
 export type PostDailyUpdateInput = z.infer<typeof postDailyUpdateSchema>;
 
 export const editDailyUpdateSchema = z.object({
   id: z.uuid(),
-  body: z.string().trim().min(1),
+  body: z
+    .string()
+    .trim()
+    .min(1, "Please describe what happened today")
+    .max(4000, "Keep the update to 4,000 characters or fewer"),
 });
 export type EditDailyUpdateInput = z.infer<typeof editDailyUpdateSchema>;

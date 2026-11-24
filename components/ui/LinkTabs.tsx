@@ -16,7 +16,7 @@ export function LinkTabs({ items }: { items: { key: string; label: string; href:
   // UUID params) never equal the slug-based URL `usePathname()` returns.
   const segment = useSelectedLayoutSegment();
   return (
-    <div className="inline-flex bg-muted rounded-lg p-1 gap-0.5 mb-4">
+    <div className="inline-flex max-w-full overflow-x-auto overscroll-x-contain bg-muted rounded-lg p-1 gap-0.5 mb-4">
       {items.map((it) => {
         const active = segment === it.href.split("/").filter(Boolean).pop();
         return (
@@ -24,7 +24,7 @@ export function LinkTabs({ items }: { items: { key: string; label: string; href:
             key={it.key}
             href={it.href}
             aria-current={active ? "page" : undefined}
-            className={`border-0 rounded-md px-3 py-1.5 text-[13.5px] cursor-pointer ${
+            className={`shrink-0 whitespace-nowrap border-0 rounded-md px-3 py-1.5 text-[13.5px] cursor-pointer ${
               active
                 ? "bg-background text-foreground font-semibold shadow-sm"
                 : "bg-transparent text-muted-foreground font-medium hover:text-foreground"

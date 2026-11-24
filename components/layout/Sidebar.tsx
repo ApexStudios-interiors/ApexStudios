@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useParams } from "next/navigation";
+import { usePathname, useParams, useRouter } from "next/navigation";
 import { Fragment, useRef, useState, useTransition } from "react";
 import { useAction } from "next-safe-action/hooks";
 import { BookOpenIcon, InboxIcon } from "lucide-react";
@@ -17,6 +17,14 @@ import { ALLOWED_SECTIONS, type Section, sectionFromPath } from "@/lib/rbac/nav"
 import { ROLE_LABEL } from "@/lib/rbac/roles";
 import { packagePath, projectPath, withAmbiguityFlags } from "@/lib/routing/paths";
 import { useClickOutside } from "@/hooks/useClickOutside";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 
 // `href` takes the project's CODE, not its id: a canonical link costs no
 // redirect, a UUID one costs a whole extra request (lib/routing/paths.ts).
@@ -57,6 +65,12 @@ const PREVIEW_OPTIONS: { value: PreviewRole; label: string }[] = [
   { value: "client", label: "Client" },
 ];
 
+/**
+ * The desktop sidebar: a sticky 250px column from `md` up. Below `md` it is
+ * hidden and the same SidebarNav renders inside MobileNav's drawer instead
+ * (APX-16), so the project switcher, packages and user menu are identical on
+ * both.
+ */
 export function Sidebar({
   /** The real, role-scoped project list, read from the database by the app
    *  shell — including each project's packages and pending counts. Previously
@@ -66,6 +80,21 @@ export function Sidebar({
   projects,
 }: {
   projects: NavProject[];
+}) {
+  return (
+    <aside className="max-md:hidden bg-sidebar border-r border-border flex flex-col sticky top-0 self-start h-screen overflow-auto overscroll-contain p-3">
+      <SidebarNav projects={projects} />
+    </aside>
+  );
+}
+
+export function SidebarNav({
+  projects,
+  onNavigate,
+}: {
+  projects: NavProject[];
+  /** Called after the project switcher navigates — the mobile drawer closes on it. */
+  onNavigate?: () => void;
 }) {
   // `role` here is the EFFECTIVE role (impersonated role while previewing) —
   // exactly what nav filtering should use. `session` is the REAL identity:
@@ -80,6 +109,7 @@ export function Sidebar({
   const projectsMenuRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [signOutPending, startSignOut] = useTransition();
+  const router = useRouter();
   const preview = useAction(startPreview, { onSuccess: () => setUserMenuOpen(false) });
 
   useClickOutside(projectsMenuRef, () => setProjectsMenuOpen(false), projectsMenuOpen);
@@ -97,7 +127,7 @@ export function Sidebar({
   const showStudio = role === "admin";
 
   return (
-    <aside className="bg-sidebar border-r border-border flex flex-col sticky top-0 self-start h-screen overflow-auto overscroll-contain p-3">
+    <div className="flex flex-1 flex-col min-h-full">
       <div className="shrink-0 flex items-center gap-2.5 px-1.5 pt-1.5 pb-4">
         <div className="w-[30px] h-[30px] rounded-[7px] bg-primary text-primary-foreground grid place-items-center font-bold text-[13px]">
           A
@@ -110,7 +140,10 @@ export function Sidebar({
 
       <div className="shrink-0 relative mb-2.5" ref={projectsMenuRef}>
         <button
+          type="button"
           onClick={() => setProjectsMenuOpen((v) => !v)}
+          aria-expanded={projectsMenuOpen}
+          aria-controls="project-switcher"
           className={`flex items-center gap-2.5 w-full text-left border-0 border-b rounded-none px-2 pt-2 pb-3 cursor-pointer font-semibold text-[13.5px] text-foreground hover:opacity-70 ${
             isHome ? "border-foreground" : "border-border"
           }`}
@@ -123,26 +156,60 @@ export function Sidebar({
           />
         </button>
         {projectsMenuOpen && (
-          <div className="absolute left-0 right-0 top-full z-20 mt-1 bg-card border border-border rounded-lg shadow-lg py-1 max-h-80 overflow-auto overscroll-contain">
-            <Link
-              href="/"
-              onClick={() => setProjectsMenuOpen(false)}
-              className="flex items-center gap-2 px-3 py-2 text-[13px] font-semibold text-foreground hover:bg-accent"
-            >
-              <Icon name="folder" className="w-3.5 h-3.5" />
-              View all projects
-            </Link>
-            <div className="border-t border-border my-1" />
-            {projects.map((p) => (
-              <Link
-                key={p.id}
-                href={projectPath({ code: p.code })}
-                onClick={() => setProjectsMenuOpen(false)}
-                className={`flex flex-col px-3 py-2 text-[13px] hover:bg-accent ${params?.projectId === p.id ? "bg-accent" : ""}`}
-              >
-                <span className="font-medium text-foreground truncate">{p.name}</span>
-              </Link>
-            ))}
+          // APX-51: type-to-filter on name, client and code. cmdk gives the
+          // input combobox semantics, arrow keys and Enter; Escape closes.
+          <div
+            id="project-switcher"
+            className="absolute left-0 right-0 top-full z-20 mt-1 bg-card border border-border rounded-lg shadow-lg"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.stopPropagation();
+                setProjectsMenuOpen(false);
+              }
+            }}
+          >
+            <Command className="bg-card" loop>
+              <CommandInput placeholder="Filter projects…" aria-label="Filter projects" autoFocus />
+              <CommandList className="max-h-80 overscroll-contain">
+                <CommandEmpty className="py-4 text-[13px] text-muted-foreground">
+                  No matching project
+                </CommandEmpty>
+                <CommandGroup>
+                  <CommandItem
+                    value="__all__ view all projects"
+                    onSelect={() => {
+                      setProjectsMenuOpen(false);
+                      router.push("/");
+                      onNavigate?.();
+                    }}
+                    className="text-[13px] font-semibold"
+                  >
+                    <Icon name="folder" className="w-3.5 h-3.5" />
+                    View all projects
+                  </CommandItem>
+                  {projects.map((p) => (
+                    <CommandItem
+                      key={p.id}
+                      value={`${p.name} ${p.client} ${p.code} ${p.id}`}
+                      onSelect={() => {
+                        setProjectsMenuOpen(false);
+                        router.push(projectPath({ code: p.code }));
+                        onNavigate?.();
+                      }}
+                      data-checked={params?.projectId === p.id}
+                      className="text-[13px]"
+                    >
+                      <span className="min-w-0 flex flex-col">
+                        <span className="font-medium text-foreground truncate">{p.name}</span>
+                        {p.client && (
+                          <span className="text-xs text-muted-foreground truncate">{p.client}</span>
+                        )}
+                      </span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
           </div>
         )}
       </div>
@@ -210,62 +277,74 @@ export function Sidebar({
                         ? billPend
                         : 0;
                 const label = it.key === "billing" ? (role === "client" ? "Bills" : "Billing") : it.label;
+                const linkClass = `flex items-center gap-2.5 w-full text-left border-0 rounded-md px-2 py-[7px] cursor-pointer text-[13.5px] ${
+                  on
+                    ? "bg-accent font-semibold text-foreground"
+                    : "font-medium text-foreground hover:bg-accent"
+                }`;
+                const link = (
+                  <Link
+                    href={it.href(project.code)}
+                    aria-current={on ? "page" : undefined}
+                    className={it.key === "packages" ? `${linkClass} pr-10` : linkClass}
+                  >
+                    <Icon
+                      name={it.icon}
+                      className={`w-4 h-4 flex-none ${on ? "text-foreground" : "text-muted-foreground"}`}
+                    />
+                    {label}
+                    {badge ? (
+                      <span className="ml-auto text-[11px] font-semibold bg-primary text-primary-foreground rounded-full min-w-[18px] h-[18px] px-1.5 grid place-items-center">
+                        {badge}
+                      </span>
+                    ) : null}
+                  </Link>
+                );
                 return (
                   <Fragment key={it.key}>
-                    <Link
-                      href={it.href(project.code)}
-                      className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md px-2 py-[7px] cursor-pointer text-[13.5px] ${
-                        on
-                          ? "bg-accent font-semibold text-foreground"
-                          : "font-medium text-foreground hover:bg-accent"
-                      }`}
-                    >
-                      <Icon
-                        name={it.icon}
-                        className={`w-4 h-4 flex-none ${on ? "text-foreground" : "text-muted-foreground"}`}
-                      />
-                      {label}
-                      {badge ? (
-                        <span className="ml-auto text-[11px] font-semibold bg-primary text-primary-foreground rounded-full min-w-[18px] h-[18px] px-1.5 grid place-items-center">
-                          {badge}
-                        </span>
-                      ) : null}
-                      {it.key === "packages" ? (
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setModsOpen((v) => !v);
-                          }}
-                          className="ml-auto w-[26px] h-[26px] grid place-items-center rounded hover:bg-border text-muted-foreground"
+                    {it.key === "packages" ? (
+                      // The chevron is a sibling button, not a span inside the
+                      // link: a control nested in a link is invalid HTML and
+                      // not reachable as its own control (APX-47).
+                      <div className="relative">
+                        {link}
+                        <button
+                          type="button"
+                          onClick={() => setModsOpen((v) => !v)}
+                          aria-expanded={modsOpen}
+                          aria-controls="sidebar-packages"
+                          aria-label="Package list"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 w-[26px] h-[26px] grid place-items-center rounded hover:bg-border text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
                         >
                           <Icon
                             name="chevronRight"
                             className={`w-3.5 h-3.5 transition-transform ${modsOpen ? "rotate-90" : ""}`}
                           />
-                        </span>
-                      ) : null}
-                    </Link>
-                    {it.key === "packages" &&
-                      modsOpen &&
-                      withAmbiguityFlags(project.packages).map((m, i) => (
-                        <Link
-                          key={m.id}
-                          href={packagePath({ code: project.code }, m)}
-                          className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md pl-[34px] pr-2 py-[7px] cursor-pointer text-[13.5px] ${
-                            params?.moduleId === m.id
-                              ? "text-foreground font-medium bg-accent"
-                              : "text-muted-foreground font-normal hover:bg-accent"
-                          }`}
-                        >
-                          <span className="inline-block min-w-[22px] text-muted-foreground tabular-nums font-medium">
-                            {String(i + 1).padStart(2, "0")}
-                          </span>
-                          {m.name}
-                        </Link>
-                      ))}
+                        </button>
+                      </div>
+                    ) : (
+                      link
+                    )}
+                    {it.key === "packages" && modsOpen && (
+                      <div id="sidebar-packages" className="flex flex-col gap-px">
+                        {withAmbiguityFlags(project.packages).map((m, i) => (
+                          <Link
+                            key={m.id}
+                            href={packagePath({ code: project.code }, m)}
+                            className={`flex items-center gap-2.5 w-full text-left border-0 rounded-md pl-[34px] pr-2 py-[7px] cursor-pointer text-[13.5px] ${
+                              params?.moduleId === m.id
+                                ? "text-foreground font-medium bg-accent"
+                                : "text-muted-foreground font-normal hover:bg-accent"
+                            }`}
+                          >
+                            <span className="inline-block min-w-[22px] text-muted-foreground tabular-nums font-medium">
+                              {String(i + 1).padStart(2, "0")}
+                            </span>
+                            {m.name}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
                   </Fragment>
                 );
               });
@@ -375,6 +454,6 @@ export function Sidebar({
           />
         </button>
       </div>
-    </aside>
+    </div>
   );
 }

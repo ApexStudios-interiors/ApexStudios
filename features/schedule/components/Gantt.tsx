@@ -69,6 +69,9 @@ export function Gantt({
     setClosed(collapseSignal.collapsed ? new Set(phases.map((p) => p.id)) : new Set());
   }
 
+  const openTask = (taskId: string) =>
+    openDialog({ kind: "taskDetail", projectId, moduleId: packageId, taskId });
+
   const today = useMemo(() => todayIso(), []);
   const todayWeek = weekIndex(today, projectStart);
   const weeks = useMemo(
@@ -104,8 +107,10 @@ export function Gantt({
   return (
     <div className="overflow-x-auto overscroll-x-contain">
       <div
-        className="grid min-w-[960px]"
-        style={{ gridTemplateColumns: `280px repeat(${weeks.length}, minmax(52px,1fr))` }}
+        // The sticky task column is 160px on a phone (APX-16) so the bars
+        // keep most of the screen; 280px from md up, as before.
+        className="grid min-w-[960px] [--gantt-name:160px] md:[--gantt-name:280px]"
+        style={{ gridTemplateColumns: `var(--gantt-name) repeat(${weeks.length}, minmax(52px,1fr))` }}
       >
         <div className="border-b border-border bg-muted/50 sticky left-0 z-[2]" />
         {monthHeaders.map((mo, i) => (
@@ -145,9 +150,11 @@ export function Gantt({
           const isClosed = closed.has(ph.id);
           return (
             <Fragment key={ph.id}>
-              <div
+              <button
+                type="button"
                 onClick={() => toggle(ph.id)}
-                className="bg-muted/50 text-[13px] font-semibold px-2.5 py-1.5 sticky left-0 z-[1] border-b border-border flex items-center gap-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-muted/80"
+                aria-expanded={!isClosed}
+                className="bg-muted/50 text-[13px] font-semibold px-2.5 py-1.5 sticky left-0 z-[1] border-b border-border flex items-center gap-1.5 whitespace-nowrap cursor-pointer select-none text-left hover:bg-muted/80 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
               >
                 <span className="inline-grid place-items-center w-[18px] h-[18px] text-muted-foreground">
                   <Icon
@@ -157,9 +164,9 @@ export function Gantt({
                 </span>
                 {ph.name}
                 <span className="text-muted-foreground font-normal ml-2">
-                  {ph.tasks.length} tasks · {ph.progressPct}%
+                  {ph.tasks.length} {ph.tasks.length === 1 ? "task" : "tasks"} · {ph.progressPct}%
                 </span>
-              </div>
+              </button>
               {weeks.map((wk) => (
                 <div key={wk} className="bg-muted/50 border-b border-border min-h-[28px]" />
               ))}
@@ -168,7 +175,19 @@ export function Gantt({
                 ph.tasks.map((t) => (
                   <Fragment key={t.id}>
                     <div className="px-4 py-2.5 border-b border-border sticky left-0 bg-card z-[1] text-[13px]">
-                      <div className="font-medium">{t.name}</div>
+                      {canEdit ? (
+                        // The keyboard path to Task Detail (APX-47): the bar
+                        // itself is a pointer target only.
+                        <button
+                          type="button"
+                          onClick={() => openTask(t.id)}
+                          className="block max-w-full text-left font-medium rounded-sm hover:underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        >
+                          {t.name}
+                        </button>
+                      ) : (
+                        <div className="font-medium">{t.name}</div>
+                      )}
                       <div className="text-xs text-muted-foreground">
                         {t.ownerName ?? "To assign"} · {t.durationWeeks} wk ·{" "}
                         <b className="text-foreground font-semibold">{t.progressPct}%</b>
@@ -204,13 +223,9 @@ export function Gantt({
                                 toast(`${t.name}: ${t.progressPct}% complete`);
                                 return;
                               }
-                              openDialog({
-                                kind: "taskDetail",
-                                projectId,
-                                moduleId: packageId,
-                                taskId: t.id,
-                              });
+                              openTask(t.id);
                             }}
+                            aria-hidden="true"
                             title={`${t.name}: ${t.progressPct}%`}
                             className={`absolute top-[13px] h-5 rounded-md bg-primary/10 overflow-hidden cursor-pointer hover:outline-2 hover:outline-ring/40 ${
                               t.late

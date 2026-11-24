@@ -48,7 +48,11 @@ export type TransitionBillInput = z.infer<typeof transitionBillSchema>;
  *  established pattern. */
 export const rejectBillSchema = z.object({
   billId: z.uuid(),
-  reason: z.string().trim().min(1, "Please give a reason"),
+  reason: z
+    .string()
+    .trim()
+    .min(1, "Please give a reason")
+    .max(1000, "Keep the reason to 1,000 characters or fewer"),
 });
 export type RejectBillInput = z.infer<typeof rejectBillSchema>;
 

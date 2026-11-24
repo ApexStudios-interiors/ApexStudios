@@ -25,8 +25,8 @@ export const requestApprovalSchema = z.object({
     .optional()
     .transform((v) => (v ? v : undefined)),
   type: z.enum(APPROVAL_TYPES),
-  item: z.string().trim().min(1, "Item is required"),
-  note: z.string().trim().optional(),
+  item: z.string().trim().min(1, "Item is required").max(200, "Keep the item to 200 characters or fewer"),
+  note: z.string().trim().max(2000, "Keep the note to 2,000 characters or fewer").optional(),
   neededBy: z
     .union([z.iso.date(), z.literal("")])
     .optional()
@@ -59,7 +59,7 @@ export const decideApprovalSchema = z
   .object({
     approvalId: z.uuid(),
     decision: z.enum(["approved", "rejected"]),
-    reason: z.string().trim().optional(),
+    reason: z.string().trim().max(1000, "Keep the reason to 1,000 characters or fewer").optional(),
   })
   .refine((v) => v.decision !== "rejected" || (v.reason?.length ?? 0) > 0, {
     message: "Please give a reason for rejecting",

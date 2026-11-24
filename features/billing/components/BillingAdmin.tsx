@@ -119,7 +119,7 @@ export function BillingAdmin({
         setUnlisted(u);
         setSel(new Set());
       })
-      .catch(() => toast("Could not load Billable Now."));
+      .catch(() => toast("Could not load Billable Now.", "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
@@ -470,7 +470,7 @@ export function BillingAdmin({
                 return (
                   <tr key={b.id}>
                     <td className={td}>
-                      {b.refNo}
+                      <span className="whitespace-nowrap">{b.refNo}</span>
                       <span className={sub}>
                         {b.paidAt
                           ? `Paid ${dmy(b.paidAt)}`
@@ -483,7 +483,7 @@ export function BillingAdmin({
                                 : "Draft"}
                       </span>
                     </td>
-                    <td className={td}>{dmy(b.billDate)}</td>
+                    <td className={`${td} whitespace-nowrap`}>{dmy(b.billDate)}</td>
                     <td className={td + " text-muted-foreground"}>{b.packageLabels.join(", ")}</td>
                     <td className={tdNum}>{formatINR(b.taxableAmount)}</td>
                     <td className={tdNum}>{formatINR(b.netPayable)}</td>

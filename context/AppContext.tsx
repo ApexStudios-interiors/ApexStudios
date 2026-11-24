@@ -81,9 +81,24 @@ interface AppContextValue {
   dialog: DialogState;
   openDialog: (d: DialogState) => void;
   closeDialog: () => void;
-  toastMsg: string | null;
-  toast: (msg: string) => void;
+  /** The current toast, or null. `kind` decides how it is announced and
+   *  whether it hides itself (APX-47): success is a polite status that hides
+   *  after a few seconds; an error is an alert that stays until dismissed. */
+  toastMsg: ToastState | null;
+  toast: (msg: string, kind?: ToastKind) => void;
+  dismissToast: () => void;
 }
+
+export type ToastKind = "success" | "error";
+export interface ToastState {
+  msg: string;
+  kind: ToastKind;
+  /** Increments on every toast, so the same message twice re-announces. */
+  id: number;
+}
+
+/** How long a success toast stays up. Errors never time out. */
+export const TOAST_SUCCESS_MS = 4000;
 
 const AppContext = createContext<AppContextValue | null>(null);
 
@@ -105,13 +120,23 @@ export function AppProvider({
   const [role, setRole] = useState<Role>(initialRole);
   const [lastProjectId, setLastProjectId] = useState("bhel");
   const [dialog, setDialog] = useState<DialogState>(null);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState<ToastState | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastSeq = useRef(0);
 
-  const toast = useCallback((msg: string) => {
-    setToastMsg(msg);
+  const toast = useCallback((msg: string, kind: ToastKind = "success") => {
+    toastSeq.current += 1;
+    setToastMsg({ msg, kind, id: toastSeq.current });
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToastMsg(null), 2400);
+    toastTimer.current = null;
+    if (kind === "success") {
+      toastTimer.current = setTimeout(() => setToastMsg(null), TOAST_SUCCESS_MS);
+    }
+  }, []);
+  const dismissToast = useCallback(() => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = null;
+    setToastMsg(null);
   }, []);
 
   const openDialog = useCallback((d: DialogState) => setDialog(d), []);
@@ -128,8 +153,9 @@ export function AppProvider({
       closeDialog,
       toastMsg,
       toast,
+      dismissToast,
     }),
-    [role, lastProjectId, dialog, toastMsg, toast, openDialog, closeDialog]
+    [role, lastProjectId, dialog, toastMsg, toast, dismissToast, openDialog, closeDialog]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

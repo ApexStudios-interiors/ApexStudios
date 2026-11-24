@@ -7,7 +7,7 @@ export function Card({ className = "", ...props }: HTMLAttributes<HTMLDivElement
 export function CardHeader({ className = "", ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={`px-5 py-[15px] border-b border-border flex items-center gap-3 ${className}`}
+      className={`px-4 md:px-5 py-[15px] border-b border-border flex flex-wrap items-center gap-3 ${className}`}
       {...props}
     />
   );

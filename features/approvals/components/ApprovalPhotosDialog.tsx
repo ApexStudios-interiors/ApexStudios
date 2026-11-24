@@ -77,6 +77,7 @@ export function ApprovalPhotosDialog({
       description={item}
       okLabel={pending ? "Saving…" : uploading ? "Uploading…" : "Upload"}
       okPending={pending}
+      dirty={attachmentIds.length > 0}
       okDisabled={uploading || room === 0}
       onClose={closeDialog}
       onOk={onSubmit}

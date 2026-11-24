@@ -91,15 +91,27 @@ export function ScheduleCards({
               className="cursor-pointer select-none hover:bg-muted/80"
               onClick={() => toggle(pkg.packageId)}
             >
-              <span className="inline-grid place-items-center w-[18px] h-[18px] text-muted-foreground">
-                <Icon
-                  name="chevronRight"
-                  className={`w-3.5 h-3.5 transition-transform ${isClosed ? "" : "rotate-90"}`}
-                />
-              </span>
-              <h3>
-                {String(pkg.seqNo).padStart(2, "0")} {pkg.packageName}
-              </h3>
+              {/* The header row stays clickable for the mouse; this button is
+                  the keyboard and screen-reader path (APX-47). */}
+              <button
+                type="button"
+                aria-expanded={!isClosed}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggle(pkg.packageId);
+                }}
+                className="flex min-w-0 items-center gap-2 rounded-sm text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                <span className="inline-grid place-items-center w-[18px] h-[18px] text-muted-foreground">
+                  <Icon
+                    name="chevronRight"
+                    className={`w-3.5 h-3.5 transition-transform ${isClosed ? "" : "rotate-90"}`}
+                  />
+                </span>
+                <h3>
+                  {String(pkg.seqNo).padStart(2, "0")} {pkg.packageName}
+                </h3>
+              </button>
               <span className="text-muted-foreground text-sm">
                 {pkg.taskCount ? `${pkg.taskCount} tasks · ${pkg.progressPct}%` : "No plan yet"}
               </span>

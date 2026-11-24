@@ -1,9 +1,10 @@
-import { Decimal } from "decimal.js";
-
 /**
  * Pure. No next/* imports — testable against a plain connection or no
  * connection at all (HLD §4.3, code-standards §1).
  */
+
+import { Decimal } from "decimal.js";
+import { parseMoneyInput } from "@/lib/money/input";
 
 /** package_status -> the prototype's display strings. The enum is the source
  *  of truth; this is a presentation concern, not a schema one. */
@@ -133,6 +134,20 @@ export function costToClientFactor(
   if (phase && phase.internalAmount > 0) return phase.allocatedAmount / phase.internalAmount;
   if (pkg && pkg.internalAmount > 0) return pkg.allocatedAmount / pkg.internalAmount;
   return 1.0;
+}
+
+/**
+ * APX-40: whether the internal (cost) budget typed into a package form is
+ * larger than its allocated (client) budget. Inputs are the raw text of the
+ * two fields; anything that is not yet a valid amount answers false, so the
+ * warning only appears once both are real amounts. Compared as decimals, never
+ * through a JavaScript number.
+ */
+export function isInternalOverAllocated(allocatedRaw: string, internalRaw: string): boolean {
+  const allocated = parseMoneyInput(allocatedRaw);
+  const internal = parseMoneyInput(internalRaw);
+  if (allocated === null || internal === null) return false;
+  return new Decimal(internal).greaterThan(allocated);
 }
 
 /** A phase on a bill — Billed, or Paid once that bill is paid. */

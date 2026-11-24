@@ -84,6 +84,7 @@ export async function loadShellData(session: Session): Promise<ShellData> {
     id: p.id,
     code: p.code,
     name: p.name,
+    client: p.client,
     packages: packagesByProject[p.id] ?? [],
     pendingRequests: pendingRequests[p.id] ?? 0,
     pendingApprovals: pendingApprovals[p.id] ?? 0,
