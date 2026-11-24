@@ -646,7 +646,7 @@ export type Database = {
           id?: string;
           org_id: string;
           project_id: string;
-          seq_no: number;
+          seq_no?: number;
           name: string;
           lead_profile_id?: string | null;
           allocated_amount?: number;
@@ -744,7 +744,7 @@ export type Database = {
           org_id: string;
           project_id: string;
           package_id: string;
-          seq_no: number;
+          seq_no?: number;
           name: string;
           allocated_amount?: number;
           internal_amount?: number;
@@ -1679,8 +1679,9 @@ export type Database = {
           p_id: string;
           p_ok: boolean;
           p_error?: string;
+          p_attempt?: number;
         };
-        Returns: unknown;
+        Returns: boolean;
       };
       rpc_inventory_drift: {
         Args: Record<string, never>;
@@ -1735,6 +1736,22 @@ export type Database = {
           p_id: string;
         };
         Returns: unknown;
+      };
+      rpc_portfolio_money: {
+        Args: {
+          p_project_ids: string[];
+        };
+        Returns: { project_id: string | null; allocated: string; internal: string; committed: string }[];
+      };
+      rpc_r2_keys_referenced: {
+        Args: {
+          p_keys: string[];
+        };
+        Returns: string[];
+      };
+      rpc_reap_jobs: {
+        Args: Record<string, never>;
+        Returns: { requeued: number; failed: number }[];
       };
       rpc_revoke_user_sessions: {
         Args: {

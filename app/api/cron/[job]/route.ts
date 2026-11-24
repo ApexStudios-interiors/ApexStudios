@@ -2,7 +2,7 @@ import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
 import { env } from "@/lib/env";
 import { bearerMatches } from "@/lib/auth/bearer-secret";
-import { drain, reap, selfEnqueueAndDrain, type DrainSummary } from "@/lib/jobs/runner";
+import { drain, reap, selfEnqueueAndDrain, type DrainSummary, type ReapSummary } from "@/lib/jobs/runner";
 import { DRAIN_JOB_NAMES } from "@/lib/jobs/registry";
 
 /**
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   // 3. Claim a bounded batch, dispatch, finish — never real work here.
-  let summary: DrainSummary | { requeued: number };
+  let summary: DrainSummary | ReapSummary;
   switch (job) {
     case "jobs.drain":
       summary = await drain(DRAIN_JOB_NAMES);
@@ -80,11 +80,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       summary = await selfEnqueueAndDrain("inventory.reconcile", {}, todayKey());
       break;
     case "weekly.maintenance": {
-      // DRY RUN until the sweep is rewritten (APX-06): it builds its "keep"
-      // list from one unpaged select, which PostgREST caps at 1,000 rows, so
-      // past 1,000 attachments it would delete real photos and invoice PDFs.
-      // A dry run only logs what it would delete.
-      const sweep = await selfEnqueueAndDrain("attachment.orphan_sweep", { dryRun: true }, isoWeekKey());
+      // No payload flag: the sweep is a dry run unless ORPHAN_SWEEP_DELETE is
+      // "true" (APX-06, lib/jobs/handlers/attachment.orphan-sweep.ts). It
+      // used to pass { dryRun: true } here as the interim guard; that would
+      // now override the owner's opt-in, so the env flag is the one switch.
+      const sweep = await selfEnqueueAndDrain("attachment.orphan_sweep", {}, isoWeekKey());
       const archive = await selfEnqueueAndDrain("project.archive", {}, isoWeekKey());
       summary = {
         claimed: sweep.claimed + archive.claimed,

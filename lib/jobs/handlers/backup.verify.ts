@@ -27,7 +27,40 @@ import { env } from "@/lib/env";
  * Falls back to the app credential when the read-only pair is unset, so this
  * keeps working on an environment that has not been given one yet.
  */
+/** A gzipped pg_dump of even an empty schema is well over this; anything
+ *  smaller is a truncated upload or a dump of nothing (APX-19). */
+export const MIN_BACKUP_BYTES = 10 * 1024;
+/** Today's dump may not be smaller than this share of yesterday's. Data is
+ *  soft-deleted, never removed, so a real dump only grows; halving overnight
+ *  means the dump stopped part-way or connected to the wrong database. */
+export const MIN_SIZE_RATIO = 0.5;
+
+export function backupKey(date: Date): string {
+  return `pg_dump/${date.toISOString().slice(0, 10)}.sql.gz`;
+}
+
+function isNotFound(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+  const status = (e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+  return e.name === "NotFound" || e.name === "NoSuchKey" || status === 404;
+}
+
+export type BackupVerifySummary = { key: string; bytes: number; previousBytes: number | null };
+
 export async function verifyBackup(): Promise<void> {
+  await checkBackup(new Date());
+}
+
+/**
+ * Exists, is not tiny, and has not shrunk by half since yesterday. The gzip
+ * integrity of the bytes themselves is checked where they are produced —
+ * `gunzip -t` in backup-nightly.yml, before the upload — because reading a
+ * multi-megabyte object back through a 60-second function to decompress it
+ * would cost more than the check is worth here. Every failure throws, which
+ * lands the job in `failed`: that row is the alert, and the admin shell shows
+ * a banner while the latest one is failed.
+ */
+export async function checkBackup(now: Date): Promise<BackupVerifySummary> {
   const client = new S3Client({
     region: "auto",
     endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -37,8 +70,35 @@ export async function verifyBackup(): Promise<void> {
     },
   });
 
-  const todayKey = `pg_dump/${new Date().toISOString().slice(0, 10)}.sql.gz`;
+  const key = backupKey(now);
   // HeadObjectCommand throws (NotFound) if the object is missing — letting
-  // that exception propagate out of this handler is the entire check.
-  await client.send(new HeadObjectCommand({ Bucket: env.R2_BACKUP_BUCKET, Key: todayKey }));
+  // that exception propagate out of this handler is the first check.
+  const head = await client.send(new HeadObjectCommand({ Bucket: env.R2_BACKUP_BUCKET, Key: key }));
+  const bytes = head.ContentLength ?? 0;
+  if (bytes <= MIN_BACKUP_BYTES) {
+    throw new Error(
+      `BACKUP_TOO_SMALL: ${key} is ${bytes} bytes (minimum ${MIN_BACKUP_BYTES}) — see docs/runbooks/backup-failed.md`
+    );
+  }
+
+  const previousKey = backupKey(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+  let previousBytes: number | null = null;
+  try {
+    const prev = await client.send(new HeadObjectCommand({ Bucket: env.R2_BACKUP_BUCKET, Key: previousKey }));
+    previousBytes = prev.ContentLength ?? null;
+  } catch (e) {
+    // No dump yesterday (the first night, or yesterday's own failure — which
+    // already alerted) is not a reason to fail today's good one.
+    if (!isNotFound(e)) throw e;
+  }
+
+  if (previousBytes !== null && bytes < previousBytes * MIN_SIZE_RATIO) {
+    throw new Error(
+      `BACKUP_SHRANK: ${key} is ${bytes} bytes, under ${MIN_SIZE_RATIO * 100}% of ${previousKey} ` +
+        `(${previousBytes} bytes) — see docs/runbooks/backup-failed.md`
+    );
+  }
+
+  console.log(`backup.verify: ${key} ${bytes} bytes (previous ${previousBytes ?? "none"})`);
+  return { key, bytes, previousBytes };
 }

@@ -27,6 +27,7 @@ const SECTION_LABELS: Record<string, string> = {
 
 export function Header({
   notifications,
+  unreadCount,
   /** The same role-scoped list the Sidebar renders, passed down by the app
    *  shell rather than re-queried here. The breadcrumb used to name the
    *  project and package off AppContext's `lib/data.ts` fixture, so a real
@@ -34,6 +35,7 @@ export function Header({
   projects,
 }: {
   notifications: NotificationDTO[];
+  unreadCount: number;
   projects: NavProject[];
 }) {
   const { role } = useApp();
@@ -109,7 +111,7 @@ export function Header({
       <div className="flex-1" />
       <div className="flex items-center gap-3">
         <SearchBar />
-        <NotificationsMenu items={notifications} />
+        <NotificationsMenu items={notifications} unreadCount={unreadCount} />
         <ThemeToggle />
       </div>
     </div>

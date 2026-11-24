@@ -1,7 +1,9 @@
 import "server-only";
 import { cache } from "react";
+import Decimal from "decimal.js";
 import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
+import { getPackageNavLists } from "@/features/packages/queries";
 import {
   parseProjectStatus,
   parseRateVisibility,
@@ -55,10 +57,13 @@ export type PortfolioSite = {
   projects: ProjectCardDTO[];
 };
 
-/** `effectiveRole` decides which table/view backs the package count — see
- *  getPortfolio's own doc comment for why this must be the effective role,
- *  not session.role directly, under impersonation. */
-async function fetchProjectRows(effectiveRole: "admin" | "site" | "client") {
+/** The package count comes from getPackageNavLists — the very list the
+ *  sidebar renders, through the role-shaped table/view for the EFFECTIVE role
+ *  (see getPortfolio's own doc comment for why it must be the effective role
+ *  under impersonation). It is cache()d, so the shell's own call for the same
+ *  ids reuses this one instead of querying packages a second time (APX-26). */
+async function fetchProjectRows(session: Session) {
+  const effectiveRole = session.impersonating?.role ?? session.role;
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("projects")
@@ -94,62 +99,48 @@ async function fetchProjectRows(effectiveRole: "admin" | "site" | "client") {
   // query above and neither reads the other's result, so awaiting them in
   // sequence cost a round trip for nothing — on every page, since the app
   // shell calls this on each render.
-  const [clientsRes, pkgCountsRes] = await Promise.all([
+  const [clientsRes, navLists] = await Promise.all([
     isAdmin
       ? supabase.from("clients").select("id, name").in("id", clientIds)
       : supabase.from("v_client_name").select("id, name").in("id", clientIds),
-    isAdmin
-      ? supabase.from("packages").select("id, project_id").in("project_id", projectIds)
-      : supabase.from("v_package_site").select("id, project_id").in("project_id", projectIds),
+    getPackageNavLists(session, projectIds),
   ]);
   const { data: clients, error: clientErr } = clientsRes;
   if (clientErr) throw new Error(clientErr.message);
   const clientName = new Map(clients.map((c) => [c.id, c.name]));
-  const { data: pkgCounts, error: pkgErr } = pkgCountsRes;
-  if (pkgErr) throw new Error(pkgErr.message);
-  const packageCountByProject = new Map<string, number>();
-  for (const row of pkgCounts) {
-    if (!row.project_id) continue;
-    packageCountByProject.set(row.project_id, (packageCountByProject.get(row.project_id) ?? 0) + 1);
-  }
+  const packageCountByProject = new Map<string, number>(
+    Object.entries(navLists).map(([projectId, list]) => [projectId, list.length])
+  );
 
   return { projects: data, clientName, packageCountByProject };
 }
 
-export async function getPortfolioForAdmin(): Promise<PortfolioAdmin> {
-  const supabase = await createClient();
-  const { projects, clientName, packageCountByProject } = await fetchProjectRows("admin");
+type MoneyRow = { allocated: string; internal: string; committed: string };
+const ZERO_MONEY: MoneyRow = { allocated: "0", internal: "0", committed: "0" };
 
-  const { data: rollups, error } = await supabase
-    .from("v_package_rollup")
-    .select("project_id, allocated_amount, internal_amount, committed")
-    .in(
-      "project_id",
-      projects.map((p) => p.id)
-    );
+async function getPortfolioForAdmin(session: Session): Promise<PortfolioAdmin> {
+  const supabase = await createClient();
+  const { projects, clientName, packageCountByProject } = await fetchProjectRows(session);
+
+  // Summed in Postgres as numeric and returned as text (APX-52): the old
+  // client-side sum over an unpaged v_package_rollup select was capped at
+  // 1,000 packages and added money as binary floats. One row per project plus
+  // a grand-total row whose project_id is null (`grouping sets`).
+  const { data: money, error } = await supabase.rpc("rpc_portfolio_money", {
+    p_project_ids: projects.map((p) => p.id),
+  });
   if (error) throw new Error(error.message);
 
-  const byProject = new Map<string, { alloc: number; int: number; committed: number }>();
-  for (const r of rollups) {
-    // View columns are always reported nullable by Postgres's catalog,
-    // regardless of the underlying table's own NOT NULL constraints — a
-    // real Postgres/information_schema characteristic, not a generator gap.
-    if (!r.project_id) continue;
-    const cur = byProject.get(r.project_id) ?? { alloc: 0, int: 0, committed: 0 };
-    cur.alloc += Number(r.allocated_amount ?? 0);
-    cur.int += Number(r.internal_amount ?? 0);
-    cur.committed += Number(r.committed ?? 0);
-    byProject.set(r.project_id, cur);
+  const byProject = new Map<string, MoneyRow>();
+  let totals: MoneyRow = ZERO_MONEY;
+  for (const r of money ?? []) {
+    if (r.project_id === null) totals = r;
+    else byProject.set(r.project_id, r);
   }
 
-  let totalAllocated = 0,
-    totalInternal = 0,
-    totalCommitted = 0;
   const projectCards: ProjectCardDTO[] = projects.map((p) => {
-    const agg = byProject.get(p.id) ?? { alloc: 0, int: 0, committed: 0 };
-    totalAllocated += agg.alloc;
-    totalInternal += agg.int;
-    totalCommitted += agg.committed;
+    const agg = byProject.get(p.id) ?? ZERO_MONEY;
+    const internal = new Decimal(agg.internal);
     return {
       id: p.id,
       code: p.code,
@@ -160,56 +151,61 @@ export async function getPortfolioForAdmin(): Promise<PortfolioAdmin> {
       progressPct: p.progress_pct,
       start: p.start_date,
       packageCount: packageCountByProject.get(p.id) ?? 0,
-      headlineAmount: String(agg.alloc),
-      budgetUsedPct: agg.int > 0 ? Math.round((agg.committed / agg.int) * 100) : 0,
+      headlineAmount: agg.allocated,
+      budgetUsedPct: internal.gt(0)
+        ? new Decimal(agg.committed).div(internal).mul(100).toDecimalPlaces(0).toNumber()
+        : 0,
     };
   });
 
   return {
     role: "money",
     stats: {
-      totalAllocated: String(totalAllocated),
-      totalInternal: String(totalInternal),
-      committed: String(totalCommitted),
+      totalAllocated: totals.allocated,
+      totalInternal: totals.internal,
+      committed: totals.committed,
       activeProjects: projects.filter((p) => p.status === "active").length,
     },
     projects: projectCards,
   };
 }
 
-export async function getPortfolioForClient(): Promise<PortfolioClient> {
+async function getPortfolioForClient(session: Session): Promise<PortfolioClient> {
   const supabase = await createClient();
-  const { projects, clientName, packageCountByProject } = await fetchProjectRows("client");
+  const { projects, clientName, packageCountByProject } = await fetchProjectRows(session);
 
   const projectIds = projects.map((p) => p.id);
   // ui-guide.md §6.1: "Awaiting Your Approval" is samples AND bills — the
   // prototype's apPendAll + billsPendAll. approvals is is_member_of-gated
   // (a client decides their own project's approvals directly, §6.10), but
   // bills is admin-only on select — v_bill_client is the client-safe read.
-  const { count: pendingApprovals, error } = await supabase
-    .from("approvals")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "pending")
-    .in("project_id", projectIds);
-  if (error) throw new Error(error.message);
-
-  const { count: pendingBills, error: billErr } = await supabase
-    .from("v_bill_client")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "submitted")
-    .in("project_id", projectIds);
-  if (billErr) throw new Error(billErr.message);
+  // The two counts are independent, so they go out together (APX-26).
+  //
+  // contract_value lives behind v_project_finance (admin or client only,
+  // APX-09), not on projects, so a site session has no path to it at all.
+  const [approvalsRes, billsRes, financeRes] = await Promise.all([
+    supabase
+      .from("approvals")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending")
+      .in("project_id", projectIds),
+    supabase
+      .from("v_bill_client")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "submitted")
+      .in("project_id", projectIds),
+    supabase.from("v_project_finance").select("id, contract_value").in("id", projectIds),
+  ]);
+  if (approvalsRes.error) throw new Error(approvalsRes.error.message);
+  if (billsRes.error) throw new Error(billsRes.error.message);
+  if (financeRes.error) throw new Error(financeRes.error.message);
+  const pendingApprovals = approvalsRes.count;
+  const pendingBills = billsRes.count;
 
   const awaitingApproval = (pendingApprovals ?? 0) + (pendingBills ?? 0);
 
-  // contract_value lives behind v_project_finance (admin or client only,
-  // APX-09), not on projects, so a site session has no path to it at all.
-  const { data: finance, error: financeErr } = await supabase
-    .from("v_project_finance")
-    .select("id, contract_value")
-    .in("id", projectIds);
-  if (financeErr) throw new Error(financeErr.message);
-  const contractValue = new Map(finance.map((f) => [f.id, Number(f.contract_value ?? 0)]));
+  // Strings, not Numbers: the total is summed with decimal.js (APX-52).
+  const contractValue = new Map(financeRes.data.map((f) => [f.id, String(f.contract_value ?? 0)]));
 
   const projectCards: ProjectCardDTO[] = projects.map((p) => ({
     id: p.id,
@@ -221,14 +217,17 @@ export async function getPortfolioForClient(): Promise<PortfolioClient> {
     progressPct: p.progress_pct,
     start: p.start_date,
     packageCount: packageCountByProject.get(p.id) ?? 0,
-    headlineAmount: String(contractValue.get(p.id) ?? 0),
+    headlineAmount: contractValue.get(p.id) ?? "0",
     budgetUsedPct: null,
   }));
 
   return {
     role: "client",
     stats: {
-      totalContractValue: String(projects.reduce((a, p) => a + (contractValue.get(p.id) ?? 0), 0)),
+      // decimal.js, not a float sum: a money total (APX-52).
+      totalContractValue: projects
+        .reduce((a, p) => a.plus(new Decimal(contractValue.get(p.id) ?? "0")), new Decimal(0))
+        .toFixed(2),
       activeProjects: projects.filter((p) => p.status === "active").length,
       awaitingApproval,
     },
@@ -236,23 +235,28 @@ export async function getPortfolioForClient(): Promise<PortfolioClient> {
   };
 }
 
-export async function getPortfolioForSite(): Promise<PortfolioSite> {
+async function getPortfolioForSite(session: Session): Promise<PortfolioSite> {
   const supabase = await createClient();
-  const { projects, clientName, packageCountByProject } = await fetchProjectRows("site");
+  const { projects, clientName, packageCountByProject } = await fetchProjectRows(session);
   const projectIds = projects.map((p) => p.id);
 
-  const { data: sitePkgs, error: pkgErr } = await supabase
-    .from("v_package_site")
-    .select("project_id, status")
-    .in("project_id", projectIds);
-  if (pkgErr) throw new Error(pkgErr.message);
-
-  const { count: pendingRequests, error: reqErr } = await supabase
-    .from("v_stock_request_site")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "pending")
-    .in("project_id", projectIds);
-  if (reqErr) throw new Error(reqErr.message);
+  // Independent reads, in parallel (APX-26). "In progress" is counted in
+  // Postgres rather than by fetching every package row.
+  const [inProgressRes, requestsRes] = await Promise.all([
+    supabase
+      .from("v_package_site")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "in_progress")
+      .in("project_id", projectIds),
+    supabase
+      .from("v_stock_request_site")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending")
+      .in("project_id", projectIds),
+  ]);
+  if (inProgressRes.error) throw new Error(inProgressRes.error.message);
+  if (requestsRes.error) throw new Error(requestsRes.error.message);
+  const pendingRequests = requestsRes.count;
 
   const projectCards: ProjectCardDTO[] = projects.map((p) => ({
     id: p.id,
@@ -272,7 +276,7 @@ export async function getPortfolioForSite(): Promise<PortfolioSite> {
     role: "site",
     stats: {
       activeProjects: projects.filter((p) => p.status === "active").length,
-      packagesInProgress: sitePkgs.filter((r) => r.status === "in_progress").length,
+      packagesInProgress: inProgressRes.count ?? 0,
       pendingRequests: pendingRequests ?? 0,
     },
     projects: projectCards,
@@ -289,12 +293,14 @@ export type Portfolio = PortfolioAdmin | PortfolioClient | PortfolioSite;
  * chooses to run the client-shaped query instead of the admin one; getting this
  * dispatch wrong would defeat D20's entire point.
  */
-export async function getPortfolio(session: Session): Promise<Portfolio> {
+export const getPortfolio = cache(async (session: Session): Promise<Portfolio> => {
+  // React cache(): the app shell and the home/inventory page both ask for the
+  // portfolio in the same render; they now share one set of queries (APX-26).
   const effectiveRole = session.impersonating?.role ?? session.role;
-  if (effectiveRole === "admin") return getPortfolioForAdmin();
-  if (effectiveRole === "client") return getPortfolioForClient();
-  return getPortfolioForSite();
-}
+  if (effectiveRole === "admin") return getPortfolioForAdmin(session);
+  if (effectiveRole === "client") return getPortfolioForClient(session);
+  return getPortfolioForSite(session);
+});
 
 // ── Project Dashboard (§6.2) ─────────────────────────────────────────────────
 // The header (name, client, location, start, status, progress) is the same
@@ -384,10 +390,15 @@ export type ClientBillingStats = {
 
 export async function getClientBillingStats(projectId: string): Promise<ClientBillingStats> {
   const supabase = await createClient();
-  const { data: bills, error } = await supabase
-    .from("v_bill_client")
-    .select("status, net_payable")
-    .eq("project_id", projectId);
+  const [billsRes, approvalsRes] = await Promise.all([
+    supabase.from("v_bill_client").select("status, net_payable").eq("project_id", projectId),
+    supabase
+      .from("approvals")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", projectId)
+      .eq("status", "pending"),
+  ]);
+  const { data: bills, error } = billsRes;
   if (error) throw new Error(error.message);
 
   // Issued bills only (APX-32): a cancelled draft was never sent. Summed in
@@ -402,11 +413,7 @@ export async function getClientBillingStats(projectId: string): Promise<ClientBi
   const paidNet = netOf((s) => s === "paid");
   const billsSubmitted = bills.filter((b) => b.status === "submitted").length;
 
-  const { count: approvalsPending, error: apErr } = await supabase
-    .from("approvals")
-    .select("id", { count: "exact", head: true })
-    .eq("project_id", projectId)
-    .eq("status", "pending");
+  const { count: approvalsPending, error: apErr } = approvalsRes;
   if (apErr) throw new Error(apErr.message);
 
   return { billedNet, paidNet, billsSubmitted, approvalsPending: approvalsPending ?? 0 };
@@ -419,18 +426,21 @@ export type SiteStockStats = { pendingRequests: number; toReceive: number };
 
 export async function getSiteStockStats(projectId: string): Promise<SiteStockStats> {
   const supabase = await createClient();
-  const { count: pendingRequests, error } = await supabase
-    .from("v_stock_request_site")
-    .select("id", { count: "exact", head: true })
-    .eq("project_id", projectId)
-    .eq("status", "pending");
+  const [pendingRes, orderedRes] = await Promise.all([
+    supabase
+      .from("v_stock_request_site")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", projectId)
+      .eq("status", "pending"),
+    supabase
+      .from("v_stock_request_site")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", projectId)
+      .eq("status", "ordered"),
+  ]);
+  const { count: pendingRequests, error } = pendingRes;
   if (error) throw new Error(error.message);
-
-  const { count: toReceive, error: err2 } = await supabase
-    .from("v_stock_request_site")
-    .select("id", { count: "exact", head: true })
-    .eq("project_id", projectId)
-    .eq("status", "ordered");
+  const { count: toReceive, error: err2 } = orderedRes;
   if (err2) throw new Error(err2.message);
 
   return { pendingRequests: pendingRequests ?? 0, toReceive: toReceive ?? 0 };

@@ -14,10 +14,10 @@ import { billPdfJobKey } from "@/features/billing/pdf";
  * `lib/jobs/runner.ts`'s `reap()` cannot be imported directly here — it (and
  * everything under `lib/`) carries `import "server-only"`, which throws
  * outside a real Next.js server build, vitest's plain Node environment
- * included. Its reap query is a single plain UPDATE with no business logic
- * beyond the WHERE clause (the same "thin wrapper" trust every RPC-calling
- * test file already extends to `rpc_claim_jobs`/`rpc_finish_job`), so the
- * test below runs that exact query directly instead.
+ * included. Its reap is a single `rpc_reap_jobs()` call (the same "thin
+ * wrapper" trust every RPC-calling test file already extends to
+ * `rpc_claim_jobs`/`rpc_finish_job`), so the test below calls that RPC
+ * directly instead.
  *
  * What this file does NOT cover: `confirmUpload`'s HeadObject check, a real
  * thumbnail render, and the orphan sweep actually deleting anything — all
@@ -259,13 +259,11 @@ describe("T-23: the reaper requeues a job whose lease_until has passed", () => {
     );
     cleanupJobIds.push(stuck.id, fresh.id);
 
-    // lib/jobs/runner.ts's reap(), verbatim.
-    const requeued = await sql`
-      update public.jobs
-         set status = 'pending', lease_until = null, last_error = 'lease expired — worker timed out'
-       where status = 'running' and lease_until < now()
-       returning id`;
-    expect(requeued.length).toBeGreaterThanOrEqual(1);
+    // lib/jobs/runner.ts's reap() is now exactly this RPC call (APX-23,
+    // migration 20261124600001); the terminal-at-max-attempts half is
+    // tested in reliability.test.ts.
+    const counts = one(await sql`select requeued from public.rpc_reap_jobs()`, "reap counts");
+    expect(Number(counts.requeued)).toBeGreaterThanOrEqual(1);
 
     const after = one(
       await sql`select status, lease_until, last_error from public.jobs where id = ${stuck.id}`,

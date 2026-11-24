@@ -15,37 +15,33 @@ import { isPhaseBilled, phaseAllocatedChangeRefusal } from "./service";
  * arithmetic here — guard, parse, delegate, revalidate (AGENTS.md's layering
  * rule).
  *
- * seq_no for a new package/phase is "current max + 1", read then written as
- * two statements rather than a single atomic RPC. This is not the class of
- * mutation AGENTS.md's RPC rule targets (that rule is about stock and money
- * quantities changing under concurrent writers — inventory levels, bill
- * state); two admins adding a package to the same project in the same instant
- * is rare, and `packages_seq_uq` / `phases_seq_uq` (02-lld.md §3.3) turn the
- * rare collision into a rejected insert, never a silently wrong sequence.
+ * seq_no for a new package/phase is not chosen here. It used to be "current
+ * live max + 1", read then written as two statements: two admins adding at
+ * once collided on `packages_seq_uq` / `phases_seq_uq`, and because those
+ * uniques cover soft-deleted rows, a deleted package's number was handed out
+ * again and ALWAYS collided. A BEFORE INSERT trigger now allocates it under a
+ * lock on the parent row, over every row including deleted ones (migration
+ * 20261124600003, APX-45/APX-66). The insert simply omits the column.
  */
 
-async function nextSeqNo(table: "packages" | "phases", column: "project_id" | "package_id", id: string) {
-  const supabase = await createClient();
-  const query =
-    table === "packages"
-      ? supabase.from("packages").select("seq_no").eq("project_id", id)
-      : supabase.from("phases").select("seq_no").eq("package_id", id);
-  const { data, error } = await query.is("deleted_at", null).order("seq_no", { ascending: false }).limit(1);
-  if (error) throw new Error(error.message);
-  return (data[0]?.seq_no ?? 0) + 1;
+/** Maps the one Postgres error a create can still raise for a reason the
+ *  user can act on — a unique violation, e.g. racing a data repair that set
+ *  an explicit seq_no — to the CONFLICT domain code, so the user sees
+ *  "someone else changed this" rather than "Something went wrong". */
+function createError(error: { code?: string; message: string }): Error {
+  if (error.code === "23505") return new Error(`CONFLICT: ${error.message}`);
+  return new Error(error.message);
 }
 
 export const createPackage = adminAction
   .inputSchema(createPackageSchema)
   .action(async ({ parsedInput, ctx }) => {
     const supabase = await createClient();
-    const seqNo = await nextSeqNo("packages", "project_id", parsedInput.projectId);
     const { data, error } = await supabase
       .from("packages")
       .insert({
         org_id: ctx.session.orgId,
         project_id: parsedInput.projectId,
-        seq_no: seqNo,
         name: parsedInput.name,
         allocated_amount: Number(parsedInput.allocatedAmount),
         internal_amount: Number(parsedInput.internalAmount),
@@ -53,7 +49,7 @@ export const createPackage = adminAction
       })
       .select("id")
       .single();
-    if (error) throw new Error(error.message);
+    if (error) throw createError(error);
 
     updateTag(`project:${parsedInput.projectId}`);
     // 'layout' revalidates this whole project subtree in one call — the
@@ -89,7 +85,11 @@ export const updatePackage = adminAction.inputSchema(updatePackageSchema).action
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) {
-    throw new Error("This package was changed by someone else. Reload to see the current values.");
+    // CONFLICT is a mapped domain code (lib/safe-action.ts): unprefixed, this
+    // reached the user as "Something went wrong" (APX-45). Progress-only
+    // writes no longer move updated_at (migration 20261124600003), so this
+    // now means a real concurrent edit of something the form shows.
+    throw new Error("CONFLICT: package was changed by someone else");
   }
 
   updateTag(`project:${data.project_id}`);
@@ -100,8 +100,8 @@ export const updatePackage = adminAction.inputSchema(updatePackageSchema).action
 /**
  * Add Phase (APX-10) — from the package's Budget tab, and from Add Task when
  * the package has no phase yet. A read-only (archived) project is refused by
- * trg_project_writable with PROJECT_ARCHIVED; a seq_no collision with a
- * concurrent add is CONFLICT (phases_seq_uq), and the person simply retries.
+ * trg_project_writable with PROJECT_ARCHIVED. seq_no is allocated by the
+ * database (trg_phases_assign_seq, APX-45), so concurrent adds do not collide.
  */
 export const createPhase = adminAction.inputSchema(createPhaseSchema).action(async ({ parsedInput, ctx }) => {
   const supabase = await createClient();
@@ -115,24 +115,19 @@ export const createPhase = adminAction.inputSchema(createPhaseSchema).action(asy
   if (pkgErr) throw new Error(pkgErr.message);
   if (!pkg) throw new Error("NOT_FOUND: package");
 
-  const seqNo = await nextSeqNo("phases", "package_id", parsedInput.packageId);
   const { data, error } = await supabase
     .from("phases")
     .insert({
       org_id: ctx.session.orgId,
       package_id: parsedInput.packageId,
       project_id: pkg.project_id,
-      seq_no: seqNo,
       name: parsedInput.name,
       allocated_amount: Number(parsedInput.allocatedAmount),
       internal_amount: Number(parsedInput.internalAmount),
     })
     .select("id")
     .single();
-  // 23505: phases_seq_uq — another admin added a phase to this package in
-  // the same instant and took this seq_no first.
-  if (error?.code === "23505") throw new Error("CONFLICT: phase seq_no taken");
-  if (error) throw new Error(error.message);
+  if (error) throw createError(error);
 
   updateTag(`project:${pkg.project_id}`);
   revalidatePath(`/projects/${pkg.project_id}`, "layout");
