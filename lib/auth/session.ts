@@ -111,6 +111,17 @@ export const getSession = cache(async (): Promise<Session | null> => {
   // database enum, which still carries the retired 'owner' value for
   // audit_log's history (D66). A JWT minted before the change could still name
   // it until it expires.
+  // APX-59: a token minted before a role change still carries the OLD role
+  // for up to its lifetime. setUserRole signs the user out everywhere, but
+  // that ends refresh tokens, not an access token already issued — and the
+  // mobile API (Bearer, no middleware round trip) verified the signature
+  // only. If the claim and the profile disagree, the token is stale: no
+  // session, so the caller signs in again and gets a fresh one.
+  if (claimRole && toRole(claimRole) !== toRole(profile.role)) {
+    console.warn(`[auth] stale role claim for user ${userId}: token predates a role change`);
+    return null;
+  }
+
   const role = toRole(claimRole ?? profile.role);
   const orgId = claimOrgId ?? profile.org_id;
 

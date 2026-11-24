@@ -1,19 +1,15 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useAction } from "next-safe-action/hooks";
-import { useApp } from "@/context/AppContext";
 import type { Role } from "@/lib/rbac/roles";
 import type { StockRequestDTO } from "@/features/stock/queries";
-import { availableTransitions, isDeadlineAtRisk } from "@/features/stock/service";
-import { transitionStockRequest } from "@/features/stock/actions";
+import { isDeadlineAtRisk } from "@/features/stock/service";
 import { todayIst } from "@/lib/dates";
 import { dmy } from "@/lib/logic";
 import { formatINR } from "@/lib/money";
 import { StockRequestStatusBadge } from "@/components/shared/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, sub } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
+import { StockRequestActions } from "./StockRequestActions";
 import { Empty } from "@/components/ui/Empty";
 
 /**
@@ -39,13 +35,10 @@ export function ReqTable({
   role: Role;
   isAdmin: boolean;
 }) {
-  const { openDialog } = useApp();
-  const router = useRouter();
   // The one "today" this business keeps (lib/dates) — the same answer on the
   // server and in any browser timezone, so the red date cannot differ between
   // the server render and hydration. Never `new Date()` here.
   const today = todayIst();
-  const transition = useAction(transitionStockRequest, { onSuccess: () => router.refresh() });
 
   const head = (
     <thead>
@@ -85,36 +78,22 @@ export function ReqTable({
     );
   }
 
-  const actionsFor = (r: StockRequestDTO) => {
-    const transitions = availableTransitions(r.status, role);
-    if (!transitions.length) return null;
-    return (
-      <div className="flex gap-1.5 flex-wrap justify-end">
-        {transitions.map((t) =>
-          t.to === "rejected" ? (
-            <Button
-              key={t.to}
-              variant="destructive"
-              size="sm"
-              onClick={() => openDialog({ kind: "rejectStockRequest", requestId: r.id })}
-            >
-              {t.label}
-            </Button>
-          ) : (
-            <Button
-              key={t.to}
-              variant={t.to === "approved" ? "primary" : "default"}
-              size="sm"
-              disabled={transition.isPending}
-              onClick={() => transition.execute({ requestId: r.id, toStatus: t.to })}
-            >
-              {t.label}
-            </Button>
-          )
-        )}
-      </div>
-    );
-  };
+  // #100 (APX-39): why a request stopped, and part-delivery remainders.
+  const statusNotes = (r: StockRequestDTO) => (
+    <>
+      {r.status === "rejected" && r.rejectedReason && (
+        <span className={`${sub} max-w-[220px] truncate`} title={r.rejectedReason}>
+          {r.rejectedReason}
+        </span>
+      )}
+      {r.status === "cancelled" && (
+        <span className={`${sub} max-w-[220px] truncate`} title={r.cancelledReason ?? undefined}>
+          {r.cancelledReason ?? "Withdrawn by the requester"}
+        </span>
+      )}
+      {r.splitFromId && r.status !== "cancelled" && <span className={sub}>Remainder of a part delivery</span>}
+    </>
+  );
 
   // Red from two business days before the needed-by date, and red from then
   // on once it has passed — while the request is still pending approval.
@@ -136,7 +115,6 @@ export function ReqTable({
       <ul className="md:hidden divide-y divide-border" aria-label="Stock requests">
         {requests.map((r) => {
           const atRisk = isDeadlineAtRisk(r.status, r.neededBy, today);
-          const actions = actionsFor(r);
           return (
             <li key={r.id} className="px-4 py-3.5">
               <div className="flex items-start justify-between gap-3">
@@ -158,7 +136,10 @@ export function ReqTable({
                   {r.requestedByName}
                 </span>
               </div>
-              {actions && <div className="mt-2.5">{actions}</div>}
+              {statusNotes(r)}
+              <div className="mt-2.5 flex justify-end">
+                <StockRequestActions request={r} role={role} />
+              </div>
             </li>
           );
         })}
@@ -198,8 +179,11 @@ export function ReqTable({
                   <td className={td}>{neededBy(r, atRisk)}</td>
                   <td className={td}>
                     <StockRequestStatusBadge status={r.status} />
+                    {statusNotes(r)}
                   </td>
-                  <td className={td}>{actionsFor(r)}</td>
+                  <td className={td}>
+                    <StockRequestActions request={r} role={role} />
+                  </td>
                 </tr>
               );
             })}

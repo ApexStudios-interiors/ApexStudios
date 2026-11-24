@@ -66,3 +66,6 @@ export const decideApprovalSchema = z
     path: ["reason"],
   });
 export type DecideApprovalInput = z.infer<typeof decideApprovalSchema>;
+
+/** APX-42: the requester withdraws a pending approval (rpc_withdraw_approval). */
+export const withdrawApprovalSchema = z.object({ approvalId: z.uuid() });

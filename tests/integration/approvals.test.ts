@@ -411,7 +411,7 @@ describe("attachments freeze on decision (migrations 0036/0037)", () => {
         mime_type: "image/jpeg",
         size_bytes: 1000,
         file_name: "sample.jpg",
-        r2_key: `test/${approval.id}/sample.jpg`,
+        r2_key: `org/${SEED.org}/project/${SEED.project}/approval/${approval.id}/${randomUUID()}-sample.jpg`,
       })
       .select("id")
       .single();
@@ -440,7 +440,7 @@ describe("attachments freeze on decision (migrations 0036/0037)", () => {
         mime_type: "image/jpeg",
         size_bytes: 1000,
         file_name: "sample2.jpg",
-        r2_key: `test/${approval.id}/sample2.jpg`,
+        r2_key: `org/${SEED.org}/project/${SEED.project}/approval/${approval.id}/${randomUUID()}-sample2.jpg`,
       })
       .select("id")
       .single();
@@ -470,7 +470,7 @@ describe("attachments freeze on decision (migrations 0036/0037)", () => {
         mime_type: "image/jpeg",
         size_bytes: 1000,
         file_name: "presubmit.jpg",
-        r2_key: `test/${approvalId}/presubmit.jpg`,
+        r2_key: `org/${SEED.org}/project/${SEED.project}/approval/${approvalId}/${randomUUID()}-presubmit.jpg`,
       })
       .select("id")
       .single();
@@ -662,7 +662,7 @@ describe("approval sample photos — cap and role (20261008090002)", () => {
       mime_type: "image/jpeg",
       size_bytes: 1000,
       file_name: `sample-${n}.jpg`,
-      r2_key: `test/${approvalId}/sample-${n}-${randomUUID()}.jpg`,
+      r2_key: `org/${SEED.org}/project/${SEED.project}/approval/${approvalId}/${randomUUID()}-sample-${n}.jpg`,
     };
   }
 

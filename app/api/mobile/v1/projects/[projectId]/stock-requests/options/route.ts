@@ -4,7 +4,7 @@ import { ForbiddenError, UnauthenticatedError, requireProjectAccess, requireRole
 import { codeFromPostgresMessage, mapDomainError } from "@/lib/safe-action";
 import { isUuid } from "@/lib/routing/slug";
 import { getBearerToken } from "@/lib/supabase/server";
-import { getMaterialSuggestions, getUnitOptions } from "@/features/stock/actions";
+import { getMaterialOptions, getMaterialSuggestions, getUnitOptions } from "@/features/stock/actions";
 import { getProjectRateVisibility } from "@/features/projects/actions";
 
 /**
@@ -59,10 +59,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
     // Admin passes implicitly; site needs a project_members row (403).
     await requireProjectAccess(session, projectId);
 
-    const [units, rateVisibility, materials] = await Promise.all([
+    const [units, rateVisibility, materials, materialItems] = await Promise.all([
       getUnitOptions(),
       getProjectRateVisibility(projectId),
       getMaterialSuggestions(),
+      getMaterialOptions(projectId),
     ]);
 
     return NextResponse.json(
@@ -70,6 +71,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
         rateVisibility,
         units: units.map((u) => ({ code: u.code, label: u.label })),
         materials,
+        // APX-15: this project's (and the central store's) items with their
+        // ids and units, so the app can send inventoryItemId. Additive.
+        materialItems,
       },
       { headers: NO_STORE }
     );

@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { moneyString } from "@/lib/money/input";
 
+/** Re-exported: features/projects/schema.ts takes it from here. */
+export { moneyString };
+
 /** 02-lld.md §7. `numeric(14,2)` amounts travel as strings end to end — the
  *  form, the action, and lib/money's Decimal arithmetic never round-trip
  *  through a JS number (docs/code-standards.md §6). `moneyString` is the
@@ -71,5 +74,8 @@ export const updatePhaseSchema = z.object({
   name: nameField.optional(),
   allocatedAmount: moneyString.optional(),
   internalAmount: moneyString.optional(),
+  /** Optimistic concurrency, exactly as updatePackageSchema: the update is
+   *  scoped to this `updated_at`, and zero rows back is a CONFLICT. */
+  updatedAt: z.string().min(1),
 });
 export type UpdatePhaseInput = z.infer<typeof updatePhaseSchema>;

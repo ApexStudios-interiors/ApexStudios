@@ -59,6 +59,8 @@ export function Header({
         <b className="text-foreground font-semibold">Failed Jobs</b>
       </>
     );
+  } else if (pathname === "/inbox") {
+    crumb = <b className="text-foreground font-semibold">Needs my action</b>;
   } else if (params?.projectId) {
     const project = projects.find((p) => p.id === params.projectId);
     const section = sectionFromPath(pathname, params.projectId);

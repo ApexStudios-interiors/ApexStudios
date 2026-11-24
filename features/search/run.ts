@@ -17,11 +17,10 @@ import type { SearchResultDTO } from "./service";
  */
 export async function searchFor(session: Session, query: string): Promise<SearchResultDTO[]> {
   const supabase = await createClient();
-  const { data: allowed, error } = await supabase.rpc("rpc_check_rate_limit", {
-    p_action: "search",
-    p_max_per_window: 20,
-    p_window_seconds: 60,
-  });
+  // The limit itself (20 per 60 s) is decided in the database, per action —
+  // a caller that could pass its own window could reset its own limit
+  // (APX-56, migration 20261124100001).
+  const { data: allowed, error } = await supabase.rpc("rpc_check_rate_limit", { p_action: "search" });
   if (error) throw new Error(error.message);
   if (!allowed) throw new Error("RATE_LIMITED: too many searches, slow down");
 

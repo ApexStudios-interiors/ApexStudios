@@ -9,6 +9,7 @@ import { useApp } from "@/context/AppContext";
 import { TASK_NAME_MAX, createTaskSchema } from "@/features/schedule/schema";
 import { createTask, getOwnerOptions, getPhaseOptions } from "@/features/schedule/actions";
 import { DatePicker } from "@/components/shared/DatePicker";
+import { Button } from "@/components/ui/button";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
 import {
   Select,
@@ -28,8 +29,8 @@ import {
  * name is not representable now, the same class of gap Build 04 found for
  * package leads).
  */
-export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: string }) {
-  const { closeDialog, toast } = useApp();
+export function AddTaskDialog({ projectId, moduleId }: { projectId: string; moduleId: string }) {
+  const { closeDialog, openDialog, toast, role } = useApp();
   const router = useRouter();
   const [phases, setPhases] = useState<{ id: string; name: string }[] | null>(null);
   const [owners, setOwners] = useState<{ id: string; name: string }[] | null>(null);
@@ -158,10 +159,24 @@ export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: strin
             />
           </Field>
           {noPhases ? (
-            <p className="text-xs text-muted-foreground mt-1">
-              This package has no phases yet. Add a phase to it before adding a task — a task must belong to
-              one.
-            </p>
+            // APX-10: an admin can create the missing phase right here and is
+            // brought back to this dialog; anyone else is told who can.
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <p className="text-xs text-muted-foreground">
+                This package has no phases yet, and a task must belong to one.
+                {role === "admin" ? "" : " Ask an admin to add a phase on the package's Phases tab."}
+              </p>
+              {role === "admin" && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  onClick={() => openDialog({ kind: "addPhase", projectId, moduleId, thenAddTask: true })}
+                >
+                  Create phase
+                </Button>
+              )}
+            </div>
           ) : (
             errors.phaseId && <p className="text-xs text-destructive mt-1">{errors.phaseId.message}</p>
           )}

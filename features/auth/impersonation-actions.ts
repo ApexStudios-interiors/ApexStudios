@@ -4,10 +4,10 @@ import "server-only";
 import { z } from "zod";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { adminAction, authedAction } from "@/lib/safe-action";
+import { previewAllowedAction } from "@/lib/safe-action";
 import { createClient } from "@/lib/supabase/server";
 import { encodePreviewCookie, PREVIEW_COOKIE_NAME, PREVIEW_ROLES } from "@/lib/auth/impersonation";
-import { ForbiddenError } from "@/lib/auth/session";
+import { ForbiddenError, requireRole } from "@/lib/auth/session";
 
 /**
  * D20. Read the module doc on lib/auth/session.ts's `impersonating` field
@@ -23,7 +23,18 @@ const startSchema = z.object({
   projectId: z.string().min(1),
 });
 
-export const startPreview = adminAction.inputSchema(startSchema).action(async ({ parsedInput }) => {
+/**
+ * Starting, switching and stopping a preview are the actions a preview must
+ * still be able to run (APX-25: every other guarded action refuses while
+ * previewing — lib/safe-action.ts). Admin-only against the REAL role, exactly
+ * as adminAction checks it.
+ */
+const previewControlAction = previewAllowedAction.use(async ({ next }) => {
+  const session = await requireRole(["admin"]);
+  return next({ ctx: { session } });
+});
+
+export const startPreview = previewControlAction.inputSchema(startSchema).action(async ({ parsedInput }) => {
   // D66: only an admin can reach this action at all, so previewing as Admin
   // would be previewing as yourself — it shapes no read differently and would
   // put an ordinary view behind a banner warning that writes are refused. It
@@ -56,7 +67,7 @@ export const startPreview = adminAction.inputSchema(startSchema).action(async ({
   return { ok: true as const };
 });
 
-export const stopPreview = authedAction.action(async ({ ctx }) => {
+export const stopPreview = previewAllowedAction.action(async ({ ctx }) => {
   if (ctx.session.impersonating) {
     const supabase = await createClient();
     await supabase.rpc("rpc_log_impersonation", {

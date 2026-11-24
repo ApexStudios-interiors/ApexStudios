@@ -13,6 +13,7 @@ import { td, th, sub } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { DialogShell } from "@/components/ui/DialogShell";
 import { Empty } from "@/components/ui/Empty";
+import { WithdrawApprovalButton } from "./WithdrawApprovalButton";
 
 /** Shown on the focusable wrapper of a decided row's disabled "Add photos". */
 const ADD_PHOTOS_CLOSED = "Photos can only be added while the approval is pending.";
@@ -135,16 +136,29 @@ export function ApprovalTable({
     }
     if (mayAddPhotos) {
       return (
-        <DisabledReason reason={a.canAddPhotos ? null : ADD_PHOTOS_CLOSED}>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={!a.canAddPhotos}
-            onClick={() => openDialog({ kind: "approvalPhotos", approvalId: a.id, projectId, item: a.item })}
-          >
-            Add photos
-          </Button>
-        </DisabledReason>
+        <div className="flex gap-1.5 flex-wrap justify-end">
+          <DisabledReason reason={a.canAddPhotos ? null : ADD_PHOTOS_CLOSED}>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!a.canAddPhotos}
+              onClick={() =>
+                openDialog({
+                  kind: "approvalPhotos",
+                  approvalId: a.id,
+                  projectId,
+                  item: a.item,
+                  // APX-46: the uploader offers only the slots left.
+                  existingPhotos: a.attachments.length,
+                })
+              }
+            >
+              Add photos
+            </Button>
+          </DisabledReason>
+          {/* APX-42: the requester's own pending approval. */}
+          {a.canWithdraw && <WithdrawApprovalButton approvalId={a.id} refNo={a.refNo} item={a.item} />}
+        </div>
       );
     }
     return null;

@@ -46,6 +46,13 @@ export const stockRequests = pgTable(
     rejectedReason: text("rejected_reason"),
     /** Half of the double-billing guard. The FK is added in migration 0010. */
     billedOnBillId: uuid("billed_on_bill_id"),
+    /** 20261124400002 (APX-42): a cancelled request — when, by whom, why. */
+    cancelledAt: tsz("cancelled_at"),
+    cancelledBy: uuid("cancelled_by").references(() => profiles.id),
+    cancelledReason: text("cancelled_reason"),
+    /** 20261124400002 (APX-69): the request this one is the undelivered
+     *  remainder of, after a part delivery. */
+    splitFromId: uuid("split_from_id"),
     ...auditColumns,
   },
   (t) => [

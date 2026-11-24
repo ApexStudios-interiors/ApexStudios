@@ -51,3 +51,17 @@ export function billPdfJobKey(billId: string, revision: number): string {
 export function billPdfFileName(billNo: string, revision: number): string {
   return revision > FIRST_REVISION ? `${billNo}-R${revision}.pdf` : `${billNo}.pdf`;
 }
+
+/**
+ * Whether a bill in this status has an invoice to render (APX-35 / APX-62).
+ * Only an ISSUED bill: submitted, or certified / paid after it. A draft — never
+ * sent, or sent back by the client's rejection before the job ran — and a
+ * cancelled draft have none; rendering one would turn unsent figures into a
+ * downloadable invoice. Certified and paid are included deliberately: a
+ * client may certify before the job has run (or a failed job is retried
+ * later), and the figures are immutable from submitted onward, so the
+ * document is the same one it would have been.
+ */
+export function billHasInvoice(status: string): boolean {
+  return status === "submitted" || status === "certified" || status === "paid";
+}
