@@ -95,13 +95,14 @@ async function insertRequest(o: {
   rate?: number | null;
   material?: string;
   requestedBy?: string;
+  phaseId?: string | null;
 }): Promise<string> {
   const rows = await sql`
     insert into public.stock_requests (
-      org_id, project_id, package_id, ref_no, material_name, qty, unit, rate, status,
+      org_id, project_id, package_id, phase_id, ref_no, material_name, qty, unit, rate, status,
       requested_by, created_by, approved_by, approved_at, ordered_at, delivered_at
     ) values (
-      ${SEED.org}, ${SEED.project}, ${SEED.poolPackage}, ${"SR-FIX-" + tag()},
+      ${SEED.org}, ${SEED.project}, ${SEED.poolPackage}, ${o.phaseId ?? null}, ${"SR-FIX-" + tag()},
       ${o.material ?? "Fixes test material"}, ${o.qty ?? 10}, 'bag',
       ${o.rate === undefined ? 100 : o.rate}, ${o.status},
       ${o.requestedBy ?? SEED.siteProfile}, ${o.requestedBy ?? SEED.siteProfile},
@@ -192,7 +193,9 @@ describe("APX-14 — a rate on approval, and set until delivery", () => {
   });
 
   it("approving with a rate stores it, so committed and Billable Now are qty × rate", async () => {
-    const id = await insertRequest({ status: "pending", rate: null, qty: 4 });
+    // On a phase: package-level material is not billed as an advance (D69 R4),
+    // so only a phased request reaches Billable Now.
+    const id = await insertRequest({ status: "pending", rate: null, qty: 4, phaseId: SEED.phaseTiling });
     const admin = await client(ADMIN_EMAIL);
     const before = one(
       await sql`select coalesce(committed, 0)::float as c from public.v_package_rollup where package_id = ${SEED.poolPackage}`,

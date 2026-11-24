@@ -190,13 +190,13 @@ describe("v_notifications — status changes and the inbox (D72)", () => {
 });
 
 describe("v_notifications — anon", () => {
-  it("gets zero rows — this project's table grants are broad by platform default, RLS is the actual boundary", async () => {
+  it("sees nothing — zero rows, or a permission refusal now that anon has no SELECT on projects (APX-09)", async () => {
     const supabase = anonClient();
     const { data, error } = await supabase
       .from("v_notifications")
       .select("kind")
       .eq("project_id", SEED.project);
-    expect(error).toBeNull();
-    expect(data).toEqual([]);
+    if (error) expect(error.code).toBe("42501");
+    else expect(data).toEqual([]);
   });
 });

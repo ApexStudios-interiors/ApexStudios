@@ -301,9 +301,19 @@ describe("APX-30 — the preview is the bill", () => {
     const m2 = await insertMaterial({ qty: 7, rate: 123.45, phaseId: p3 });
 
     const selection = [ph(p1), ph(p2), mat(m2)];
-    const viewRows = await sql`
-      select source_type, amount, internal_cost, mas_recovery from public.v_billable_now
-       where project_id = ${SEED.project} and source_id = any(${[p1, p2, m2]})`;
+    // Read the view as the admin the app reads it as: fn_cost_to_client_factor
+    // returns NULL to anyone else (APX-01, 20261124100001), and this raw
+    // connection has no JWT claims of its own.
+    const viewRows = await sql.begin(async (tx) => {
+      await tx`select set_config('request.jwt.claims', ${JSON.stringify({
+        sub: SEED.adminProfile,
+        role: "authenticated",
+        app_metadata: { app_role: "admin", org_id: SEED.org },
+      })}, true)`;
+      return tx`
+        select source_type, amount, internal_cost, mas_recovery from public.v_billable_now
+         where project_id = ${SEED.project} and source_id = any(${[p1, p2, m2]})`;
+    });
     expect(viewRows).toHaveLength(3);
     const project = one(
       await sql`select gst_rate_pct, retention_pct, tds_pct, mobilisation_advance, mobilisation_recovered, mobilisation_recovery_pct
