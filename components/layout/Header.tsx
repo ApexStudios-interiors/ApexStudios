@@ -89,21 +89,25 @@ export function Header({
       <>
         {crumbs.map((c, i) => (
           <Fragment key={i}>
-            {i > 0 && <span>/</span>}
-            {c.isLink && c.href ? (
-              <Link
-                href={c.href}
-                className={`rounded-sm hover:text-foreground hover:underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
-                  i > 0 ? "font-semibold" : ""
-                }`}
-              >
-                {c.label}
-              </Link>
-            ) : i > 0 ? (
-              <b className="text-foreground font-semibold">{c.label}</b>
-            ) : (
-              <span>{c.label}</span>
-            )}
+            {/* On a phone only the last crumb shows — the project is in the
+                drawer — so it is never cut off mid-word (APX-16). */}
+            {i > 0 && <span className="max-md:hidden">/</span>}
+            <span className={i < crumbs.length - 1 ? "max-md:hidden" : "min-w-0 truncate"}>
+              {c.isLink && c.href ? (
+                <Link
+                  href={c.href}
+                  className={`rounded-sm hover:text-foreground hover:underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+                    i > 0 ? "font-semibold" : ""
+                  }`}
+                >
+                  {c.label}
+                </Link>
+              ) : i > 0 ? (
+                <b className="text-foreground font-semibold">{c.label}</b>
+              ) : (
+                <span>{c.label}</span>
+              )}
+            </span>
           </Fragment>
         ))}
       </>
