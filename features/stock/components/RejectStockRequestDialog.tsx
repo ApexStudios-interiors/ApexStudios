@@ -29,7 +29,7 @@ export function RejectStockRequestDialog({ requestId }: { requestId: string }) {
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm({ resolver: zodResolver(rejectSchema), defaultValues: { note: "" } });
 
   const reject = useAction(transitionStockRequest, {
@@ -49,6 +49,7 @@ export function RejectStockRequestDialog({ requestId }: { requestId: string }) {
       title="Reject Stock Request"
       okLabel={reject.isPending ? "Rejecting…" : "Reject"}
       okPending={reject.isPending}
+      dirty={isDirty}
       onClose={closeDialog}
       onOk={onSubmit}
     >

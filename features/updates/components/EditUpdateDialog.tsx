@@ -38,6 +38,7 @@ export function EditUpdateDialog({ updateId, body: initialBody }: { updateId: st
       title="Edit Update"
       okLabel={pending ? "Saving…" : "Save"}
       okPending={pending}
+      dirty={body !== initialBody}
       onClose={closeDialog}
       onOk={onSave}
     >

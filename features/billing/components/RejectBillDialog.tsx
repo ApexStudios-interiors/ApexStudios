@@ -26,7 +26,7 @@ export function RejectBillDialog({ billId, refNo }: { billId: string; refNo: str
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm({ resolver: zodResolver(rejectSchema), defaultValues: { reason: "" } });
 
   const reject = useAction(rejectBill, {
@@ -45,6 +45,7 @@ export function RejectBillDialog({ billId, refNo }: { billId: string; refNo: str
       description={refNo}
       okLabel={reject.isPending ? "Rejecting…" : "Reject"}
       okPending={reject.isPending}
+      dirty={isDirty}
       onClose={closeDialog}
       onOk={onSubmit}
     >

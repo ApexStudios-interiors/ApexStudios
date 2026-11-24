@@ -6,7 +6,8 @@ import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
-import { createProjectSchema, packageNameMessage } from "@/features/projects/schema";
+import { PROJECT_NAME_MAX, createProjectSchema, packageNameMessage } from "@/features/projects/schema";
+import { todayIst } from "@/lib/dates";
 import { isValidPackageName, normalisePackageNames } from "@/features/projects/service";
 import {
   createProject,
@@ -37,7 +38,7 @@ export function AddProjectDialog() {
   useEffect(() => {
     getClientOptions()
       .then(setClients)
-      .catch(() => toast("Could not load clients."));
+      .catch(() => toast("Could not load clients.", "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -45,7 +46,7 @@ export function AddProjectDialog() {
     register,
     control,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm({
     // No explicit generic — `packages`' `.default([])` gives the schema's
     // input and output types different optionality for that field, which a
@@ -53,7 +54,9 @@ export function AddProjectDialog() {
     // it infer from the resolver is the pattern @hookform/resolvers documents
     // for a schema with any `.default()`.
     resolver: zodResolver(createProjectSchema),
-    defaultValues: { name: "", clientId: "", location: "", startDate: "", packages: [] },
+    // APX-40: Start Date defaults to today (IST calendar day) — a blank one
+    // used to make Create do nothing at all.
+    defaultValues: { name: "", clientId: "", location: "", startDate: todayIst(), packages: [] },
   });
 
   const create = useAction(createProject, {
@@ -129,7 +132,7 @@ export function AddProjectDialog() {
             return;
           }
         } catch {
-          toast("Could not check for an existing project with this name.");
+          toast("Could not check for an existing project with this name.", "error");
         } finally {
           setCheckingDuplicate(false);
         }
@@ -151,16 +154,18 @@ export function AddProjectDialog() {
       title="New Project"
       okLabel={create.isPending ? "Creating…" : "Create"}
       okPending={create.isPending || checkingDuplicate}
+      dirty={isDirty || packagesText.trim() !== ""}
       onClose={closeDialog}
       onOk={onSubmit}
     >
-      <form onSubmit={onSubmit} className="grid grid-cols-2 gap-3.5">
-        <div className="col-span-2">
+      <form onSubmit={onSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        <div className="sm:col-span-2">
           <Field label="Project Name" htmlFor="ap-name">
             <input
               id="ap-name"
               className={inputClass}
               placeholder="Model Villas Interiors"
+              maxLength={PROJECT_NAME_MAX}
               {...register("name")}
             />
           </Field>
@@ -208,7 +213,7 @@ export function AddProjectDialog() {
           </Field>
           {errors.location && <p className="text-xs text-destructive mt-1">{errors.location.message}</p>}
         </div>
-        <Field label="Start Date" htmlFor="ap-start">
+        <Field label="Start Date" htmlFor="ap-start" error={errors.startDate?.message}>
           <Controller
             control={control}
             name="startDate"
@@ -224,7 +229,7 @@ export function AddProjectDialog() {
             )}
           />
         </Field>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <Field
             label="Packages"
             hint="Comma separated. Letters, numbers, spaces and & - . / only, up to 60 characters each."
@@ -245,7 +250,7 @@ export function AddProjectDialog() {
           {packagesError && <p className="text-xs text-destructive mt-1">{packagesError}</p>}
         </div>
         {duplicateShown && (
-          <div className="col-span-2 rounded-lg bg-status-warning-bg px-3 py-2.5">
+          <div className="sm:col-span-2 rounded-lg bg-status-warning-bg px-3 py-2.5">
             <p className="text-[12.5px] text-status-warning">
               A project called “{duplicateShown.name}” already exists. You can still create this one — its
               project code will be different — but check it is not a duplicate first.
@@ -256,7 +261,7 @@ export function AddProjectDialog() {
           </div>
         )}
         {create.result.serverError && (
-          <p className="col-span-2 text-[12.5px] text-destructive">{create.result.serverError}</p>
+          <p className="sm:col-span-2 text-[12.5px] text-destructive">{create.result.serverError}</p>
         )}
       </form>
     </DialogShell>

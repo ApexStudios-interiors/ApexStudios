@@ -9,6 +9,7 @@ import { projectCrumbs } from "@/lib/rbac/breadcrumbs";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { NotificationsMenu } from "@/components/layout/NotificationsMenu";
 import { SearchBar } from "@/components/layout/SearchBar";
+import { MobileNav } from "@/components/layout/MobileNav";
 import type { NotificationDTO } from "@/features/notifications/queries";
 import type { NavProject } from "@/components/layout/nav-project";
 import { withAmbiguityFlags } from "@/lib/routing/paths";
@@ -48,6 +49,16 @@ export function Header({
     crumb = <b className="text-foreground font-semibold">Users</b>;
   } else if (pathname === "/inventory") {
     crumb = <b className="text-foreground font-semibold">Inventory</b>;
+  } else if (pathname === "/docs") {
+    crumb = <b className="text-foreground font-semibold">Docs</b>;
+  } else if (pathname === "/ops/jobs") {
+    crumb = (
+      <>
+        <span>Studio</span>
+        <span>/</span>
+        <b className="text-foreground font-semibold">Failed Jobs</b>
+      </>
+    );
   } else if (params?.projectId) {
     const project = projects.find((p) => p.id === params.projectId);
     const section = sectionFromPath(pathname, params.projectId);
@@ -78,21 +89,25 @@ export function Header({
       <>
         {crumbs.map((c, i) => (
           <Fragment key={i}>
-            {i > 0 && <span>/</span>}
-            {c.isLink && c.href ? (
-              <Link
-                href={c.href}
-                className={`rounded-sm hover:text-foreground hover:underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
-                  i > 0 ? "font-semibold" : ""
-                }`}
-              >
-                {c.label}
-              </Link>
-            ) : i > 0 ? (
-              <b className="text-foreground font-semibold">{c.label}</b>
-            ) : (
-              <span>{c.label}</span>
-            )}
+            {/* On a phone only the last crumb shows — the project is in the
+                drawer — so it is never cut off mid-word (APX-16). */}
+            {i > 0 && <span className="max-md:hidden">/</span>}
+            <span className={i < crumbs.length - 1 ? "max-md:hidden" : "min-w-0 truncate"}>
+              {c.isLink && c.href ? (
+                <Link
+                  href={c.href}
+                  className={`rounded-sm hover:text-foreground hover:underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+                    i > 0 ? "font-semibold" : ""
+                  }`}
+                >
+                  {c.label}
+                </Link>
+              ) : i > 0 ? (
+                <b className="text-foreground font-semibold">{c.label}</b>
+              ) : (
+                <span>{c.label}</span>
+              )}
+            </span>
           </Fragment>
         ))}
       </>
@@ -100,12 +115,16 @@ export function Header({
   }
 
   return (
-    <div className="h-16 flex items-center gap-3 px-7 border-b border-border sticky top-0 bg-background z-[5]">
-      <div className="flex items-center gap-2 text-[13.5px] text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
+    <div className="h-14 md:h-16 flex items-center gap-2 md:gap-3 px-4 md:px-7 border-b border-border sticky top-0 bg-background z-[5]">
+      <MobileNav projects={projects} />
+      <nav
+        aria-label="Breadcrumb"
+        className="min-w-0 flex items-center gap-2 text-[13.5px] text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis"
+      >
         {crumb}
-      </div>
+      </nav>
       <div className="flex-1" />
-      <div className="flex items-center gap-3">
+      <div className="flex flex-none items-center gap-1.5 md:gap-3">
         <SearchBar />
         <NotificationsMenu items={notifications} />
         <ThemeToggle />

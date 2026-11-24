@@ -54,6 +54,7 @@ export function ApprovalPhotosDialog({
       description={item}
       okLabel={pending ? "Uploading…" : "Upload"}
       okPending={pending}
+      dirty={attachmentIds.length > 0}
       onClose={closeDialog}
       onOk={onSubmit}
     >

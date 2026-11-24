@@ -273,6 +273,21 @@ export const GLOSSARY: GlossaryGroup[] = [
         definition:
           "A permanent record of who did what and when: status changes, password resets, preview sessions. It is never edited or deleted.",
       },
+      {
+        term: "Using the app on a phone",
+        definition:
+          "Tap ☰ at the top left for the same menu the sidebar shows on a computer — projects, sections, packages and your account — and the magnifier for search. Approvals, Stock Requests and Bills show as cards with their buttons at the bottom. Forms open full screen; if you have typed something, closing one asks “Discard changes?” first.",
+      },
+      {
+        term: "Amounts in forms",
+        definition:
+          "Type money the usual way — 1,80,00,000 or ₹45,000.50 both work — and the amount is shown back under the box so you can check it before saving.",
+      },
+      {
+        term: "Greyed-out button",
+        definition:
+          "Hover over it, or Tab to it, to see why it is not available — for example why a user cannot be deactivated, or why photos can no longer be added to a decided approval.",
+      },
     ],
   },
 ];

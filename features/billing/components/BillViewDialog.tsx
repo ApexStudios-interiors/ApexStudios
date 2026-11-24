@@ -54,7 +54,7 @@ export function BillViewDialog({ billId }: { billId: string }) {
   useEffect(() => {
     getBillDetailForDialog(billId)
       .then(setDetail)
-      .catch(() => toast("Could not load this bill."));
+      .catch(() => toast("Could not load this bill.", "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once for this dialog instance
   }, [billId]);
 

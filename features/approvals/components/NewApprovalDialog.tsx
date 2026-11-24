@@ -67,7 +67,7 @@ export function NewApprovalDialog({
         setPackages(opts);
         setPackageId((current) => current || (opts[0]?.id ?? ""));
       })
-      .catch(() => toast("Could not load packages."));
+      .catch(() => toast("Could not load packages.", "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once for this dialog instance, matching PostUpdateDialog's own pattern
   }, [projectId]);
 
@@ -75,7 +75,7 @@ export function NewApprovalDialog({
     if (!packageId) return;
     getPhaseOptions(packageId)
       .then(setPhases)
-      .catch(() => toast("Could not load phases."));
+      .catch(() => toast("Could not load phases.", "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [packageId]);
 
@@ -126,10 +126,11 @@ export function NewApprovalDialog({
       description="Sent to the client for sign-off."
       okLabel={pending ? "Sending…" : "Send"}
       okPending={pending}
+      dirty={note.trim() !== "" || attachmentIds.length > 0 || item !== (supersedes?.item ?? "")}
       onClose={closeDialog}
       onOk={onSubmit}
     >
-      <div className="grid grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         <Field label="Package" htmlFor="na-package">
           {/* State keeps "" for "no package" (the schema's own shape); Base UI
               wants null, so map at the boundary in both directions. Until the
@@ -206,7 +207,7 @@ export function NewApprovalDialog({
         <Field label="Needed By" htmlFor="na-needed">
           <DatePicker id="na-needed" value={neededBy} onChange={setNeededBy} />
         </Field>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <Field label="Item" htmlFor="na-item">
             <input
               id="na-item"
@@ -217,7 +218,7 @@ export function NewApprovalDialog({
             />
           </Field>
         </div>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <Field label="Note" htmlFor="na-note">
             <textarea
               id="na-note"
@@ -228,7 +229,7 @@ export function NewApprovalDialog({
             />
           </Field>
         </div>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <Field label="Sample Photos">
             <FileUploader
               projectId={projectId}
@@ -241,7 +242,7 @@ export function NewApprovalDialog({
             />
           </Field>
         </div>
-        {error && <p className="col-span-2 text-[12.5px] text-destructive">{error}</p>}
+        {error && <p className="sm:col-span-2 text-[12.5px] text-destructive">{error}</p>}
       </div>
     </DialogShell>
   );

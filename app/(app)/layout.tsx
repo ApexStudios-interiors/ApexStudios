@@ -77,6 +77,7 @@ export default async function AppShellLayout({ children }: { children: React.Rea
     id: p.id,
     code: p.code,
     name: p.name,
+    client: p.client,
     packages: packagesByProject[p.id] ?? [],
     pendingRequests: pendingRequests[p.id] ?? 0,
     pendingApprovals: pendingApprovals[p.id] ?? 0,
@@ -87,11 +88,15 @@ export default async function AppShellLayout({ children }: { children: React.Rea
     <SessionProvider session={session}>
       <AppProvider initialRole={effectiveRole}>
         {session.impersonating && <PreviewBanner role={session.impersonating.role} />}
-        <div className="grid grid-cols-[250px_1fr] min-h-screen">
+        {/* APX-16: one column below md — Sidebar hides itself and the Header's
+            menu button opens the same nav in a drawer. `min-w-0` on the content
+            column is what lets a wide table scroll inside its own container
+            instead of widening the page. */}
+        <div className="md:grid md:grid-cols-[250px_1fr] min-h-screen">
           <Sidebar projects={projects} />
           <div className="min-w-0">
             <Header notifications={notifications} projects={projects} />
-            <div className="p-7 max-w-[1280px]">{children}</div>
+            <main className="p-4 md:p-7 max-w-[1280px] min-w-0">{children}</main>
           </div>
         </div>
         <DialogHost />

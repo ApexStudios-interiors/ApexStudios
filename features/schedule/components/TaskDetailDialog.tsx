@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useOptimistic, useState, useTransition } from "react";
+import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
-import { updateTaskSchema } from "@/features/schedule/schema";
+import { TASK_NAME_MAX, TASK_NOTE_MAX, updateTaskSchema } from "@/features/schedule/schema";
 import { updateTask, setTaskProgress, getTaskForEdit, type TaskForEdit } from "@/features/schedule/actions";
 import { DatePicker } from "@/components/shared/DatePicker";
 import { DialogShell, Field, inputClass, textareaClass } from "@/components/ui/DialogShell";
@@ -35,6 +35,9 @@ export function TaskDetailDialog({ taskId }: { projectId: string; moduleId: stri
   const [current, setCurrent] = useState<TaskForEdit | null | undefined>(undefined);
   const [confirmedProgress, setConfirmedProgress] = useState(0);
   const [optimisticProgress, setOptimisticProgress] = useOptimistic(confirmedProgress);
+  /** The slider's position while it is being moved, before it is committed. */
+  const [draft, setDraft] = useState<number | null>(null);
+  const shownProgress = draft ?? optimisticProgress;
   const [, startTransition] = useTransition();
 
   useEffect(() => {
@@ -44,7 +47,7 @@ export function TaskDetailDialog({ taskId }: { projectId: string; moduleId: stri
         if (t) setConfirmedProgress(t.progressPct);
       })
       .catch(() => {
-        toast("Could not load this task.");
+        toast("Could not load this task.", "error");
         setCurrent(null);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -52,12 +55,38 @@ export function TaskDetailDialog({ taskId }: { projectId: string; moduleId: stri
 
   const progressAction = useAction(setTaskProgress);
 
+  // APX-47: arrow keys / Page Up / Home on the slider used to move it without
+  // ever saving. A keyboard change now commits after a short pause (so ten
+  // presses are one request, not ten), and leaving the slider commits at once.
+  const keyCommitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastCommitted = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (keyCommitTimer.current) clearTimeout(keyCommitTimer.current);
+    },
+    []
+  );
+  const commitIfChanged = (pct: number) => {
+    if (keyCommitTimer.current) clearTimeout(keyCommitTimer.current);
+    keyCommitTimer.current = null;
+    if (pct === (lastCommitted.current ?? confirmedProgress)) {
+      setDraft(null);
+      return;
+    }
+    commitProgress(pct);
+  };
+
   function commitProgress(pct: number) {
+    lastCommitted.current = pct;
     startTransition(async () => {
       setOptimisticProgress(pct);
+      // A transition update: the draft gives way to the optimistic value only
+      // when this settles, so the slider never flickers back mid-save.
+      setDraft(null);
       const result = await progressAction.executeAsync({ id: taskId, progressPct: pct });
       if (result?.serverError) {
-        toast(result.serverError);
+        toast(result.serverError, "error");
+        lastCommitted.current = null;
         // confirmedProgress stays at the old value on purpose — the
         // optimistic override reverts to it once this transition settles.
       } else {
@@ -71,7 +100,7 @@ export function TaskDetailDialog({ taskId }: { projectId: string; moduleId: stri
     control,
     handleSubmit,
     reset,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm({
     resolver: zodResolver(updateTaskSchema),
     defaultValues: { id: taskId },
@@ -112,20 +141,33 @@ export function TaskDetailDialog({ taskId }: { projectId: string; moduleId: stri
       title={current.name}
       okLabel={update.isPending ? "Saving…" : "Save"}
       okPending={update.isPending}
+      dirty={isDirty}
       onClose={closeDialog}
       onOk={onSubmit}
     >
-      <form onSubmit={onSubmit} className="grid grid-cols-2 gap-3.5">
-        <div className="col-span-2">
-          <Field label="Progress" hint={`${optimisticProgress}%`}>
+      <form onSubmit={onSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        <div className="sm:col-span-2">
+          <Field
+            label="Progress"
+            htmlFor="td-progress"
+            hint={`${shownProgress}% · Saves immediately${progressAction.isPending ? " — saving…" : ""}`}
+          >
             <input
+              id="td-progress"
               type="range"
               min={0}
               max={100}
               step={10}
-              value={optimisticProgress}
-              onChange={(e) => setOptimisticProgress(+e.target.value)}
-              onPointerUp={(e) => commitProgress(+e.currentTarget.value)}
+              value={shownProgress}
+              aria-valuetext={`${shownProgress}%`}
+              onChange={(e) => setDraft(+e.target.value)}
+              onPointerUp={(e) => commitIfChanged(+e.currentTarget.value)}
+              onKeyUp={(e) => {
+                const value = +e.currentTarget.value;
+                if (keyCommitTimer.current) clearTimeout(keyCommitTimer.current);
+                keyCommitTimer.current = setTimeout(() => commitIfChanged(value), 700);
+              }}
+              onBlur={(e) => commitIfChanged(+e.currentTarget.value)}
               className="w-full accent-current"
             />
             {/* Quick picks — the same save as releasing the slider
@@ -137,13 +179,11 @@ export function TaskDetailDialog({ taskId }: { projectId: string; moduleId: stri
                   key={pct}
                   type="button"
                   size="sm"
-                  variant={optimisticProgress === pct ? "primary" : "default"}
-                  aria-pressed={optimisticProgress === pct}
+                  variant={shownProgress === pct ? "primary" : "default"}
+                  aria-pressed={shownProgress === pct}
                   className="flex-1 tabular-nums"
                   disabled={progressAction.isPending}
-                  onClick={() => {
-                    if (pct !== optimisticProgress) commitProgress(pct);
-                  }}
+                  onClick={() => commitIfChanged(pct)}
                 >
                   {pct}%
                 </Button>
@@ -151,13 +191,19 @@ export function TaskDetailDialog({ taskId }: { projectId: string; moduleId: stri
             </div>
           </Field>
         </div>
-        <div className="col-span-2">
-          <Field label="Task Name" htmlFor="td-name">
-            <input id="td-name" className={inputClass} {...register("name")} />
+        <div className="sm:col-span-2">
+          <Field label="Task Name" htmlFor="td-name" error={errors.name?.message}>
+            <input
+              id="td-name"
+              className={inputClass}
+              maxLength={TASK_NAME_MAX}
+              aria-invalid={!!errors.name}
+              aria-describedby={errors.name ? "td-name-error" : undefined}
+              {...register("name")}
+            />
           </Field>
-          {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
         </div>
-        <Field label="Start Date" htmlFor="td-start">
+        <Field label="Start Date" htmlFor="td-start" error={errors.startDate?.message}>
           <Controller
             control={control}
             name="startDate"
@@ -173,23 +219,32 @@ export function TaskDetailDialog({ taskId }: { projectId: string; moduleId: stri
             )}
           />
         </Field>
-        <Field label="Duration (weeks)" htmlFor="td-duration">
+        <Field label="Duration (weeks)" htmlFor="td-duration" error={errors.durationWeeks?.message}>
           <input
             id="td-duration"
             type="number"
+            inputMode="numeric"
             min={1}
             max={104}
             className={inputClass}
+            aria-invalid={!!errors.durationWeeks}
+            aria-describedby={errors.durationWeeks ? "td-duration-error" : undefined}
             {...register("durationWeeks")}
           />
         </Field>
-        <div className="col-span-2">
-          <Field label="Note" htmlFor="td-note">
-            <textarea id="td-note" className={textareaClass} placeholder="Optional" {...register("note")} />
+        <div className="sm:col-span-2">
+          <Field label="Note" htmlFor="td-note" error={errors.note?.message}>
+            <textarea
+              id="td-note"
+              className={textareaClass}
+              placeholder="Optional"
+              maxLength={TASK_NOTE_MAX}
+              {...register("note")}
+            />
           </Field>
         </div>
         {update.result.serverError && (
-          <p className="col-span-2 text-[12.5px] text-destructive">{update.result.serverError}</p>
+          <p className="sm:col-span-2 text-[12.5px] text-destructive">{update.result.serverError}</p>
         )}
       </form>
     </DialogShell>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAction } from "next-safe-action/hooks";
 import { Button } from "@/components/ui/button";
+import { DisabledReason } from "@/components/shared/DisabledReason";
 import {
   Dialog,
   DialogClose,
@@ -62,8 +63,9 @@ export function ResetPasswordButton({
 
   return (
     <>
-      {/* The title sits on a wrapper: a disabled Button has pointer-events-none, so its own would never show. */}
-      <span className="inline-flex" title={refusal ? REFUSAL_TITLE[refusal] : undefined}>
+      {/* A disabled Button can neither be hovered nor focused, so the reason
+          hangs off a focusable wrapper with a tooltip (APX-47). */}
+      <DisabledReason reason={refusal ? REFUSAL_TITLE[refusal] : null}>
         <Button
           variant="ghost"
           size="sm"
@@ -75,7 +77,7 @@ export function ResetPasswordButton({
         >
           Reset password
         </Button>
-      </span>
+      </DisabledReason>
 
       <Dialog
         open={confirming}
