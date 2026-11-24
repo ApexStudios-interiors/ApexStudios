@@ -1,6 +1,6 @@
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { connect, SEED } from "./db";
+import { connect, SEED, withLedgerMaintenance } from "./db";
 import { one } from "./expect-row";
 
 /**
@@ -40,30 +40,34 @@ const trackedApprovalIds: string[] = [];
 const tag = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 afterEach(async () => {
-  if (trackedRequestIds.length) {
-    // Remainders of a part delivery point back at a tracked request.
-    const children =
-      await sql`select id from public.stock_requests where split_from_id = any(${trackedRequestIds})`;
-    const ids = [...trackedRequestIds, ...children.map((c) => c.id as string)];
-    const items = await sql`select distinct inventory_item_id from public.stock_requests
-                             where id = any(${ids}) and inventory_item_id is not null`;
-    for (const i of items)
-      if (!trackedItemIds.includes(i.inventory_item_id)) trackedItemIds.push(i.inventory_item_id);
-    await sql`delete from public.stock_request_events where request_id = any(${ids})`;
-    await sql`delete from public.stock_movements where ref_type = 'stock_request' and ref_id = any(${ids})`;
-    await sql`update public.stock_requests set inventory_item_id = null, split_from_id = null where id = any(${ids})`;
-    await sql`delete from public.stock_requests where id = any(${ids})`;
-    trackedRequestIds.length = 0;
-  }
-  if (trackedItemIds.length) {
-    await sql`delete from public.stock_movements where inventory_item_id = any(${trackedItemIds})`;
-    await sql`delete from public.inventory_items where id = any(${trackedItemIds})`;
-    trackedItemIds.length = 0;
-  }
-  if (trackedApprovalIds.length) {
-    await sql`delete from public.approvals where id = any(${trackedApprovalIds})`;
-    trackedApprovalIds.length = 0;
-  }
+  // Ledgers are append-only (20261124100008); cleanup runs with the
+  // transaction-local maintenance switch on.
+  await withLedgerMaintenance(sql, async (tx) => {
+    if (trackedRequestIds.length) {
+      // Remainders of a part delivery point back at a tracked request.
+      const children =
+        await tx`select id from public.stock_requests where split_from_id = any(${trackedRequestIds})`;
+      const ids = [...trackedRequestIds, ...children.map((c) => c.id as string)];
+      const items = await tx`select distinct inventory_item_id from public.stock_requests
+                               where id = any(${ids}) and inventory_item_id is not null`;
+      for (const i of items)
+        if (!trackedItemIds.includes(i.inventory_item_id)) trackedItemIds.push(i.inventory_item_id);
+      await tx`delete from public.stock_request_events where request_id = any(${ids})`;
+      await tx`delete from public.stock_movements where ref_type = 'stock_request' and ref_id = any(${ids})`;
+      await tx`update public.stock_requests set inventory_item_id = null, split_from_id = null where id = any(${ids})`;
+      await tx`delete from public.stock_requests where id = any(${ids})`;
+      trackedRequestIds.length = 0;
+    }
+    if (trackedItemIds.length) {
+      await tx`delete from public.stock_movements where inventory_item_id = any(${trackedItemIds})`;
+      await tx`delete from public.inventory_items where id = any(${trackedItemIds})`;
+      trackedItemIds.length = 0;
+    }
+    if (trackedApprovalIds.length) {
+      await tx`delete from public.approvals where id = any(${trackedApprovalIds})`;
+      trackedApprovalIds.length = 0;
+    }
+  });
 });
 afterAll(async () => {
   await Promise.all(openClients.map((c) => c.auth.signOut()));
