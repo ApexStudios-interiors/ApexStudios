@@ -142,6 +142,24 @@ describe("requestUploadUrl", () => {
     expect(h.presignPut).toHaveBeenCalledOnce();
   });
 
+  it("APX-05: refuses a client a file on a bill before anything is signed", async () => {
+    sessionAs("client");
+
+    const result = await requestUploadUrl({ ...UPLOAD, entityType: "bill", fileName: "RA-BHEL-NCH-3.pdf" });
+
+    expect(result?.serverError).toBe("You don't have permission to do that.");
+    expect(h.presignPut).not.toHaveBeenCalled();
+  });
+
+  it.each(["admin", "site"] as const)("APX-05: still signs a bill copy for %s", async (role) => {
+    sessionAs(role);
+
+    const result = await requestUploadUrl({ ...UPLOAD, entityType: "bill" });
+
+    expect(result?.serverError).toBeUndefined();
+    expect(h.presignPut).toHaveBeenCalledOnce();
+  });
+
   it("still refuses a fifth photo up front, with the same message", async () => {
     h.liveCount = 4;
 

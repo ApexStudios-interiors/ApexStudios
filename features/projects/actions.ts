@@ -18,26 +18,32 @@ import {
 import {
   isSameProjectName,
   normalisePackageNames,
+  parseProjectStatus,
   parseRateVisibility,
   projectCodeBase,
+  projectEditRefusal,
+  type ProjectStatus,
   type RateVisibility,
 } from "./service";
 import { deleteProjectMember, insertProjectMember } from "./members";
 
 /**
  * build/04-projects-packages-phases.md §4.1: adminAction for all four, each
- * ending in revalidatePath. No business arithmetic here (AGENTS.md's layering
- * rule) — createProject's only non-trivial move, creating the project and its
- * named packages atomically, is pushed into rpc_create_project precisely
- * because that atomicity can't be expressed as two separate .insert() calls
- * through PostgREST; everything else here is a single-row, already-atomic
- * write.
+ * ending in revalidateTag('project:' + id) and revalidatePath('/'). No
+ * business arithmetic here (AGENTS.md's layering rule) — createProject's only
+ * non-trivial move, creating the project and its named packages atomically,
+ * is pushed into rpc_create_project precisely because that atomicity can't be
+ * expressed as two separate .insert() calls through PostgREST; everything
+ * else here is a single-row, already-atomic write.
  *
- * No `updateTag` (APX-67): no route opts into "use cache"/cacheTag, so a tag
- * invalidation had nothing to invalidate. revalidatePath is what actually
- * refreshes the rendered routes. If a caching pass ever tags a read, add the
- * matching `updateTag` (Next 16's Server Action form of revalidateTag) next
- * to the revalidatePath it accompanies, in the same change.
+ * Next 16 breaking change (AGENTS.md's header: heed deprecation notices):
+ * `revalidateTag` now takes a required second `cacheLife` profile argument,
+ * and its own doc comment says to use `updateTag` instead inside a Server
+ * Action for immediate, read-your-own-writes expiration — exactly this case.
+ * No route yet opts into "use cache"/cacheTag (that lands with a later
+ * build's caching pass), so today this is a no-op with nothing tagged; it's
+ * still called here so every mutating path already carries the right
+ * invalidation call once caching is added.
  */
 
 export const createProject = adminAction.inputSchema(createProjectSchema).action(async ({ parsedInput }) => {
@@ -102,41 +108,168 @@ export const createClientRecord = adminAction
     return data;
   });
 
-export const updateProject = adminAction.inputSchema(updateProjectSchema).action(async ({ parsedInput }) => {
-  const { id, ...patch } = parsedInput;
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("projects")
-    .update({
-      ...(patch.name !== undefined && { name: patch.name }),
-      ...(patch.location !== undefined && { location: patch.location }),
-      ...(patch.targetEndDate !== undefined && { target_end_date: patch.targetEndDate }),
-      ...(patch.contractValue !== undefined && { contract_value: Number(patch.contractValue) }),
-    })
-    .eq("id", id);
-  if (error) throw new Error(error.message);
+/**
+ * The Edit Project dialog (APX-11). Guard → parse (updateProjectSchema: money
+ * and percentages as strict strings, so NaN or a negative never reaches
+ * Number()) → the checks that need the current row (projectEditRefusal, on
+ * the field they concern) → one update scoped to the live row, where zero
+ * rows back means it was deleted meanwhile (NOT_FOUND), never a silent
+ * "saved". Status is not here: it goes through setProjectStatus and its RPC.
+ */
+export const updateProject = adminAction
+  .inputSchema(updateProjectSchema)
+  .action(async ({ parsedInput, ctx }) => {
+    const { id, ...patch } = parsedInput;
+    const supabase = await createClient();
 
-  revalidatePath("/");
-  // 'layout': every route under this project (dashboard, packages,
-  // package detail) can render fields this action changes.
-  revalidatePath(`/projects/${id}`, "layout");
-  return { ok: true as const };
-});
+    // The money columns come from v_project_finance: authenticated has no
+    // SELECT on them in `projects` (APX-09, migration 20261124100005).
+    const [{ data: row, error: readErr }, { data: finance, error: financeErr }] = await Promise.all([
+      supabase
+        .from("projects")
+        .select("status, start_date")
+        .eq("id", id)
+        .is("deleted_at", null)
+        .maybeSingle(),
+      supabase.from("v_project_finance").select("mobilisation_recovered").eq("id", id).maybeSingle(),
+    ]);
+    if (readErr) throw new Error(readErr.message);
+    if (financeErr) throw new Error(financeErr.message);
+    if (!row || !finance) throw new Error("NOT_FOUND: project");
+    const current = { ...row, mobilisation_recovered: finance.mobilisation_recovered ?? 0 };
 
+    const refusal = projectEditRefusal(
+      {
+        status: current.status,
+        startDate: current.start_date,
+        mobilisationRecovered: current.mobilisation_recovered,
+      },
+      patch
+    );
+    if (refusal) return { status: "invalid" as const, ...refusal };
+
+    const { data, error } = await supabase
+      .from("projects")
+      .update({
+        ...(patch.name !== undefined && { name: patch.name }),
+        ...(patch.location !== undefined && { location: patch.location || null }),
+        ...(patch.targetEndDate !== undefined && { target_end_date: patch.targetEndDate || null }),
+        ...(patch.contractValue !== undefined && { contract_value: Number(patch.contractValue) }),
+        ...(patch.gstRatePct !== undefined && { gst_rate_pct: Number(patch.gstRatePct) }),
+        ...(patch.retentionPct !== undefined && { retention_pct: Number(patch.retentionPct) }),
+        ...(patch.masBillablePct !== undefined && { mas_billable_pct: Number(patch.masBillablePct) }),
+        ...(patch.tdsPct !== undefined && { tds_pct: Number(patch.tdsPct) }),
+        ...(patch.mobilisationAdvance !== undefined && {
+          mobilisation_advance: Number(patch.mobilisationAdvance),
+        }),
+        ...(patch.mobilisationRecoveryPct !== undefined && {
+          mobilisation_recovery_pct: Number(patch.mobilisationRecoveryPct),
+        }),
+        updated_by: ctx.session.userId,
+      })
+      .eq("id", id)
+      .is("deleted_at", null)
+      .select("id");
+    if (error) throw new Error(error.message);
+    if (data.length === 0) throw new Error("NOT_FOUND: project");
+
+    revalidatePath("/");
+    // 'layout': every route under this project (dashboard, packages,
+    // package detail) can render fields this action changes.
+    revalidatePath(`/projects/${id}`, "layout");
+    return { status: "saved" as const };
+  });
+
+/**
+ * The status control (APX-11). rpc_set_project_status decides everything —
+ * the legal transitions, that only an admin may move it, that a reopen needs
+ * a reason — and writes the audit row in the same transaction; this only
+ * passes it on. completed_at is stamped by trg_projects_completed_at.
+ */
 export const setProjectStatus = adminAction
   .inputSchema(setProjectStatusSchema)
   .action(async ({ parsedInput }) => {
     const supabase = await createClient();
-    const { error } = await supabase
-      .from("projects")
-      .update({ status: parsedInput.status })
-      .eq("id", parsedInput.id);
+    const { data, error } = await supabase.rpc("rpc_set_project_status", {
+      p_project_id: parsedInput.id,
+      p_status: parsedInput.status,
+      ...(parsedInput.reason ? { p_reason: parsedInput.reason } : {}),
+    });
     if (error) throw new Error(error.message);
 
     revalidatePath("/");
     revalidatePath(`/projects/${parsedInput.id}`, "layout");
-    return { ok: true as const };
+    return { status: data };
   });
+
+/** What the Edit Project dialog loads on open. Admin only; money as strings
+ *  (code-standards §6) so the form shows exactly what is stored. */
+export type ProjectForEdit = {
+  id: string;
+  name: string;
+  location: string;
+  startDate: string;
+  targetEndDate: string;
+  contractValue: string;
+  gstRatePct: string;
+  retentionPct: string;
+  masBillablePct: string;
+  tdsPct: string;
+  mobilisationAdvance: string;
+  mobilisationRecovered: string;
+  mobilisationRecoveryPct: string;
+  status: ProjectStatus;
+};
+
+export async function getProjectForEdit(projectId: string): Promise<ProjectForEdit | null> {
+  "use server";
+  await requireRole(["admin"]);
+  const supabase = await createClient();
+  // contract_value and the mobilisation figures are not selectable on
+  // `projects` (APX-09, migration 20261124100005); v_project_finance serves
+  // them to admin and to a client on their own project.
+  const [{ data: row, error }, { data: finance, error: financeErr }] = await Promise.all([
+    supabase
+      .from("projects")
+      .select(
+        "id, name, location, start_date, target_end_date, gst_rate_pct, retention_pct, mas_billable_pct, tds_pct, mobilisation_recovery_pct, status"
+      )
+      .eq("id", projectId)
+      .is("deleted_at", null)
+      .maybeSingle(),
+    supabase
+      .from("v_project_finance")
+      .select("contract_value, mobilisation_advance, mobilisation_recovered")
+      .eq("id", projectId)
+      .maybeSingle(),
+  ]);
+  if (error) throw new Error(error.message);
+  if (financeErr) throw new Error(financeErr.message);
+  if (!row || !finance) return null;
+  // View columns are typed nullable; the table columns behind them are NOT NULL default 0.
+  const data = {
+    ...row,
+    contract_value: finance.contract_value ?? 0,
+    mobilisation_advance: finance.mobilisation_advance ?? 0,
+    mobilisation_recovered: finance.mobilisation_recovered ?? 0,
+  };
+  return {
+    id: data.id,
+    name: data.name,
+    location: data.location ?? "",
+    startDate: data.start_date,
+    targetEndDate: data.target_end_date ?? "",
+    contractValue: String(data.contract_value),
+    gstRatePct: String(data.gst_rate_pct),
+    retentionPct: String(data.retention_pct),
+    masBillablePct: String(data.mas_billable_pct),
+    tdsPct: String(data.tds_pct),
+    mobilisationAdvance: String(data.mobilisation_advance),
+    mobilisationRecovered: String(data.mobilisation_recovered),
+    mobilisationRecoveryPct: String(data.mobilisation_recovery_pct),
+    status: parseProjectStatus(data.status) ?? "planning",
+  };
+}
 
 /**
  * D55 — whether a Site Supervisor may see and enter the per-unit Rate on a
@@ -210,31 +343,37 @@ export async function findProjectWithName(name: string): Promise<{ id: string; n
 }
 
 /**
- * Grants an existing profile access to a project (CAN.manageProjectMembers).
- * The project dashboard's Client access card uses it to give an existing
- * client login a further project (D51) — one client company often has
- * several. Returns `already_member` rather than an error for a repeat grant.
+ * Grants an existing profile access to a project (CAN.manageProjectMembers):
+ * the Client access card (an existing client login, D51), the Site team card
+ * (a Site Supervisor, APX-12) and Projects on a Users-page row. Returns
+ * `already_member` rather than an error for a repeat grant, and
+ * `{ status: "refused", reason }` for an admin (implicit member) or a profile
+ * of the other role than the card manages.
  */
 export const addProjectMember = adminAction
   .inputSchema(addProjectMemberSchema)
   .action(async ({ parsedInput, ctx }) => {
     const supabase = await createClient();
-    const status = await insertProjectMember(supabase, {
+    const result = await insertProjectMember(supabase, {
       projectId: parsedInput.projectId,
       profileId: parsedInput.profileId,
       addedBy: ctx.session.userId,
+      expectedRole: parsedInput.expectedRole,
     });
+    if (typeof result === "object") return result;
 
     revalidatePath("/");
     revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
-    return { status };
+    revalidatePath("/users");
+    return { status: result };
   });
 
 /**
- * Takes a client login off one project (the Client access card's Remove, and
- * the Users page's client Projects list). Their other projects and the login
- * itself are untouched. A refusal (not a client, not a member, their last
- * project) comes back as `{ status: "refused", reason }`, not an error.
+ * Takes a client login or a Site Supervisor off one project (Remove on the
+ * Client access and Site team cards, and in Projects on a Users-page row).
+ * Their other projects and the login itself are untouched. A refusal (an
+ * admin, not a member, the other role) comes back as
+ * `{ status: "refused", reason }`, not an error.
  */
 export const removeProjectMember = adminAction
   .inputSchema(removeProjectMemberSchema)

@@ -40,6 +40,14 @@ export async function requestUploadFor(
   if (entityType === "daily_update" && session.role !== "admin" && session.role !== "site") {
     throw new ForbiddenError("only admin or site may add photos to a daily update");
   }
+  // APX-05: the same rule for a bill. A file on a bill is a "bill copy" —
+  // admin or site (02-lld.md §7) — and a client never adds one; the database
+  // refuses the row too (trg_attachments_integrity). The invoice itself is
+  // never an upload: getCurrentBillPdfKey serves only the row the bill.pdf
+  // job records as kind = 'generated_invoice'.
+  if (entityType === "bill" && session.role !== "admin" && session.role !== "site") {
+    throw new ForbiddenError("only admin or site may attach a file to a bill");
+  }
 
   await requireProjectAccess(session, projectId);
 

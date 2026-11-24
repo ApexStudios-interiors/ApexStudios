@@ -28,6 +28,9 @@ export const attachments = pgTable(
       .references(() => profiles.id),
     createdAt: tsz("created_at").notNull().defaultNow(),
     deletedAt: tsz("deleted_at"),
+    /** 'upload' | 'generated_invoice' — migration 20261124100004 (APX-05).
+     *  Only the bill.pdf job writes 'generated_invoice'. */
+    kind: text("kind").notNull().default("upload"),
   },
   (t) => [
     index("idx_att_entity").on(t.entityType, t.entityId),

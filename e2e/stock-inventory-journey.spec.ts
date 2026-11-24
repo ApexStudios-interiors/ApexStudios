@@ -47,17 +47,23 @@ test.describe("full stock lifecycle across three roles", () => {
     if (!createdRequestId) return;
     const sql = dbConnect();
     try {
-      await sql`delete from public.stock_movements where ref_type = 'stock_request' and ref_id = ${createdRequestId}`;
-      await sql`delete from public.stock_request_events where request_id = ${createdRequestId}`;
-      const [row] =
-        await sql`select inventory_item_id from public.stock_requests where id = ${createdRequestId}`;
-      await sql`delete from public.stock_requests where id = ${createdRequestId}`;
-      // Only clean up the inventory item if this test created a brand new
-      // one (material_name below is unique per run) — never touch a seeded item.
-      if (row?.inventory_item_id) {
-        await sql`delete from public.stock_movements where inventory_item_id = ${row.inventory_item_id}`;
-        await sql`delete from public.inventory_items where id = ${row.inventory_item_id}`;
-      }
+      // stock_movements and stock_request_events are append-only
+      // (20261124100008): a test removes its own rows only inside a
+      // transaction that turns the maintenance switch on.
+      await sql.begin(async (tx) => {
+        await tx`select set_config('apex.ledger_maintenance', 'on', true)`;
+        await tx`delete from public.stock_movements where ref_type = 'stock_request' and ref_id = ${createdRequestId}`;
+        await tx`delete from public.stock_request_events where request_id = ${createdRequestId}`;
+        const [row] =
+          await tx`select inventory_item_id from public.stock_requests where id = ${createdRequestId}`;
+        await tx`delete from public.stock_requests where id = ${createdRequestId}`;
+        // Only clean up the inventory item if this test created a brand new
+        // one (material_name below is unique per run) — never touch a seeded item.
+        if (row?.inventory_item_id) {
+          await tx`delete from public.stock_movements where inventory_item_id = ${row.inventory_item_id}`;
+          await tx`delete from public.inventory_items where id = ${row.inventory_item_id}`;
+        }
+      });
     } finally {
       await sql.end({ timeout: 5 });
     }
@@ -141,8 +147,28 @@ test.describe("full stock lifecycle across three roles", () => {
          where ref_type = 'stock_request' and ref_id = ${requestId}`;
       expect(Number(movement?.qty)).toBe(7);
 
+      // A delivered material is billable as material at site only with a
+      // rate and a phase that is not yet billed (MAS rules R1/R4/R6,
+      // migration 20261124200001). Assert the rule, whichever this request
+      // ended up with.
+      const [req] = await sql2`
+        select sr.rate, sr.phase_id, ph.billing_status,
+               exists (select 1 from public.bill_lines bl
+                        where bl.source_type = 'phase' and bl.source_id = sr.phase_id) as phase_on_bill
+          from public.stock_requests sr
+          left join public.phases ph on ph.id = sr.phase_id
+         where sr.id = ${requestId}`;
+      const shouldBeBillable =
+        req !== undefined &&
+        req.rate !== null &&
+        Number(req.rate) > 0 &&
+        req.phase_id !== null &&
+        (req.billing_status === "unresolved" || req.billing_status === "billable") &&
+        !req.phase_on_bill;
       const [billable] = await sql2`select 1 from public.v_billable_now where source_id = ${requestId}`;
-      expect(billable, "delivered material should appear in v_billable_now").toBeDefined();
+      expect(Boolean(billable), "v_billable_now lists a delivered material exactly when it is billable").toBe(
+        shouldBeBillable
+      );
     } finally {
       await sql2.end({ timeout: 5 });
     }

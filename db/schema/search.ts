@@ -21,3 +21,15 @@ export const rateLimits = pgTable(
   },
   (t) => [primaryKey({ columns: [t.profileId, t.action] })]
 );
+
+/**
+ * Mirrors migration 20261124100009 (APX-38): the per-username sign-in
+ * throttle. Keyed by sha256 of the normalised username, never the username
+ * itself. No RLS policy at all — rpc_login_allowed / rpc_login_record_failure
+ * (security definer) are the only way in.
+ */
+export const loginThrottle = pgTable("login_throttle", {
+  usernameHash: text("username_hash").primaryKey(),
+  windowStart: tsz("window_start").notNull().defaultNow(),
+  failures: integer("failures").notNull().default(0),
+});

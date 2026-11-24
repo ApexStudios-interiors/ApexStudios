@@ -6,7 +6,7 @@ import { r2Client } from "@/lib/r2/client";
 import { buildAttachmentKey } from "@/lib/r2/keys";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { BillDocument, type BillPdfData } from "@/features/billing/components/BillDocument";
-import { billPdfFileName } from "@/features/billing/pdf";
+import { billHasInvoice, billPdfFileName } from "@/features/billing/pdf";
 
 /**
  * build/09-billing.md §4.6. Enqueued on draft -> submitted
@@ -33,12 +33,23 @@ export async function generateBillPdf(payload: unknown): Promise<void> {
   const { data: bill, error: billErr } = await supabase
     .from("bills")
     .select(
-      "id, org_id, project_id, bill_no, revision, bill_date, period_from, period_to, work_value, material_value, gross_amount, mas_recovery_amount, taxable_amount, gst_amount, gst_rate_pct, invoice_total, retention_amount, retention_pct, tds_amount, tds_pct, advance_recovery, net_payable, submitted_by, created_by"
+      "id, org_id, project_id, status, bill_no, revision, bill_date, period_from, period_to, work_value, material_value, gross_amount, mas_recovery_amount, taxable_amount, gst_amount, gst_rate_pct, invoice_total, retention_amount, retention_pct, tds_amount, tds_pct, advance_recovery, net_payable, submitted_by, created_by"
     )
     .eq("id", billId)
+    .is("deleted_at", null)
     .maybeSingle();
   if (billErr) throw new Error(billErr.message);
   if (!bill) throw new Error(`NOT_FOUND: bill ${billId} does not exist`);
+
+  // APX-35 / APX-62: never render a bill that is not issued. A job claimed
+  // after a quick rejection (the bill is a draft again) has nothing to do —
+  // the resubmission enqueues its own job for the next revision — and a draft
+  // must never become a downloadable invoice. Done, not failed: retrying
+  // would only refuse again.
+  if (!billHasInvoice(bill.status)) {
+    console.log(`bill.pdf: ${billId} is ${bill.status}, not issued — nothing rendered`);
+    return;
+  }
 
   // The file name carries the bill's own revision (features/billing/pdf.ts),
   // and is read from the bill row rather than the job payload so a job
@@ -62,6 +73,10 @@ export async function generateBillPdf(payload: unknown): Promise<void> {
     .select("id")
     .eq("entity_type", "bill")
     .eq("entity_id", billId)
+    // APX-05: only this job's own document counts as "already generated" —
+    // an upload that happens to carry the same name must not stop the real
+    // invoice being rendered.
+    .eq("kind", "generated_invoice")
     .eq("file_name", fileName)
     .is("deleted_at", null)
     .maybeSingle();
@@ -160,6 +175,9 @@ export async function generateBillPdf(payload: unknown): Promise<void> {
     file_name: fileName,
     mime_type: "application/pdf",
     size_bytes: pdfBuffer.byteLength,
+    // The only writer of this kind: service_role bypasses att_insert, and
+    // getCurrentBillPdfKey serves nothing else as the invoice.
+    kind: "generated_invoice",
     // The admin who submitted this bill is the closest real "author" of the
     // document a job generates on their behalf; created_by is the fallback
     // for the (should-be-impossible) case submitted_by is somehow null.

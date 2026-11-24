@@ -12,6 +12,7 @@ const STATUSES = [
   { key: "ordered", label: "Ordered" },
   { key: "delivered", label: "Delivered" },
   { key: "rejected", label: "Rejected" },
+  { key: "cancelled", label: "Cancelled" },
 ];
 
 /**

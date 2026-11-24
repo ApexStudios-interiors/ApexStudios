@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { adminAction } from "@/lib/safe-action";
 import { requireRole } from "@/lib/auth/session";
 import { createPackageSchema, createPhaseSchema, updatePackageSchema, updatePhaseSchema } from "./schema";
+import { isPhaseBilled, phaseAllocatedChangeRefusal } from "./service";
 
 /**
  * build/04-projects-packages-phases.md §4.2: createPackage, updatePackage,
@@ -94,17 +95,25 @@ export const updatePackage = adminAction.inputSchema(updatePackageSchema).action
   return { ok: true as const };
 });
 
+/**
+ * Add Phase (APX-10) — from the package's Budget tab, and from Add Task when
+ * the package has no phase yet. A read-only (archived) project is refused by
+ * trg_project_writable with PROJECT_ARCHIVED; a seq_no collision with a
+ * concurrent add is CONFLICT (phases_seq_uq), and the person simply retries.
+ */
 export const createPhase = adminAction.inputSchema(createPhaseSchema).action(async ({ parsedInput, ctx }) => {
   const supabase = await createClient();
-  const seqNo = await nextSeqNo("phases", "package_id", parsedInput.packageId);
 
   const { data: pkg, error: pkgErr } = await supabase
     .from("packages")
     .select("project_id")
     .eq("id", parsedInput.packageId)
-    .single();
+    .is("deleted_at", null)
+    .maybeSingle();
   if (pkgErr) throw new Error(pkgErr.message);
+  if (!pkg) throw new Error("NOT_FOUND: package");
 
+  const seqNo = await nextSeqNo("phases", "package_id", parsedInput.packageId);
   const { data, error } = await supabase
     .from("phases")
     .insert({
@@ -118,15 +127,41 @@ export const createPhase = adminAction.inputSchema(createPhaseSchema).action(asy
     })
     .select("id")
     .single();
+  // 23505: phases_seq_uq — another admin added a phase to this package in
+  // the same instant and took this seq_no first.
+  if (error?.code === "23505") throw new Error("CONFLICT: phase seq_no taken");
   if (error) throw new Error(error.message);
 
   revalidatePath(`/projects/${pkg.project_id}`, "layout");
   return { id: data.id };
 });
 
+/**
+ * Edit Phase (APX-10). Optimistic concurrency as updatePackage: the update
+ * is scoped to `id` AND the `updated_at` the form loaded, and zero rows back
+ * is CONFLICT. A phase already on a bill keeps its allocated amount
+ * (phaseAllocatedChangeRefusal, checked here for an inline message;
+ * trg_phases_allocated_locked is the boundary).
+ */
 export const updatePhase = adminAction.inputSchema(updatePhaseSchema).action(async ({ parsedInput }) => {
-  const { id, ...patch } = parsedInput;
+  const { id, updatedAt, ...patch } = parsedInput;
   const supabase = await createClient();
+
+  const { data: current, error: readErr } = await supabase
+    .from("phases")
+    .select("billing_status, allocated_amount")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (readErr) throw new Error(readErr.message);
+  if (!current) throw new Error("NOT_FOUND: phase");
+
+  const billed = phaseAllocatedChangeRefusal(
+    { billingStatus: current.billing_status, allocatedAmount: current.allocated_amount },
+    patch.allocatedAmount
+  );
+  if (billed) return { status: "invalid" as const, field: "allocatedAmount" as const, message: billed };
+
   const { data, error } = await supabase
     .from("phases")
     .update({
@@ -135,13 +170,49 @@ export const updatePhase = adminAction.inputSchema(updatePhaseSchema).action(asy
       ...(patch.internalAmount !== undefined && { internal_amount: Number(patch.internalAmount) }),
     })
     .eq("id", id)
+    .eq("updated_at", updatedAt)
+    .is("deleted_at", null)
     .select("id, project_id, package_id")
-    .single();
+    .maybeSingle();
   if (error) throw new Error(error.message);
+  if (!data) throw new Error("CONFLICT: phase changed since the form loaded");
 
   revalidatePath(`/projects/${data.project_id}`, "layout");
-  return { ok: true as const };
+  return { status: "saved" as const };
 });
+
+export type PhaseForEdit = {
+  id: string;
+  name: string;
+  allocatedAmount: string;
+  internalAmount: string;
+  /** Billed or Paid: the dialog locks Allocated and says why. */
+  billed: boolean;
+  updatedAt: string;
+};
+
+/** What Edit Phase loads on open — the row's values and its `updated_at`. */
+export async function getPhaseForEdit(phaseId: string): Promise<PhaseForEdit | null> {
+  "use server";
+  await requireRole(["admin"]);
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("phases")
+    .select("id, name, allocated_amount, internal_amount, billing_status, updated_at")
+    .eq("id", phaseId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return {
+    id: data.id,
+    name: data.name,
+    allocatedAmount: String(data.allocated_amount),
+    internalAmount: String(data.internal_amount),
+    billed: isPhaseBilled(data.billing_status),
+    updatedAt: data.updated_at,
+  };
+}
 
 /**
  * Two plain, read-only Server Actions (not next-safe-action clients, matching

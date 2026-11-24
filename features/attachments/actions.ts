@@ -3,7 +3,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { requireProjectAccess, requireSession } from "@/lib/auth/session";
-import { authedAction } from "@/lib/safe-action";
+import { authedAction, previewAllowedAction } from "@/lib/safe-action";
 import { presignGet } from "@/lib/r2/presign";
 import { confirmUploadFor, requestUploadFor } from "./upload";
 import {
@@ -32,7 +32,8 @@ export const confirmUpload = authedAction
   .inputSchema(confirmUploadSchema)
   .action(async ({ parsedInput, ctx }) => confirmUploadFor(ctx.session, parsedInput));
 
-export const getDownloadUrl = authedAction
+// A read, so it stays available while previewing (APX-25).
+export const getDownloadUrl = previewAllowedAction
   .inputSchema(getDownloadUrlSchema)
   .action(async ({ parsedInput, ctx }) => {
     const supabase = await createClient();

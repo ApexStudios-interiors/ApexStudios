@@ -12,6 +12,7 @@ import { td, th, sub } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { DialogShell } from "@/components/ui/DialogShell";
 import { Empty } from "@/components/ui/Empty";
+import { WithdrawApprovalButton } from "./WithdrawApprovalButton";
 
 /**
  * build/08-approvals.md §2.5. Real DTOs, not `useApp()` data — the mock's
@@ -141,16 +142,29 @@ export function ApprovalTable({
               );
             } else if (mayAddPhotos) {
               action = (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={!a.canAddPhotos}
-                  onClick={() =>
-                    openDialog({ kind: "approvalPhotos", approvalId: a.id, projectId, item: a.item })
-                  }
-                >
-                  Add photos
-                </Button>
+                <div className="flex gap-1.5 flex-wrap justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!a.canAddPhotos}
+                    onClick={() =>
+                      openDialog({
+                        kind: "approvalPhotos",
+                        approvalId: a.id,
+                        projectId,
+                        item: a.item,
+                        // APX-46: the uploader offers only the slots left.
+                        existingPhotos: a.attachments.length,
+                      })
+                    }
+                  >
+                    Add photos
+                  </Button>
+                  {/* APX-42: the requester's own pending approval. */}
+                  {a.canWithdraw && (
+                    <WithdrawApprovalButton approvalId={a.id} refNo={a.refNo} item={a.item} />
+                  )}
+                </div>
               );
             }
 

@@ -2,7 +2,7 @@ import type { ProjectClientAccess } from "@/features/projects/queries";
 import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { initials } from "@/lib/format";
-import { RemoveClientAccessButton } from "./RemoveClientAccessButton";
+import { RemoveProjectMemberButton } from "./RemoveProjectMemberButton";
 
 /**
  * D51: the project's client logins, each with Remove (take them off THIS
@@ -13,8 +13,8 @@ import { RemoveClientAccessButton } from "./RemoveClientAccessButton";
  *
  * There was no project team or membership surface anywhere in the app before
  * this (addProjectMember had no caller), so it lives on the project dashboard
- * and the page renders it for owner/admin only. Site supervisor membership is
- * not managed here; this card is about client sign-ins.
+ * and the page renders it for admins only. Site Supervisor membership is the
+ * Site team card (SiteTeamCard, APX-12); this card is about client sign-ins.
  */
 export function ClientAccessCard({
   projectId,
@@ -26,7 +26,7 @@ export function ClientAccessCard({
   access: ProjectClientAccess;
 }) {
   return (
-    <Card className="mt-5">
+    <Card id="client-access" className="mt-5 scroll-mt-4">
       <CardHeader>
         <h3>Client access</h3>
         <div className="ml-auto flex gap-2 items-center">
@@ -54,13 +54,14 @@ export function ClientAccessCard({
               <span className="font-medium text-[13.5px]">{m.fullName}</span>
               <span className="ml-auto flex items-center gap-3">
                 {m.email && <span className="text-[13px] text-muted-foreground">{m.email}</span>}
-                <RemoveClientAccessButton
+                <RemoveProjectMemberButton
+                  role="client"
                   projectId={projectId}
                   projectName={projectName}
                   profileId={m.id}
                   fullName={m.fullName}
                   projectCount={m.projectCount}
-                  onlyClientOnProject={access.members.length === 1}
+                  onlyMemberOnProject={access.members.length === 1}
                 />
               </span>
             </li>

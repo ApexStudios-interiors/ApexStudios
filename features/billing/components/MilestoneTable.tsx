@@ -6,7 +6,8 @@ import { useApp } from "@/context/AppContext";
 import { markPackagePhasesComplete, markPhaseComplete } from "@/features/billing/actions";
 import type { PhaseBillingRow, MaterialAtSiteRow } from "@/features/billing/queries";
 import { PhaseStatusBadge } from "@/components/shared/StatusBadges";
-import type { PhaseStatus } from "@/components/shared/StatusBadges";
+import { phaseBillingLabel } from "@/features/billing/service";
+import { ConfirmBillingActionDialog } from "./ConfirmBillingActionDialog";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/button";
 import { formatINR } from "@/lib/money";
@@ -20,17 +21,16 @@ import { Empty } from "@/components/ui/Empty";
  *  Site" (Cost, Client Value, Billable, Status). `rpc_mark_phase_complete`
  *  predates this build (migration 20260911090001) — this is its own Server
  *  Action wiring, as that migration's own comment says would land here. */
-/** `phases.billing_status` (unresolved/billable/billed/paid) collapsed to
- *  the prototype's own display-only vocabulary — "unresolved" and
- *  "billable" both read as "Pending" here, exactly like the mock's own
- *  `phStatus()` never distinguished a not-yet-billable phase from a
- *  billable-but-unbilled one either. */
-const BILLING_STATUS_LABEL: Record<PhaseBillingRow["billingStatus"], PhaseStatus> = {
-  unresolved: "Pending",
-  billable: "Pending",
-  billed: "Billed",
-  paid: "Paid",
+/** The Material at Site status line for a material that is not on a bill:
+ *  billable, or why not (MAS rules R1/R4/R6, migration 20261124200001). */
+const MATERIAL_STATE_LABEL: Record<Exclude<MaterialAtSiteRow["state"], "billed">, string> = {
+  billable: "● Billable",
+  no_rate: "No rate — not billable",
+  no_phase: "No phase — not billed as an advance",
+  covered_by_phase: "Covered by its phase's bill",
 };
+
+type MarkConfirm = { kind: "one"; phase: PhaseBillingRow } | { kind: "all" };
 
 export function MilestoneTable({
   phases,
@@ -48,36 +48,54 @@ export function MilestoneTable({
 }) {
   const { toast } = useApp();
   const router = useRouter();
-  const [bulkPending, setBulkPending] = useState(false);
+  const [confirm, setConfirm] = useState<MarkConfirm | null>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const total = phases.reduce((a, p) => a + p.allocatedAmount, 0);
   const markable = phases.filter((p) => p.canMarkComplete);
   const markableValue = markable.reduce((a, p) => a + p.allocatedAmount, 0);
 
-  async function onMarkAll() {
-    setBulkPending(true);
-    const result = await markPackagePhasesComplete({ packageId });
-    setBulkPending(false);
-    if (!result?.data) {
-      toast(result?.serverError ?? "Could not mark these phases complete");
-      return;
-    }
-    const { marked, failed } = result.data;
-    router.refresh();
-    toast(
-      failed
-        ? `${marked} phase${marked === 1 ? "" : "s"} marked complete, ${failed} could not be`
-        : `${marked} phase${marked === 1 ? "" : "s"} marked complete — now billable`
-    );
+  function ask(next: MarkConfirm) {
+    setError(null);
+    setConfirm(next);
   }
 
-  async function onMarkComplete(phaseId: string) {
-    const result = await markPhaseComplete({ phaseId });
-    if (!result?.data) {
-      toast(result?.serverError ?? "Could not mark this phase complete");
-      return;
+  // APX-39: both mark actions confirm first, with the amount they make
+  // billable, and hold a pending state so a double click sends one request.
+  async function onConfirm() {
+    if (!confirm) return;
+    setPending(true);
+    setError(null);
+    try {
+      if (confirm.kind === "all") {
+        const result = await markPackagePhasesComplete({ packageId });
+        if (!result?.data) {
+          setError(result?.serverError ?? "Could not mark these phases complete");
+          return;
+        }
+        const { marked, failed } = result.data;
+        setConfirm(null);
+        router.refresh();
+        toast(
+          failed
+            ? `${marked} phase${marked === 1 ? "" : "s"} marked complete, ${failed} could not be`
+            : `${marked} phase${marked === 1 ? "" : "s"} marked complete — now billable`
+        );
+      } else {
+        const result = await markPhaseComplete({ phaseId: confirm.phase.id });
+        if (!result?.data) {
+          setError(result?.serverError ?? "Could not mark this phase complete");
+          return;
+        }
+        setConfirm(null);
+        router.refresh();
+        toast(`${confirm.phase.name} marked complete — now billable`);
+      }
+    } catch {
+      setError("The connection dropped before an answer came back. Refresh to see whether it went through.");
+    } finally {
+      setPending(false);
     }
-    router.refresh();
-    toast("Phase marked complete");
   }
 
   return (
@@ -100,10 +118,8 @@ export function MilestoneTable({
               {packageStatus === "completed" ? '"completed"' : "complete"} does not do this on its own. Until
               then nothing from this package appears under Billable Now, so Create Bill has nothing to bill.
             </p>
-            <Button className="mt-2.5" size="sm" disabled={bulkPending} onClick={onMarkAll}>
-              {bulkPending
-                ? "Marking…"
-                : `Mark all ${markable.length} complete${markable.length === 1 ? "" : " "}`}
+            <Button className="mt-2.5" size="sm" disabled={pending} onClick={() => ask({ kind: "all" })}>
+              Mark all {markable.length} complete
             </Button>
           </div>
         </Card>
@@ -130,12 +146,12 @@ export function MilestoneTable({
                   </td>
                   <td className={tdNum}>{formatINR(p.allocatedAmount)}</td>
                   <td className={td}>
-                    <PhaseStatusBadge status={BILLING_STATUS_LABEL[p.billingStatus]} />
+                    <PhaseStatusBadge status={phaseBillingLabel(p)} />
                     {p.billRefNo && <span className={sub + " text-xs"}>{p.billRefNo}</span>}
                   </td>
                   <td className={td} style={{ textAlign: "right" }}>
                     {p.canMarkComplete ? (
-                      <Button size="sm" onClick={() => onMarkComplete(p.id)}>
+                      <Button size="sm" disabled={pending} onClick={() => ask({ kind: "one", phase: p })}>
                         Mark Complete
                       </Button>
                     ) : null}
@@ -182,14 +198,18 @@ export function MilestoneTable({
                   </td>
                   <td className={tdNum}>{formatINR(m.cost)}</td>
                   <td className={tdNum}>{formatINR(m.clientValue)}</td>
-                  <td className={tdNum}>{formatINR(m.billableAmount)}</td>
+                  <td className={tdNum}>{m.billableAmount === null ? "—" : formatINR(m.billableAmount)}</td>
                   <td className={td}>
                     {m.billRefNo ? (
                       <Badge variant={m.billStatus === "paid" ? "default" : "outline"}>
                         {m.billRefNo} · {m.billStatus}
                       </Badge>
+                    ) : m.state === "billed" ? (
+                      <Badge variant="outline">Billed</Badge>
+                    ) : m.state === "billable" ? (
+                      <Badge variant="outline">{MATERIAL_STATE_LABEL.billable}</Badge>
                     ) : (
-                      <Badge variant="outline">● Billable</Badge>
+                      <span className="text-xs text-muted-foreground">{MATERIAL_STATE_LABEL[m.state]}</span>
                     )}
                   </td>
                 </tr>
@@ -204,6 +224,31 @@ export function MilestoneTable({
           </tbody>
         </TableWrap>
       </Card>
+
+      <ConfirmBillingActionDialog
+        open={confirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirm(null);
+        }}
+        title={
+          confirm?.kind === "one"
+            ? `Mark ${confirm.phase.name} complete?`
+            : `Mark ${markable.length} phase${markable.length === 1 ? "" : "s"} complete?`
+        }
+        confirmLabel="Mark complete"
+        pendingLabel="Marking…"
+        pending={pending}
+        error={error}
+        onConfirm={onConfirm}
+      >
+        <p>
+          {confirm?.kind === "one"
+            ? `${formatINR(confirm.phase.allocatedAmount)} becomes billable and appears in Billable Now.`
+            : `${formatINR(markableValue)} across ${markable.length} task-less phase${markable.length === 1 ? "" : "s"} becomes billable and appears in Billable Now.`}{" "}
+          Only mark a phase complete when its work is actually finished: it is then billed to the client in
+          full.
+        </p>
+      </ConfirmBillingActionDialog>
     </>
   );
 }

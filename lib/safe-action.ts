@@ -25,6 +25,21 @@ const ERROR_MESSAGES = {
   NEGATIVE_STOCK: "Not enough stock on hand.",
   REASON_REQUIRED: "Please give a reason.",
   RATE_LIMITED: "Too many requests. Please wait a moment and try again.",
+  PREVIEW_READ_ONLY: "Preview is read-only. Exit preview to make changes.",
+  // rpc_create_bill's material-at-site rules (migration 20261124200001, D69).
+  MAS_SAME_BILL: "A material and its own phase can't go on the same bill — the phase already includes it.",
+  MAS_DRAFT_PENDING: "Material for a selected phase is on a draft bill. Submit or cancel that draft first.",
+  MAS_EXCEEDS_GROSS:
+    "The material advance to recover is more than this bill's value. Add more items, or check the phase's value.",
+  INVALID_PERIOD: "Give both billing period dates, with the start on or before the end.",
+  CONFLICT:
+    "Someone else changed this while you were editing. Close and reopen it to see the current values.",
+  PROJECT_ARCHIVED: "This project is archived, so it is read-only.",
+  PROJECT_COMPLETED: "This project is completed, so no new stock requests or daily updates can be added.",
+  PHASE_BILLED: "This phase is already on a bill, so its allocated amount can no longer change.",
+  // 20261124400002 (APX-14, APX-44).
+  RATE_REQUIRED: "Enter a rate (₹ per unit) of 0 or more.",
+  ALREADY_SUBMITTED: "This was already submitted. Refresh to see it.",
 } as const;
 
 /** Postgres RAISE EXCEPTION messages the RPCs use are prefixed with their code
@@ -63,9 +78,33 @@ export const actionClient = createSafeActionClient({
   handleServerError: mapDomainError,
 });
 
-export const authedAction = actionClient.use(async ({ next }) => {
+/**
+ * A signed-in session, preview or not. Only for the allow-list of actions a
+ * "preview as" session may still run (APX-25): stopping or switching the
+ * preview itself, marking a notification read, and pure reads (search, a
+ * download URL). Everything else starts from `authedAction` below, which
+ * refuses while previewing.
+ */
+export const previewAllowedAction = actionClient.use(async ({ next }) => {
   const session = await requireSession();
   return next({ ctx: { session } });
+});
+
+/**
+ * APX-25: the preview banner promises every write is refused, so it is — here,
+ * for every guarded action, rather than by each action remembering to. The
+ * preview cookie only ever shaped READS (lib/auth/session.ts); without this an
+ * admin previewing as Site could still Mark Delivered, as themselves.
+ */
+export function assertNotPreviewing(session: Session): void {
+  if (session.impersonating) {
+    throw new Error("PREVIEW_READ_ONLY: writes are refused while previewing another role");
+  }
+}
+
+export const authedAction = previewAllowedAction.use(async ({ next, ctx }) => {
+  assertNotPreviewing(ctx.session);
+  return next({ ctx });
 });
 
 function roleGuarded(roles: Role[]) {
