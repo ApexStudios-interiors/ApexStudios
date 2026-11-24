@@ -229,6 +229,17 @@ real Supabase infrastructure rather than a local approximation.
 Supersedes the "Local" row in `architecture.md` §5.2 and `01-hld.md` §13, and the Docker
 prerequisites in `build/01-foundations.md` §0.4 and `build/02-database.md`.
 
+**Amended 2026-11-23 (APX-13): Docker inside the GitHub-hosted CI runner only.** CI's `database`
+job (`.github/workflows/ci.yml`) now runs `supabase start` on the `ubuntu-latest` runner, which
+has Docker. That gives the job a throwaway local Postgres + GoTrue + PostgREST stack: an empty
+database, every migration and `supabase/seed.sql` applied, the pgTAP suite, the integration suite
+and the Drizzle drift check run against `127.0.0.1`, and the whole stack destroyed with the runner.
+It is no second Supabase project, uses no secret and has no route to production. **Nothing changes
+for a developer machine:** Docker is still not part of the local toolchain, and `supabase start`,
+`supabase stop` and `supabase db reset` are still not used outside CI. The guard in
+`scripts/lib/db-target.mjs` now accepts an unset `SUPABASE_PROD_PROJECT_REF` only when every
+target is a loopback URL with no project ref in it; a configured ref is still refused everywhere.
+
 ---
 
 ### ADR-016 — Vercel Pro and Supabase Pro at go-live?
@@ -1252,6 +1263,30 @@ superseded and is not merged.
   exists, "CI has its own database" remains unfunded, which is precisely why CI is paused instead of
   re-pointed.
 
+**Amended 2026-11-23 (APX-13): CI is re-enabled, against an ephemeral local stack.** The condition
+above — "the `database` job has a database that is not the live project" — is now met without a
+second project and without paying for branching. The `database` job starts a throwaway local
+Supabase stack inside the GitHub runner (`supabase start`, using the runner's Docker; see the D14
+amendment), which applies every migration and the seed to an empty database, then runs
+`pnpm test:rls`, `pnpm test:integration` and `pnpm db:check-drift` against `127.0.0.1`. The job no
+longer reads `secrets.SUPABASE_DB_URL` or any other Supabase secret, so it has no production
+access. The `pull_request` and `push: branches: [main]` triggers are restored, and
+`workflow_dispatch` is kept so any branch can be tested by hand
+(`gh workflow run ci.yml --ref <branch>`). The answer itself stands: there is still exactly one
+Supabase project and it is production, and `pnpm dev`, `pnpm db:push` and `.env.local` still point
+at it.
+
+Two deliberate differences from a stock local stack, both made on the runner's copy of
+`supabase/config.toml` only: GoTrue's sign-in rate limits are raised (the integration suite signs
+in far more than 30 times in five minutes from one IP), and the custom access token hook is left
+**unregistered**, matching production, where it has never been registered. Registered as written,
+the hook returns NULL and fails every sign-in, because `profiles` forces RLS and has no policy for
+`supabase_auth_admin` (confirmed on the CI stack: that role sees 0 profiles). That must be fixed
+before anyone runs `supabase config push`. The first runs also found tests that had never run and
+had drifted from the product; each was either brought in line with the migrations or marked
+`KNOWN FAILURE` (pgTAP: a first-line marker that `scripts/run-pgtap.mjs` honours; Vitest:
+`it.skip`). Both kinds are listed in the APX-13 pull request.
+
 ---
 
 ### Findings from Build 09 (Billing)
@@ -1509,8 +1544,10 @@ owner/admin.
   Add User is now the one place a client login is created; the card keeps the list and
   **Add existing client**. Also added the same day: **Remove** on each client row of the card, and
   **Projects** on a client's row of the Users page, to take a client off ONE project
-  (`removeProjectMember`, `pm_delete` — no migration). Refused for a client's last project
-  (`clientAccessRemovalRefusal`): the invariant above holds, and Deactivate is the tool for that.
+  (`removeProjectMember`, `pm_delete` — no migration). **Including a client's last project**
+  (Voola, same day): a client login is still always *created* with a project, but may later have
+  none — it can sign in, sees an empty All Projects page with a message, and gets access back via
+  Add existing client (or is ended with Deactivate). The confirm step warns when it is their last.
 - **Client logins are created from the project.** The project dashboard has a **Client access** card
   (owner/admin only): the project's client logins; **Create client login** (username + optional name
   → auth user, `profiles` row with role `client`, `project_members` row for this project, password

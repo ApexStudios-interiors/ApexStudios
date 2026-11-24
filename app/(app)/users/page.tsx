@@ -1,4 +1,4 @@
-import { requireRole } from "@/lib/auth/session";
+import { requireRoleForPage } from "@/lib/auth/session";
 import { countActiveOwners, listUsers } from "@/features/users/queries";
 import { listClientProjects, listProjectOptions } from "@/features/projects/queries";
 import { ClientProjectsButton } from "@/features/users/components/ClientProjectsButton";
@@ -35,7 +35,7 @@ export default async function UsersPage({
 }: {
   searchParams: Promise<{ page?: string; pageSize?: string }>;
 }) {
-  const session = await requireRole(["admin"]);
+  const session = await requireRoleForPage(["admin"]);
   // The REAL role, as the actions use: a preview never changes who may do what.
   const actor = { userId: session.userId, role: session.role };
   const [users, activeOwners, projects] = await Promise.all([

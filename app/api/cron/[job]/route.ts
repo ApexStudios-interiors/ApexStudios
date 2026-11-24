@@ -79,7 +79,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       summary = await selfEnqueueAndDrain("inventory.reconcile", {}, todayKey());
       break;
     case "weekly.maintenance": {
-      const sweep = await selfEnqueueAndDrain("attachment.orphan_sweep", {}, isoWeekKey());
+      // DRY RUN until the sweep is rewritten (APX-06): it builds its "keep"
+      // list from one unpaged select, which PostgREST caps at 1,000 rows, so
+      // past 1,000 attachments it would delete real photos and invoice PDFs.
+      // A dry run only logs what it would delete.
+      const sweep = await selfEnqueueAndDrain("attachment.orphan_sweep", { dryRun: true }, isoWeekKey());
       const archive = await selfEnqueueAndDrain("project.archive", {}, isoWeekKey());
       summary = {
         claimed: sweep.claimed + archive.claimed,

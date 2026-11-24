@@ -1,10 +1,9 @@
 -- projects.rate_visibility and the rate rule inside rpc_create_stock_request
 -- (migration 20260921090001, D55).
 --
--- UNRUN. There is exactly one Supabase project and it is production (D49), so
--- `pnpm test:rls` has no target today and refuses to run; this file is written
--- to be run the moment a non-production database exists, and has never been
--- executed. Nothing here has been observed passing.
+-- Runs in CI's `database` job against a throwaway local Supabase stack
+-- (APX-13). It was written before that existed, when `pnpm test:rls` had no
+-- non-production target (D49).
 --
 -- Seeded (supabase/seed.sql): owner d1, admin d2, site d5, org a0.
 

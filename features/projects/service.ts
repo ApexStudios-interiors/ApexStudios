@@ -176,26 +176,28 @@ export function isSameProjectName(a: string, b: string): boolean {
  * - `not_client`: only CLIENT access is managed on these screens; a site
  *   supervisor's membership is not (and owner/admin have no rows at all).
  * - `not_member`: nothing to remove.
- * - `last_project`: D51 says a client login always has a project. Taking away
- *   the only one would leave a login that can sign in and see nothing — the
- *   right tool for that is Deactivate on the Users page.
+ *
+ * A client's LAST project may be removed too (owner decision, 2026-11-23): the
+ * login stays and can sign in, but sees no project until Add existing client
+ * gives one back, or Deactivate ends it. The confirm step says so
+ * (CLIENT_LAST_PROJECT_REMOVAL_NOTE).
  */
-export type ClientAccessRemovalRefusal = "not_client" | "not_member" | "last_project";
+export type ClientAccessRemovalRefusal = "not_client" | "not_member";
 
 export function clientAccessRemovalRefusal(target: {
   role: string;
   isMember: boolean;
-  projectCount: number;
 }): ClientAccessRemovalRefusal | null {
   if (target.role !== "client") return "not_client";
   if (!target.isMember) return "not_member";
-  if (target.projectCount <= 1) return "last_project";
   return null;
 }
 
 export const CLIENT_ACCESS_REMOVAL_REFUSAL_COPY: Record<ClientAccessRemovalRefusal, string> = {
   not_client: "Only client access is managed here.",
   not_member: "This client already can't see this project.",
-  last_project:
-    "This is their only project. To stop them signing in, deactivate them on the Users page instead.",
 };
+
+/** Shown when confirming the removal of a client's only project. */
+export const CLIENT_LAST_PROJECT_REMOVAL_NOTE =
+  "This is their only project: they can still sign in but will see no projects until you give them access to one again (Add existing client) or deactivate them on the Users page.";
