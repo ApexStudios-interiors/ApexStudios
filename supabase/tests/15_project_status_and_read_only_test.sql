@@ -129,14 +129,10 @@ select throws_ok(
 
 reset role;
 
--- A real bill on c1 for the bill-attachment check below. Since 20261124100004
--- (APX-05/APX-37) an uploaded attachment must point at a record that exists in
--- its project, with a key under that record's own prefix — so the fixture
--- creates the bill rather than naming an id that does not exist.
-insert into public.bills (id, org_id, project_id, seq_no, bill_no, gst_rate_pct, retention_pct, tds_pct, created_by)
-values ('00000000-0000-4000-8000-000000000401', '00000000-0000-4000-8000-0000000000a0',
-        '00000000-0000-4000-8000-0000000000c1', 990, 'RA-PGTAP-990', 18, 5, 0,
-        '00000000-0000-4000-8000-0000000000d2');
+-- The bill-attachment check below uses the seeded paid bill RA-BHEL-NCH-1
+-- (…0401) on c1. Since 20261124100004 (APX-05/APX-37) an uploaded attachment's
+-- key must sit under its own record's prefix, so the key is
+-- org/<org>/project/<project>/bill/<bill>/….
 
 -- ── archived: read-only (as the migration owner; the trigger fires anyway) ──
 update public.projects set status = 'archived' where id = '00000000-0000-4000-8000-0000000000c1';
