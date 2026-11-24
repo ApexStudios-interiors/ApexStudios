@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
 import { Button } from "@/components/ui/button";
-import { DisabledReason } from "@/components/shared/DisabledReason";
 import {
   Dialog,
   DialogClose,
@@ -18,14 +17,18 @@ import {
 } from "@/components/ui/dialog";
 import { removeProjectMember } from "@/features/projects/actions";
 import type { ClientProjectDTO } from "@/features/projects/queries";
-import { CLIENT_ACCESS_REMOVAL_REFUSAL_COPY, clientAccessRemovalRefusal } from "@/features/projects/service";
+import {
+  CLIENT_ACCESS_REMOVAL_REFUSAL_COPY,
+  CLIENT_LAST_PROJECT_REMOVAL_NOTE,
+} from "@/features/projects/service";
 import { projectPath } from "@/lib/routing/paths";
 
 /**
  * Projects, on a client row of the Users page: the projects this client login
  * can see, each with Remove — the same removeProjectMember the project's
- * Client access card uses, so the same rule applies (not their last project,
- * D51). Remove asks to confirm in place, on that project's row.
+ * Client access card uses, so the same rule applies. Remove asks to confirm in
+ * place, on that project's row; on their only project the confirm also says
+ * they will see no project until given one again (2026-11-23).
  */
 export function ClientProjectsButton({
   profileId,
@@ -41,12 +44,6 @@ export function ClientProjectsButton({
   const [open, setOpen] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [refusalText, setRefusalText] = useState<string | null>(null);
-
-  const refusal = clientAccessRemovalRefusal({
-    role: "client",
-    isMember: true,
-    projectCount: projects.length,
-  });
 
   const remove = useAction(removeProjectMember, {
     onSuccess: ({ data, input }) => {
@@ -128,22 +125,19 @@ export function ClientProjectsButton({
                       >
                         {p.name}
                       </Link>
-                      <span className="ml-auto inline-flex">
-                        <DisabledReason reason={refusal ? CLIENT_ACCESS_REMOVAL_REFUSAL_COPY[refusal] : null}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={refusal !== null || remove.isPending}
-                            onClick={() => {
-                              remove.reset();
-                              setRefusalText(null);
-                              setConfirmingId(p.id);
-                            }}
-                          >
-                            Remove
-                          </Button>
-                        </DisabledReason>
-                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ml-auto"
+                        disabled={remove.isPending}
+                        onClick={() => {
+                          remove.reset();
+                          setRefusalText(null);
+                          setConfirmingId(p.id);
+                        }}
+                      >
+                        Remove
+                      </Button>
                     </>
                   )}
                 </li>
@@ -151,6 +145,9 @@ export function ClientProjectsButton({
             </ul>
           )}
 
+          {confirmingId && projects.length === 1 && (
+            <p className="text-[13px] font-medium">{CLIENT_LAST_PROJECT_REMOVAL_NOTE}</p>
+          )}
           {(refusalText ?? remove.result.serverError) && (
             <p className="text-[12.5px] text-destructive">{refusalText ?? remove.result.serverError}</p>
           )}

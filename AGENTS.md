@@ -50,7 +50,8 @@ Accounts are created on the Users page (Add User: Admin, Site Supervisor, or Cli
 login always belongs to a project: choosing Client in Add User requires a Project. The project
 dashboard's Client access card lists a project's client logins, grants an existing one access to
 another project, and removes one from that project only (as does Projects on a client's row of the
-Users page). A client's last project cannot be removed — deactivate the login instead. It no longer
+Users page) — even their only project, which leaves a login that signs in to no project until one is
+given back or it is deactivated. It no longer
 creates logins (D51, amended 2026-11-23).
 
 ### The one rule that matters most
@@ -101,8 +102,17 @@ experiment; do not run one.
 `pnpm db:reset`, `pnpm db:seed`, `pnpm db:bootstrap`, `pnpm test:rls` and
 `pnpm test:integration` all refuse to run when their target resolves to
 `SUPABASE_PROD_PROJECT_REF` (`scripts/lib/db-target.mjs`), and refuse on a
-non-interactive run when that variable is unset — so none of them can run today.
-`pnpm db:reset` additionally makes you type the ref back. `pnpm test:e2e` has no
+non-interactive run when that variable is unset — so none of them can run on a developer machine
+today. `pnpm db:reset` additionally makes you type the ref back.
+
+**CI has a throwaway database of its own (APX-13; D49 and D14 amended 2026-11-23).** The
+`database` job in `.github/workflows/ci.yml` runs `supabase start` on the GitHub runner's Docker,
+which applies every migration and `supabase/seed.sql` to an empty local stack, then runs
+`pnpm test:rls`, `pnpm test:integration` and `pnpm db:check-drift` against `127.0.0.1`. It reads no
+Supabase secret and cannot reach production. The guard lets an unset `SUPABASE_PROD_PROJECT_REF`
+pass only when every target is a loopback URL. **To test a migration before it ships, push its
+branch and run `gh workflow run ci.yml --ref <branch>`** (pull requests run it automatically).
+Docker is still not part of the developer toolchain. `pnpm test:e2e` has no
 such guard: it signs in and writes test rows, so **never run it against production**.
 
 ## Commands
@@ -114,7 +124,7 @@ such guard: it signs in and writes test rows, so **never run it against producti
 | `pnpm typecheck`           | `tsc --noEmit`, strict mode                                 |
 | `pnpm lint`                | ESLint + Prettier check                                     |
 | `pnpm test`                | Vitest unit tests (integration: `pnpm test:integration`)    |
-| `pnpm test:rls`            | pgTAP policy tests. Refuses production — no target today    |
+| `pnpm test:rls`            | pgTAP policy tests. Refuses production — runs in CI only    |
 | `pnpm test:e2e`            | Playwright, all three role journeys. Never against prod     |
 | `pnpm db:reset`            | Drop, re-migrate, re-seed the **linked** project. Guarded.  |
 | `pnpm db:push`             | Apply pending migrations to the linked project (production) |
@@ -122,9 +132,10 @@ such guard: it signs in and writes test rows, so **never run it against producti
 | `pnpm db:types`            | Regenerate Drizzle/Supabase types from the local schema     |
 
 Before opening a PR: `pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build`.
-**Automatic CI is paused (D49):** `.github/workflows/ci.yml` runs on `workflow_dispatch` only, so
-this local run is the only gate before a push. `pnpm test:rls` belongs in it again once a
-non-production database exists.
+**CI runs on every pull request and push to `main`** (re-enabled 2026-11-23, APX-13), and by hand
+on any branch with `gh workflow run ci.yml --ref <branch>`. Its `database` job is the only place
+`pnpm test:rls`, `pnpm test:integration` and `pnpm db:check-drift` run, against a throwaway local
+Supabase on the runner — a migration PR is not ready until that job is green.
 
 ---
 
@@ -423,8 +434,8 @@ The RLS test suite is the highest-value test code in this repository. Do not ski
 - Do not store derived values that can go stale (inventory status, over-budget, late flag).
   Cached rollups (`progress_pct`) are the exception and are trigger-maintained.
 - Do not run `pnpm test:e2e`, the seed, a reset or any destructive experiment against the one
-  Supabase project — it is production (D49). Do not re-enable CI's `pull_request`/`push` triggers
-  until the `database` job has a non-production database.
+  Supabase project — it is production (D49). Do not point CI's `database` job at any hosted
+  project or give it a Supabase secret: it runs against the runner's throwaway local stack only.
 - Do not swap Base UI for Radix, use `asChild`, or let `shadcn add` overwrite
   `components/ui/button.tsx` (D53).
 - Do not commit `.env.local`, service keys, R2 credentials, or seed data containing real

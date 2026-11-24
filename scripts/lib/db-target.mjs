@@ -67,6 +67,37 @@ export function projectRefFromUrl(url) {
   return direct?.[1] ?? null;
 }
 
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
+
+/**
+ * True when a target is a URL on a loopback host with no Supabase project ref
+ * in it — e.g. postgresql://postgres:postgres@127.0.0.1:54322/postgres or
+ * http://127.0.0.1:54321. A bare ref, a remote host, or a loopback URL whose
+ * username is `postgres.<ref>` (an SSH tunnel to a hosted pooler) is not local.
+ *
+ * @param {string} target
+ * @returns {boolean}
+ */
+export function isLocalTarget(target) {
+  if (projectRefFromUrl(target) !== null) return false;
+  let url;
+  try {
+    url = new URL(target);
+  } catch {
+    return false;
+  }
+  return LOOPBACK_HOSTS.has(url.hostname);
+}
+
+/**
+ * @param {(string | null | undefined)[]} targets
+ * @returns {boolean} true when there is at least one target and every one is local
+ */
+function allLocal(targets) {
+  const present = targets.filter((t) => t).map((t) => String(t).trim());
+  return present.length > 0 && present.every(isLocalTarget);
+}
+
 /**
  * Decides whether a set of targets may be written to.
  *
@@ -80,6 +111,12 @@ export function projectRefFromUrl(url) {
  */
 export function checkProductionTarget(targets, what) {
   const prod = productionRef();
+
+  // A throwaway local stack (`supabase start` in CI's `database` job, on the
+  // runner's own Docker) is provably not production: every target is a
+  // loopback host and none carries a project ref. Only then may an unset
+  // SUPABASE_PROD_PROJECT_REF pass. A configured ref is still compared below.
+  if (!prod && allLocal(targets)) return { refuse: null, warn: null };
 
   if (!prod) {
     const message =

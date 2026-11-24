@@ -197,3 +197,65 @@ export async function getBusinessInventory(
   const stats = await fetchStats(isAdmin, opts.projectId, opts.search);
   return { items, stats };
 }
+
+export type AdjustmentDTO = {
+  id: string;
+  /** Signed: positive added stock, negative removed it. */
+  change: number;
+  reason: string | null;
+  byName: string | null;
+  createdAt: string;
+};
+
+/** How many past adjustments the Adjust dialog lists — enough to see a
+ *  pattern, short enough to stay a glance, not a report. */
+const ADJUSTMENT_HISTORY_LIMIT = 10;
+
+/**
+ * One item's recent adjustments, newest first, for the Adjust dialog.
+ * Admin only: an adjustment is the admin-only write, and the history of who
+ * wrote stock off is part of it. Read from the ledger itself
+ * (`stock_movements`, `ref_type = 'adjustment'` — D31: an adjustment is an
+ * ordinary in/out movement tagged that way), through the caller's RLS
+ * (`movements_select`). `unit_cost` is never selected. The names come from a
+ * second read of `profiles`, since generated types do not carry the
+ * embedded-relation shape.
+ */
+export async function getAdjustmentHistory(session: Session, itemId: string): Promise<AdjustmentDTO[]> {
+  const effectiveRole = session.impersonating?.role ?? session.role;
+  if (effectiveRole !== "admin") return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("stock_movements")
+    .select("id, direction, qty, reason, created_by, created_at")
+    .eq("inventory_item_id", itemId)
+    .eq("ref_type", "adjustment")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(ADJUSTMENT_HISTORY_LIMIT);
+  if (error) throw new Error(error.message);
+  if (data.length === 0) return [];
+
+  const profileIds = [...new Set(data.map((m) => m.created_by).filter((id): id is string => id != null))];
+  const names = new Map<string, string>();
+  if (profileIds.length > 0) {
+    const { data: profiles, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", profileIds);
+    if (profileError) throw new Error(profileError.message);
+    for (const p of profiles) names.set(p.id, p.full_name);
+  }
+
+  return data.map((m) => {
+    const qty = Number(m.qty);
+    return {
+      id: m.id,
+      change: m.direction === "out" ? -qty : qty,
+      reason: m.reason,
+      byName: m.created_by ? (names.get(m.created_by) ?? null) : null,
+      createdAt: m.created_at,
+    };
+  });
+}

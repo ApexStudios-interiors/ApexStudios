@@ -5,6 +5,7 @@ import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, sub } from "@/components/ui/table";
 import { Empty } from "@/components/ui/Empty";
 import { MinimumStockInfo } from "@/features/inventory/components/MinimumStockInfo";
+import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 
 /**
  * build/07-stock-inventory-notifications.md §2.5 step 5: already props-driven
@@ -18,6 +19,10 @@ import { MinimumStockInfo } from "@/features/inventory/components/MinimumStockIn
  * regardless (features/inventory/queries.ts's own boundary) — the Value
  * column is simply not rendered at all for that role, rather than rendered
  * as "–" (AGENTS.md: never fetch or expose the column in the first place).
+ *
+ * `isAdmin` also adds the last column's Adjust button (AdjustInventoryDialog)
+ * — the same admin-only write the mobile app offers; the action and
+ * rpc_adjust_inventory refuse anyone else regardless.
  */
 export function InventoryTable({
   items,
@@ -46,6 +51,11 @@ export function InventoryTable({
           {isAdmin && <th className={thNum}>Value</th>}
           <th className={th}>Location</th>
           <th className={th}>Status</th>
+          {isAdmin && (
+            <th className={th}>
+              <span className="sr-only">Actions</span>
+            </th>
+          )}
         </tr>
       </thead>
       <tbody>
@@ -78,6 +88,20 @@ export function InventoryTable({
               <td className={td}>
                 <StockLevelBadge status={i.status} />
               </td>
+              {isAdmin && (
+                <td className={td + " text-right"}>
+                  <OpenDialogButton
+                    size="sm"
+                    dialog={{
+                      kind: "adjustInventory",
+                      item: { id: i.id, name: i.name, unit: i.unit, qtyOnHand: i.qtyOnHand },
+                    }}
+                    aria-label={`Adjust ${i.name}`}
+                  >
+                    Adjust
+                  </OpenDialogButton>
+                </td>
+              )}
             </tr>
           ))
         ) : (
@@ -87,8 +111,8 @@ export function InventoryTable({
                 via review: this stayed keyed on `showProject` alone after
                 `isAdmin` was added, under-spanning the empty state for a
                 non-admin business-wide view and over-spanning it for a
-                non-admin project view. */}
-            <td className={td} colSpan={5 + (showProject ? 1 : 0) + (isAdmin ? 1 : 0)}>
+                non-admin project view. Admin also has the Adjust column. */}
+            <td className={td} colSpan={5 + (showProject ? 1 : 0) + (isAdmin ? 2 : 0)}>
               <Empty>{empty}</Empty>
             </td>
           </tr>

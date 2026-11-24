@@ -1,4 +1,5 @@
 import "server-only";
+import { forbidden } from "next/navigation";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { createClient, getBearerToken } from "@/lib/supabase/server";
@@ -22,6 +23,19 @@ export class UnauthenticatedError extends Error {
     super("UNAUTHENTICATED");
     this.name = "UnauthenticatedError";
   }
+}
+
+/**
+ * requireRole for a PAGE or LAYOUT: a wrong role renders `app/(app)/forbidden.tsx`
+ * ("You don't have access to this") through next/navigation's forbidden(),
+ * instead of throwing ForbiddenError into the error boundary, which shows
+ * "Something went wrong" (APX-28, found live). Server Actions and route
+ * handlers keep using requireRole: they map ForbiddenError to a 403 / message.
+ */
+export async function requireRoleForPage(roles: Role[]): Promise<Session> {
+  const session = await requireSession();
+  if (!roles.includes(session.role)) forbidden();
+  return session;
 }
 
 export class ForbiddenError extends Error {
