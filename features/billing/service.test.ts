@@ -93,28 +93,51 @@ describe("previewBill — line composition", () => {
 describe("previewBill — MAS recovery", () => {
   it("recovers a phase's prior material advance from gross before computing taxable", () => {
     const lines: BillableLine[] = [
-      { sourceType: "phase", amount: 50000, internalCost: 30000, priorMaterialAdvanceOnThisPhase: 5000 },
+      { sourceType: "phase", amount: 50000, internalCost: 30000, masRecovery: 5000 },
     ];
     const result = previewBill(lines, NO_ADVANCE);
     expect(result.masRecoveryAmount.toNumber()).toBe(5000);
     expect(result.taxableAmount.toNumber()).toBe(45000); // 50000 - 5000
+    expect(result.masRecoveryExceedsGross).toBe(false);
   });
 
-  it("MAS recovery exceeding gross floors taxable at zero, not negative", () => {
+  it("MAS recovery exceeding gross is flagged (the RPC refuses it), and taxable shows zero, not negative", () => {
     const lines: BillableLine[] = [
-      { sourceType: "phase", amount: 5000, internalCost: 3000, priorMaterialAdvanceOnThisPhase: 8000 },
+      { sourceType: "phase", amount: 5000, internalCost: 3000, masRecovery: 8000 },
     ];
     const result = previewBill(lines, NO_ADVANCE);
+    expect(result.masRecoveryExceedsGross).toBe(true);
     expect(result.taxableAmount.toNumber()).toBe(0);
     expect(result.gstAmount.toNumber()).toBe(0);
     expect(result.netPayable.toNumber()).toBe(0);
   });
 
-  it("a material line's own priorMaterialAdvanceOnThisPhase is never read", () => {
+  it("MAS recovery exactly equal to gross is allowed: taxable is zero and nothing is flagged", () => {
+    const lines: BillableLine[] = [
+      { sourceType: "phase", amount: 8000, internalCost: 3000, masRecovery: 8000 },
+    ];
+    const result = previewBill(lines, NO_ADVANCE);
+    expect(result.masRecoveryExceedsGross).toBe(false);
+    expect(result.taxableAmount.toNumber()).toBe(0);
+  });
+
+  it("APX-07 repro: phase ₹10,00,000 alone, with ₹3,00,000 of its marble already advanced, taxes ₹7,00,000", () => {
+    // The audit's own figures. The marble (client value ₹4,00,000, MAS 75%)
+    // was billed earlier as a ₹3,00,000 advance; billing the phase now
+    // recovers it, so across both bills the client is charged ₹10,00,000.
+    const result = previewBill(
+      [{ sourceType: "phase", amount: 1000000, internalCost: 600000, masRecovery: 300000 }],
+      NO_ADVANCE
+    );
+    expect(result.taxableAmount.toNumber()).toBe(700000);
+    expect(result.gstAmount.toNumber()).toBe(126000);
+  });
+
+  it("a material line's own masRecovery is never read", () => {
     // The field is meaningless on a 'material' line — this asserts it has no
     // effect even if a caller mistakenly sets it there.
     const lines: BillableLine[] = [
-      { sourceType: "material", amount: 5000, internalCost: 4000, priorMaterialAdvanceOnThisPhase: 9999 },
+      { sourceType: "material", amount: 5000, internalCost: 4000, masRecovery: 9999 },
     ];
     const result = previewBill(lines, NO_ADVANCE);
     expect(result.masRecoveryAmount.toNumber()).toBe(0);
@@ -220,7 +243,7 @@ describe("previewBill — net_payable reconciles across generated cases (T- list
         sourceType: "phase",
         amount: c.workValue,
         internalCost: c.internalCost,
-        priorMaterialAdvanceOnThisPhase: c.priorAdvance,
+        masRecovery: c.priorAdvance,
       },
       { sourceType: "material", amount: c.materialValue, internalCost: 0 },
     ];

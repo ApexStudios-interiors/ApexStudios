@@ -39,6 +39,7 @@ flowchart TD
     Home["/ — All Projects"] -->|click a project| Dash["/projects/:id — Dashboard"]
     Home --> Users["/users — Users (Admin only)"]
     Home --> InvAll["/inventory — Inventory, all projects (Admin/Site)"]
+    Home --> Inbox["/inbox — Needs my action (every role)"]
 
     Dash --> Packages["/projects/:id/packages — Packages list"]
     Packages -->|click a package| ModDetail["/projects/:id/packages/:moduleId"]
@@ -67,9 +68,10 @@ Top to bottom:
    - "View all projects" (goes to `/`)
    - every project listed by name + client, click jumps straight to that project's Dashboard
    - highlights the project you're currently in
-3. **Inventory** *(Admin, Site only)* — standalone link to the business-wide `/inventory` view, tagged **ALL** on the right so it's not confused with the per-project Inventory page below.
-4. **Project name** — plain text header, *only rendered once you're inside a project* (hidden on Home/Users/business Inventory, by design — the sidebar shouldn't imply a project is "selected" when you're looking at the portfolio).
-5. **Project navigation** *(only when inside a project, filtered by role — see §13)*:
+3. **Needs my action** *(every role)* — link to `/inbox`, the aged list of everything waiting on you across all your projects (see §9).
+4. **Inventory** *(Admin, Site only)* — standalone link to the business-wide `/inventory` view, tagged **ALL** on the right so it's not confused with the per-project Inventory page below.
+5. **Project name** — plain text header, *only rendered once you're inside a project* (hidden on Home/Users/business Inventory, by design — the sidebar shouldn't imply a project is "selected" when you're looking at the portfolio).
+6. **Project navigation** *(only when inside a project, filtered by role — see §13)*:
    - Dashboard
    - Packages — expandable (chevron toggle); expands into every package as a numbered sub-item (01, 02, 03…)
    - Schedule
@@ -79,15 +81,15 @@ Top to bottom:
    - Approvals
    - Billing / **Bills** (label changes for Client) — badge shows count of **Submitted** bills, Client only
    - Approvals also badges for Client: count of **Pending** approvals
-6. **Studio** *(Admin only)* — group label, contains **Users**.
-7. **User card** (bottom-left) — avatar initials, name, role. Click opens an upward menu: **Switch role** with Admin / Site Supervisor / Client, checkmark on whichever is active.
+7. **Studio** *(Admin only)* — group label, contains **Users**.
+8. **User card** (bottom-left) — avatar initials, name, role. Click opens an upward menu: **Switch role** with Admin / Site Supervisor / Client, checkmark on whichever is active.
 
 ---
 
 ## 5. Header
 
-- **Breadcrumb** (left) — `{Project} / {Section}` or `{Project} / Packages / {Package}` for module pages; just "All Projects", "Users", or "Inventory" on those top-level pages.
-- **Notifications bell** (right) — badge = count of open items; click for a dropdown, role-scoped (see §9).
+- **Breadcrumb** (left) — `{Project} / {Section}` or `{Project} / Packages / {Package}` for module pages; just "All Projects", "Users", "Inventory" or "Needs my action" on those top-level pages.
+- **Notifications bell** (right) — badge = count of unread items; click for a dropdown, role-scoped (see §9). Its footer links to **Needs my action**. Escape closes it.
 - **Theme toggle** (far right) — sun/moon icon button, flips light ↔ dark, remembered via `localStorage`, defaults to your OS setting on first visit.
 
 ---
@@ -103,8 +105,17 @@ Top to bottom:
 - A card per project: name, client, status badge, a Progress bar, a Budget-used bar (Admin only), footer line (`{n} packages · {value} allocated/contract · Started {date}`). Click anywhere on the card to open that project.
 
 ### 6.2 Project Dashboard (`/projects/:id`)
-- Heading = project name; subtitle = client · location · start date.
-- Buttons: **+ Add Package** (Admin), **+ Stock Request** (not Client).
+- Heading = project name and its status badge; subtitle = client · location · start date.
+- Buttons: **Edit Project** (Admin) → *Edit Project* dialog · **Change Status** (Admin) → *Change status*
+  dialog · **+ Add Package** (Admin) · **+ Stock Request** (not Client). On a **completed** project
+  + Stock Request is disabled; on an **archived** one + Add Package is disabled too (see §11, read-only
+  projects). The reason is the button's title and a banner at the top of every page of the project.
+- **Set up this project** card (Admin, 2026-11-24) — only while something is missing and the project is
+  not completed or archived. Six items in order: Packages with budgets · Phases in every package · A
+  schedule in every package · A site supervisor · Client access · Status set to Active. Each open item
+  says what is missing and links to where to fix it (Add Package, the first package's Budget or
+  Schedule tab, the Site team or Client access card, Change status). The card disappears when all six
+  are done.
 - Stat row, role-dependent:
   - **Admin (5 stats):** Allocated Budget, Internal Budget, Committed, Remaining, Progress
   - **Client (4 stats):** Contract Value, Work Progress, Bills Raised, Awaiting Your Approval
@@ -113,6 +124,12 @@ Top to bottom:
 - **Pending Approvals** card — only if any exist *and* role isn't Site; "View all" jumps to Approvals.
 - **Pending Requests** card — only if any exist *and* role isn't Client; "View all" jumps to Stock Requests.
 - **Latest Updates** card — last 3 daily updates, "View all" jumps to Daily Updates.
+- **Site team** card (Admin, 2026-11-24) — the Site Supervisors who can see this project, each with
+  **Remove** (this project only; confirm step, and a note when it is their only project), and
+  **Add site supervisor** to put an existing supervisor on it. A supervisor sees only projects they are
+  on, so a new one sees nothing until added here or from the Users page.
+- **Client access** card (Admin) — the project's client logins, **Remove**, **Add existing client** (D51).
+- **Rate visibility** card (Admin, D55).
 
 ### 6.3 Packages list (`/projects/:id/packages`)
 - Heading + "**+ Add Package**" (Admin) → *Add Package* dialog.
@@ -134,10 +151,11 @@ Every row is clickable → opens that package's detail page.
 
 ### 6.5 Package detail (`/projects/:id/packages/:moduleId`)
 - Heading = `{no} {package name}`; subtitle = lead · status · progress %.
-- Buttons: **Edit** (Admin) → *Edit Package* dialog · **+ Add Task** (Schedule tab, not Client) · **+ Post Update** (Updates tab, not Client) · **+ Stock Request** (not Client).
+- Buttons: **Edit** (Admin) → *Edit Package* dialog · **+ Add Task** (Schedule tab, not Client) · **+ Post Update** (Updates tab, not Client) · **+ Stock Request** (not Client). Disabled on a read-only project as in §6.2.
 - Stat row: same Admin/Client shape as §6.2 but scoped to this one package. **Site sees no stat row here** — straight to the tabs.
 - **Tabs:** Budget *(labeled "Phases" for non-Admin)* · Schedule · Updates · Stock Requests *(hidden for Client)* · Billing *(Admin only)*.
-  - **Budget/Phases tab:** phase-level table — Allocated/Internal/Committed/Remaining/Used (Admin), Contract Value (Client), Requests count (Site).
+  - **Budget/Phases tab:** phase-level table — Allocated/Internal/Committed/Remaining/Used (Admin), Contract Value (Client), Requests count (Site). Admin also gets **+ Add Phase** above the table and **Edit** on each row (→ *Add Phase* / *Edit Phase*, 2026-11-24); a phase already on a bill shows a *Billed* badge and its Allocated is locked. Not on an archived project.
+  - **Add Task** on a package with no phases says so; an Admin gets **Create phase** there, which opens *Add Phase* and returns to *Add Task* afterwards. A Site Supervisor is told to ask an admin.
   - **Schedule tab:** the Gantt chart for this package (§7).
   - **Updates tab:** daily updates filtered to this package.
   - **Stock Requests tab:** requests filtered to this package.
@@ -159,15 +177,22 @@ See §8 — documented together since they're the same table, just scoped differ
 
 ### 6.9 Stock Requests (`/projects/:id/stock`)
 - "**+ New Request**" button → *New Stock Request* dialog.
-- Status filter tabs: All / Pending / Approved / Ordered / Delivered / Rejected. Package filter dropdown.
-- Columns: Request (id, date, requester) · Material (item + package) · Qty · Value *(Admin only)* · Needed By · Status · Actions.
-- Actions depend on current status: **Pending** → Approve/Reject (Admin only) · **Approved** → Mark Ordered (Admin) · **Ordered** → Mark Delivered (Admin or Site).
+- Status filter tabs: All / Pending / Approved / Ordered / Delivered / Rejected / Cancelled. Package filter dropdown.
+- Columns: Request (id, date, requester) · Material (item + package) · Qty · Value *(Admin only)* · Needed By · Status (with the rejection or cancellation reason under the badge, and "Remainder of a part delivery" on a split-off request) · Actions.
+- Actions depend on current status (D68, 2026-11-24):
+  - **Pending** → **Approve** (Admin) opens a dialog that **requires the rate** (₹ per unit, 0 allowed) and shows the value it commits · **Reject** (Admin, reason required) · **Edit** (quantity, Needed By, note — the requester or an Admin) · **Cancel** (only the person who raised it; no reason needed).
+  - **Approved** → **Mark Ordered** (Admin, one click) · **Rate** (Admin: set or correct the rate) · **Cancel** (Admin, reason required).
+  - **Ordered** → **Mark Delivered** (Admin or Site) opens a confirmation showing the quantity and unit; the delivered quantity can be lowered for a **part delivery**, and the rest stays Ordered as a new linked request with its own number · **Rate** and **Cancel** (Admin, as above).
+  - **Delivered / Rejected / Cancelled** → none; they are final.
+- Each row has its own pending state; a failed action shows its message (a toast, or inside the dialog) and refreshes the row to its real status.
+- Submitting the New Stock Request form twice (a retry after a lost connection) does not raise a second request: the form says "Request already submitted".
+- Typing a material that is already in this project's inventory (same name, ignoring case and spacing, and the same unit) links the request to that item, and the form says so; its delivery adds to that item instead of creating a new one.
 
 ### 6.10 Approvals (`/projects/:id/approvals`)
 - "**+ Request Approval**" button (not Client) → *Request Approval* dialog.
 - Status filter tabs: Pending / Approved / Rejected / All.
 - Columns: Ref · Item (with package, note, up to 4 sample-photo thumbnails) · Type badge · Requested · Needed By · Status (+ decided date once resolved) · Actions.
-- Actions: **Client**, when Pending, gets Approve/Reject buttons — this *is* the client sign-off. Everyone else gets an "Add photos" button → *Add Sample Photos* dialog.
+- Actions: **Client**, when Pending, gets Approve/Reject buttons — this *is* the client sign-off. Everyone else gets an "Add photos" button → *Add Sample Photos* dialog, and the person who requested a still-pending approval also gets **Withdraw** (it leaves the client's list and bell; D68).
 
 ### 6.11 Billing (Admin/Site) / Bills (Client) (`/projects/:id/billing`)
 **Admin view:**
@@ -184,6 +209,7 @@ See §8 — documented together since they're the same table, just scoped differ
 ### 6.12 Users (`/users`, Admin only)
 - "**+ Invite User**" button → *Invite User* dialog.
 - Table: avatar + name, contact, a role dropdown and a Deactivate/Reactivate button (D54). Both are real: changing a role or deactivating signs that person out everywhere, and deactivation bans the login until it is reversed. Deactivate is reversible — nothing is deleted. Owner and admin only, and an admin may act only on site/client users.
+- **Projects (n)** on each Client and Site Supervisor row (D51; Site rows added 2026-11-24): the projects that login can see, each with **Remove** (that project only, confirmed in place), and **Add to project** for one it cannot see yet. A Site Supervisor added here sees the project on next load.
 
 ---
 
@@ -200,7 +226,14 @@ Two views over the same `InventoryItem` records (item, category, quantity on han
 - **Per-project** (`/projects/:id/inventory`) — one project's stock.
 - **Business-wide** (`/inventory`, sidebar-tagged **ALL**) — every project's stock in one table with a Project column and a project filter, for a studio-wide view.
 
-Both show the same stat row (Total Items, Total Value, Low Stock count, Critical count) and the same table (Item + category, On Hand, Reorder Level, Value, Location, Status).
+Both show the same stat row (Total Items, Total Value, Low Stock count, Critical count) and the same table (Item + category, On Hand, Reorder Level, Value, Location, Status, actions).
+
+**Row actions (D68, 2026-11-24):**
+- **Record usage** *(Admin, Site — a project's own stock with something on hand)*: package, quantity used (at most what is on hand), optional note. Takes the quantity off the stock as an "out" movement.
+- **Adjust** *(Admin)*: the new quantity after a physical count, with a reason (PR #81's dialog). Also how an opening balance is entered — a new item always starts at 0.
+- **Minimum** *(Admin)*: the item's minimum stock; previews the status it will read as.
+
+Unit cost is never readable by a Site Supervisor — not on screen and not through the API.
 
 **Status is derived, not stored:**
 
@@ -217,7 +250,9 @@ Value = quantity × unit cost, summed for the "Total Value" stat.
 
 ## 9. Notifications
 
-The bell icon aggregates live, role-scoped items from across **every** project (not just the one you're viewing) — built fresh from current data each time you open it, nothing is "marked read":
+The bell aggregates live, role-scoped items from across **every** project you can access (not just the one you're viewing), built fresh from current data each time. The badge counts items you have not opened yet (D60); opened items stay listed, in grey, until the work is done. Nothing from an **archived** project appears.
+
+**Open work** (stays until it is done):
 
 | Role | Sees |
 |---|---|
@@ -225,7 +260,32 @@ The bell icon aggregates live, role-scoped items from across **every** project (
 | Site | Pending stock requests · Inventory items that are Low or Critical |
 | Client | Approvals Pending (need their sign-off) · Bills Submitted (awaiting their approval) |
 
+**Status changes** (news — shown for 14 days after they happen, D68):
+
+| Change | Who is told |
+|---|---|
+| Stock request approved | the person who raised it |
+| Stock request ordered | Site Supervisors on the project, and the person who raised it |
+| Stock request delivered | Admins |
+| Stock request rejected — with the reason | the person who raised it |
+| Approval approved / rejected by the client — with the reason | Admins, and the person who requested it |
+| Bill certified / rejected by the client — with the reason | Admins |
+
+Low or Critical uses the Inventory page's own rule: Critical at zero on hand, Low below the minimum stock. No entry ever shows an amount; Site never sees a bill and a client never sees stock. While an admin previews a role, the bell (and search) show only the previewed project.
+
 Each entry is a link straight to the relevant project's relevant page.
+
+### 9.1 Needs my action (`/inbox`)
+
+One list of everything waiting on **you**, across all your projects, oldest first, with how many days each item has waited. Linked from the sidebar and from the bell's footer. Paginated like every table; empty when nothing is waiting.
+
+| Role | Lists |
+|---|---|
+| Admin | Stock requests to decide · Draft bills to submit · Certified bills awaiting payment · Rejected approvals not yet revised |
+| Site | Ordered materials waiting to be received · Your stock requests that were rejected (last 14 days) |
+| Client | Approvals waiting for your decision · Bills waiting for your certification |
+
+Columns: Action, Item (a link to where you act), Project, Since, Waiting. Items waiting a week or more are emphasised. An item leaves the list as soon as the work is done.
 
 ---
 
@@ -250,10 +310,13 @@ Color is reserved entirely for status — everything else in the UI is grayscale
 - **Committed** (per package) = sum of `qty × rate` for every stock request in that package with status Approved, Ordered, *or* Delivered.
 - **Remaining** = Internal Budget − Committed.
 - **Progress** = task-duration-weighted average of `%complete` across a package's tasks (a 3-week task counts 3× a 1-week task).
-- **Billing constants:** GST **18%**, Retention **5%**, Material-at-site billable at **75%** of its client value.
+- **Billing constants:** per project, defaulting to GST **18%**, Retention **5%**, Material-at-site billable at **75%** of its client value, TDS **0%**. An Admin changes them (and the mobilisation advance and its recovery %) in *Edit Project*; they are copied onto each bill when it is created, so a change never restates an existing bill.
 - A **phase becomes billable** when every one of its tasks hits 100%, *or* it's been marked complete manually (for phases with no linked tasks), *or* — for materials — a stock request reaches Delivered.
 - **Bill math**, top to bottom: Gross (sum of selected line values) → minus **recovery** (material already billed for a phase now being billed as a completed milestone, to avoid double-billing) → **Taxable value** → minus 5% retention → plus 18% GST → **Net Payable**.
 - **Cost→client factor**: `alloc ÷ internal` for a phase (or module, if the phase has no internal figure) — this is what converts a material's internal cost into its client-billable value.
+- **Project status** (2026-11-24): Planning → Active → On Hold / Completed → Archived, via *Change status* (Admin only, audited). Reopening (Completed → Active, Archived → Completed) needs a reason. Completing stamps the completion date the 12-month auto-archive reads.
+- **Read-only projects** (2026-11-24): an **archived** project refuses every change — packages, phases, tasks, stock requests, approvals, daily updates, attachments — except billing and payments. A **completed** project refuses only *new* stock requests and daily updates; billing, payments, deliveries, approvals and task corrections carry on. Enforced in the database; the buttons are disabled to match.
+- **A phase on a bill keeps its Allocated amount** (2026-11-24): once Billed or Paid it cannot change; correct with a credit note or an adjustment on the next bill.
 
 ---
 
@@ -287,9 +350,13 @@ stateDiagram-v2
     Pending --> Approved: Admin approves
     Pending --> Rejected: Admin rejects
     Approved --> Ordered: Admin marks ordered
-    Ordered --> Delivered: Admin or Site marks delivered
+    Ordered --> Delivered: Admin or Site marks delivered (part delivery splits off the rest as a new Ordered request)
+    Pending --> Cancelled: the requester cancels
+    Approved --> Cancelled: Admin cancels, with a reason
+    Ordered --> Cancelled: Admin cancels, with a reason
     Delivered --> [*]
     Rejected --> [*]
+    Cancelled --> [*]
 ```
 
 **Approval** (client sign-off on samples/makes/drawings)
@@ -312,6 +379,20 @@ stateDiagram-v2
     Paid --> [*]
 ```
 
+**Project** (2026-11-24 — *Change status*, Admin only, every move audited)
+```mermaid
+stateDiagram-v2
+    [*] --> Planning: Admin creates
+    Planning --> Active
+    Active --> OnHold
+    OnHold --> Active
+    Active --> Completed
+    OnHold --> Completed
+    Completed --> Archived: Admin, or automatically 12 months later
+    Completed --> Active: reopen (reason required)
+    Archived --> Completed: reopen (reason required)
+```
+
 ---
 
 ## 14. User flows
@@ -320,7 +401,10 @@ stateDiagram-v2
 ```mermaid
 flowchart TD
     A[Create project] --> B[Add packages with allocated/internal budgets]
-    B --> C[Add tasks to a package's schedule]
+    B --> B2[Add phases to each package]
+    B2 --> C[Add tasks to a package's schedule]
+    C --> C2[Site team: add a supervisor · Client access: add the client]
+    C2 --> C3[Change status to Active]
     C --> D{Site posts stock requests}
     D --> E[Admin approves request]
     E --> F[Admin marks Ordered]
@@ -408,12 +492,17 @@ flowchart TD
 | **New Project** | All Projects → "+ New Project" | Project Name, Client, Location, Start Date, Packages (comma-separated) | Creates project, navigates to its Dashboard |
 | **Add Package** | Dashboard/Packages → "+ Add Package" | Package Name, Allocated Budget, Internal Budget, Lead | Adds package to the project |
 | **Edit Package** | Package detail → "Edit" | Package Name, Allocated Budget, Internal Budget, Lead, Status | Updates the package |
+| **Edit Project** | Dashboard → "Edit Project" (Admin) | Project Name, Location, Target End Date, Contract Value, GST %, Retention %, Material at site billable %, TDS %, Mobilisation advance, Advance recovery % | Updates the project; rates apply to the next bill |
+| **Change status** | Dashboard → "Change Status" (Admin), or the setup checklist | New status (legal next steps only), Reason (when reopening) | Moves the status through the audited RPC |
+| **Add Phase** | Package → Budget tab → "+ Add Phase" (Admin), or Add Task → "Create phase" | Phase Name, Allocated, Internal | Adds a phase; from Add Task, returns to Add Task |
+| **Edit Phase** | Package → Budget tab → row "Edit" (Admin) | Phase Name, Allocated (locked once billed), Internal | Updates the phase; refuses if someone else saved first |
+| **Add site supervisor** | Dashboard → Site team → "Add site supervisor" (Admin) | Site Supervisor | Puts them on this project |
 | **Add Task** | Schedule tab / Schedule page → "+ Add Task" | Task, Phase, Owner, Start Week, Duration (weeks) | Adds a task to the Gantt |
 | **Task Detail** | Click a Gantt bar | Progress (slider), Start Week, Duration (weeks), Note | Updates the task |
 | **New Stock Request** | "+ Stock Request" (several pages) | Package, Phase, Material (with suggestions), Quantity + unit, Needed By, Rate *(Admin only)*, Note | Creates request, goes to Stock Requests |
 | **Request Approval** | Approvals → "+ Request Approval" | Package, Phase, Type, Needed By, Item, Note, Sample Photos | Creates approval, goes to Approvals |
-| **Add Sample Photos** | Approvals table → "Add photos" | Photos | Appends photo count to that approval |
-| **Post Daily Update** | "+ Post Update" (several pages) | Package, Date, Work Done, Photos | Creates update, goes to Daily Updates |
+| **Add Sample Photos** | Approvals table → "Add photos" | Photos (only as many as the approval has room for, of 4) | Attaches the photos. Upload waits for every photo to finish; **Cancel removes the photos it uploaded** |
+| **Post Daily Update** | "+ Post Update" (several pages) | Package (**no default** from the project page — a choice is required; a package page pre-selects its own), Date, Work Done, Photos | Creates update, goes to Daily Updates. Post waits for photos still uploading |
 | **Upload Bill Copy** | Billing → "Upload" | Bill PDF / image (multi-file) | Attaches file(s) to the bill |
 | **View Bill** | Billing → "View" | *(read-only)* | Download PDF/Excel (toast only, demo) |
 | **Invite User** | Users → "+ Invite User" | Name, Email or Phone, Role | Adds the person to the team table |

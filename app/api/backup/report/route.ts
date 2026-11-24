@@ -2,6 +2,7 @@ import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { env } from "@/lib/env";
+import { bearerMatches } from "@/lib/auth/bearer-secret";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -23,8 +24,8 @@ const bodySchema = z.object({
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const auth = request.headers.get("authorization");
-  if (auth !== `Bearer ${env.CRON_SECRET}`) {
+  // Constant-time (APX-57): `!==` returns at the first differing byte.
+  if (!bearerMatches(request.headers.get("authorization"), env.CRON_SECRET)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

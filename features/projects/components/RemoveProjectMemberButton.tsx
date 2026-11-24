@@ -16,33 +16,38 @@ import {
 } from "@/components/ui/dialog";
 import { removeProjectMember } from "@/features/projects/actions";
 import {
-  CLIENT_ACCESS_REMOVAL_REFUSAL_COPY,
-  CLIENT_LAST_PROJECT_REMOVAL_NOTE,
+  MEMBER_REMOVAL_REFUSAL_COPY,
+  lastProjectRemovalNote,
+  type MemberRole,
 } from "@/features/projects/service";
 
 /**
- * Remove, on a client row of the project's Client access card: takes that
- * client login off THIS project only. Their login and their other projects are
- * untouched; Add existing client gives the access back.
+ * Remove, on a row of the project's Client access card or Site team card:
+ * takes that client login or Site Supervisor off THIS project only. Their
+ * login and their other projects are untouched; the card's Add button gives
+ * the access back.
  *
- * Always available, including on the client's only project (2026-11-23); the
+ * Always available, including on the member's only project (2026-11-23); the
  * confirm step then says they will see no project until given one again.
- * removeProjectMember still refuses a non-client or non-member on the server.
+ * removeProjectMember still refuses an admin, a non-member or the other role
+ * on the server (memberRemovalRefusal).
  */
-export function RemoveClientAccessButton({
+export function RemoveProjectMemberButton({
+  role,
   projectId,
   projectName,
   profileId,
   fullName,
   projectCount,
-  onlyClientOnProject,
+  onlyMemberOnProject,
 }: {
+  role: MemberRole;
   projectId: string;
   projectName: string;
   profileId: string;
   fullName: string;
   projectCount: number;
-  onlyClientOnProject: boolean;
+  onlyMemberOnProject: boolean;
 }) {
   const router = useRouter();
   const { toast } = useApp();
@@ -52,7 +57,7 @@ export function RemoveClientAccessButton({
   const remove = useAction(removeProjectMember, {
     onSuccess: ({ data }) => {
       if (data?.status === "refused") {
-        setRefusalText(CLIENT_ACCESS_REMOVAL_REFUSAL_COPY[data.reason]);
+        setRefusalText(MEMBER_REMOVAL_REFUSAL_COPY[data.reason]);
         return;
       }
       setConfirming(false);
@@ -60,6 +65,12 @@ export function RemoveClientAccessButton({
       router.refresh();
     },
   });
+
+  const giveBack = role === "client" ? "Add existing client" : "Add site supervisor";
+  const onlyNote =
+    role === "client"
+      ? " They are this project's only client: approvals and bills waiting for a client will wait until another client is given access."
+      : " They are this project's only site supervisor: nobody on site will see it until another is added.";
 
   return (
     <>
@@ -86,12 +97,10 @@ export function RemoveClientAccessButton({
             <DialogTitle>Remove {fullName} from this project?</DialogTitle>
             <DialogDescription>
               {fullName} will no longer see {projectName}. Their login and their other projects stay as they
-              are, and you can give access back with Add existing client.
-              {onlyClientOnProject &&
-                " They are this project's only client: approvals and bills waiting for a client will wait until another client is given access."}
+              are, and you can give access back with {giveBack}.{onlyMemberOnProject && onlyNote}
             </DialogDescription>
             {projectCount <= 1 && (
-              <p className="text-[13px] font-medium text-foreground">{CLIENT_LAST_PROJECT_REMOVAL_NOTE}</p>
+              <p className="text-[13px] font-medium text-foreground">{lastProjectRemovalNote(role)}</p>
             )}
           </DialogHeader>
           {(refusalText ?? remove.result.serverError) && (
@@ -104,7 +113,7 @@ export function RemoveClientAccessButton({
             <Button
               variant="destructive"
               disabled={remove.isPending}
-              onClick={() => remove.execute({ projectId, profileId })}
+              onClick={() => remove.execute({ projectId, profileId, expectedRole: role })}
             >
               {remove.isPending ? "Removing…" : "Remove"}
             </Button>

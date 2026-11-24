@@ -20,9 +20,12 @@ import {
   getBillDetail,
   getBillPaymentsSummary,
   getCurrentBillPdfKey,
+  getUnlistedMaterials,
   type BillableNowLine,
   type BillDetail,
+  type UnlistedMaterials,
 } from "./queries";
+import { todayIst } from "@/lib/dates";
 import { transitionBillFor, type BillTransitionStatus } from "./transition";
 
 /**
@@ -54,9 +57,14 @@ export const createBill = adminAction.inputSchema(createBillSchema).action(async
   const { data, error } = await supabase.rpc("rpc_create_bill", {
     p_project_id: parsedInput.projectId,
     p_lines: parsedInput.lines.map((l) => ({ source_type: l.sourceType, source_id: l.sourceId })),
-    p_bill_date: parsedInput.billDate,
+    // Always today in Asia/Kolkata (APX-22) — never the database's UTC
+    // current_date, and never a date from the browser. Submission re-stamps
+    // it to the day the bill is actually issued.
+    p_bill_date: todayIst(),
     p_notes: parsedInput.notes,
     p_idempotency_key: parsedInput.idempotencyKey,
+    p_period_from: parsedInput.periodFrom,
+    p_period_to: parsedInput.periodTo,
   });
   if (error) throw new Error(error.message);
   const row = data as { id: string; bill_no: string; project_id: string };
@@ -189,9 +197,14 @@ export async function getBillPdfUrl(billId: string): Promise<string | null> {
  *  and a component may never import it directly (code-standards §1); this
  *  file's `"use server"` directive is what makes it reachable from a
  *  client component. */
-export async function getBillableNowForAdmin(projectId: string): Promise<BillableNowLine[]> {
+export async function getBillableNowForAdmin(
+  projectId: string
+): Promise<{ lines: BillableNowLine[]; unlisted: UnlistedMaterials }> {
   assertBillingEnabled();
-  return getBillableNow(projectId);
+  // Admin only, like everything Billable Now shows: it carries internal cost.
+  await requireRole(["admin"]);
+  const [lines, unlisted] = await Promise.all([getBillableNow(projectId), getUnlistedMaterials(projectId)]);
+  return { lines, unlisted };
 }
 
 /** `BillViewDialog`'s own data fetch — a client component calling a `"use

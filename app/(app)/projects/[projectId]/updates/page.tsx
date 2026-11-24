@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 import Link from "next/link";
 import { projectBase } from "@/lib/routing/current";
+import { projectWriteRefusal } from "@/features/projects/service";
 
 /**
  * build/06-files-jobs-daily-updates.md §4.2: the timeline, the package
@@ -39,6 +40,8 @@ export default async function UpdatesPage({
 
   const effectiveRole = session.impersonating?.role ?? session.role;
   const isClient = effectiveRole === "client";
+  // APX-41: no new daily update on a completed or archived project.
+  const readOnly = projectWriteRefusal(header.statusKey, "daily_update");
   const basePath = `${await projectBase(projectId)}/updates`;
 
   return (
@@ -52,7 +55,12 @@ export default async function UpdatesPage({
         </div>
         <div className="ml-auto flex gap-2">
           {!isClient && (
-            <OpenDialogButton dialog={{ kind: "postUpdate", projectId }} variant="primary">
+            <OpenDialogButton
+              dialog={{ kind: "postUpdate", projectId }}
+              variant="primary"
+              disabled={!!readOnly}
+              title={readOnly ?? undefined}
+            >
               <Icon name="plus" className="w-[15px] h-[15px]" />
               Post Update
             </OpenDialogButton>

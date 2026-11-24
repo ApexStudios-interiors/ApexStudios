@@ -1,0 +1,18 @@
+-- stock_request_status gains 'cancelled' (APX-42)
+--
+-- On its own, in its own file, deliberately. Postgres lets ALTER TYPE … ADD
+-- VALUE run inside a transaction, but the new label cannot be USED in that
+-- same transaction ("unsafe use of new value"). Keeping it alone means the
+-- migration that follows (20261124400002) can rely on it whichever way the
+-- runner groups files into transactions — and that file still avoids the
+-- enum literal in every DDL statement it runs (it compares status::text),
+-- so it would apply even if both were run as one batch.
+--
+-- 'cancelled' is terminal, like 'delivered' and 'rejected':
+--   * the requester may cancel their own request while it is still pending;
+--   * an admin may cancel an approved or ordered request, with a reason.
+-- Everything that reads stock_requests already filters on a positive status
+-- list ('pending' for the bell, approved/ordered/delivered for committed,
+-- delivered for Billable Now), so a cancelled request drops out of all of
+-- them with no further change.
+alter type public.stock_request_status add value if not exists 'cancelled';

@@ -1,6 +1,6 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { SEED } from "./db";
+import { connect, SEED } from "./db";
 
 /**
  * build/07-stock-inventory-notifications.md §2.6, D33 (docs/decisions.md).
@@ -113,14 +113,90 @@ describe("v_notifications — Admin role (control case)", () => {
   });
 });
 
+/**
+ * D72 (2026-11-24): status-change and inbox rows, through the SAME audience
+ * filter the app uses (features/notifications/service.ts audienceFilter) —
+ * the role's rows, or rows naming this person. Fixtures are written over the
+ * privileged connection and removed afterwards; the reads are real sessions.
+ */
+describe("v_notifications — status changes and the inbox (D72)", () => {
+  const sql = connect();
+  const APPROVED_ID = "00000000-0000-4000-8000-00000a1810a1";
+  const SITE_ID = SEED.siteProfile;
+
+  beforeAll(async () => {
+    await sql`
+      insert into public.stock_requests
+        (id, org_id, project_id, package_id, ref_no, material_name, qty, unit, status, requested_by,
+         approved_by, approved_at, created_at)
+      values (${APPROVED_ID}, ${SEED.org}, ${SEED.project}, ${SEED.poolPackage}, 'SR-ITEST-D72',
+              'Itest approved grout', 1, 'bag', 'approved', ${SITE_ID}, ${SEED.adminProfile},
+              now() - interval '1 hour', now() - interval '2 hours')
+      on conflict (id) do nothing`;
+  });
+  afterAll(async () => {
+    await sql`delete from public.stock_requests where id = ${APPROVED_ID}`;
+    await sql.end({ timeout: 5 });
+  });
+
+  async function audienceRows(email: string, role: string, profileId: string) {
+    const supabase = await client(email);
+    const { data, error } = await supabase
+      .from("v_notifications")
+      .select("kind, entity_id, title")
+      .eq("project_id", SEED.project)
+      .or(`for_roles.cs.{${role}},for_profile_id.eq.${profileId}`);
+    expect(error).toBeNull();
+    return (data ?? []) as { kind: string; entity_id: string; title: string }[];
+  }
+
+  it("site: the requester is told their request was approved", async () => {
+    const rows = await audienceRows(SITE_EMAIL, "site", SITE_ID);
+    expect(rows.some((r) => r.kind === "stock_approved" && r.entity_id === APPROVED_ID)).toBe(true);
+  });
+
+  it("admin: is not told about someone else's approved request", async () => {
+    const rows = await audienceRows(ADMIN_EMAIL, "admin", SEED.adminProfile);
+    expect(rows.some((r) => r.kind === "stock_approved" && r.entity_id === APPROVED_ID)).toBe(false);
+  });
+
+  it("admin: the seeded rejected approval (never superseded) waits for a revision", async () => {
+    const rows = await audienceRows(ADMIN_EMAIL, "admin", SEED.adminProfile);
+    expect(rows.some((r) => r.kind === "approval_revision")).toBe(true);
+  });
+
+  it("client: no stock row of any kind, even reading the raw view for every role", async () => {
+    const supabase = await client(CLIENT_EMAIL);
+    const { data, error } = await supabase
+      .from("v_notifications")
+      .select("kind")
+      .in("kind", ["stock_approved", "stock_ordered", "stock_delivered", "stock_rejected", "delivery_due"]);
+    expect(error).toBeNull();
+    expect(data).toEqual([]);
+    const notify = await supabase.from("v_stock_request_notify").select("id");
+    expect(notify.error).toBeNull();
+    expect(notify.data).toEqual([]);
+  });
+
+  it("site: no admin-only bill row, even reading the raw view", async () => {
+    const supabase = await client(SITE_EMAIL);
+    const { data, error } = await supabase
+      .from("v_notifications")
+      .select("kind")
+      .in("kind", ["bill_certified", "bill_rejected", "bill_draft", "bill_unpaid"]);
+    expect(error).toBeNull();
+    expect(data).toEqual([]);
+  });
+});
+
 describe("v_notifications — anon", () => {
-  it("gets zero rows — this project's table grants are broad by platform default, RLS is the actual boundary", async () => {
+  it("sees nothing — zero rows, or a permission refusal now that anon has no SELECT on projects (APX-09)", async () => {
     const supabase = anonClient();
     const { data, error } = await supabase
       .from("v_notifications")
       .select("kind")
       .eq("project_id", SEED.project);
-    expect(error).toBeNull();
-    expect(data).toEqual([]);
+    if (error) expect(error.code).toBe("42501");
+    else expect(data).toEqual([]);
   });
 });

@@ -12,6 +12,8 @@ import { TablePagination } from "@/components/shared/TablePagination";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 import { projectBase } from "@/lib/routing/current";
+import { projectWriteRefusal } from "@/features/projects/service";
+import { getProjectStatus } from "@/features/projects/queries";
 
 const VALID_STATUSES: ApprovalStatus[] = ["pending", "approved", "rejected"];
 
@@ -52,6 +54,8 @@ export default async function ApprovalsPage({
 
   const list = await getApprovalsPage(session, projectId, status ? { status } : {}, parsePageRequest(paging));
   const client = effectiveRole === "client";
+  // APX-41: an archived project takes no new approval request.
+  const readOnly = projectWriteRefusal(await getProjectStatus(projectId), "edit");
   const basePath = `${await projectBase(projectId)}/approvals`;
 
   return (
@@ -67,7 +71,12 @@ export default async function ApprovalsPage({
         </div>
         <div className="ml-auto flex gap-2">
           {can(effectiveRole, "requestApproval") && (
-            <OpenDialogButton dialog={{ kind: "newApproval", projectId }} variant="primary">
+            <OpenDialogButton
+              dialog={{ kind: "newApproval", projectId }}
+              variant="primary"
+              disabled={!!readOnly}
+              title={readOnly ?? undefined}
+            >
               <Icon name="plus" className="w-[15px] h-[15px]" />
               Request Approval
             </OpenDialogButton>

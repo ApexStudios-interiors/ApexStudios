@@ -52,7 +52,8 @@ dashboard's Client access card lists a project's client logins, grants an existi
 another project, and removes one from that project only (as does Projects on a client's row of the
 Users page) — even their only project, which leaves a login that signs in to no project until one is
 given back or it is deactivated. It no longer
-creates logins (D51, amended 2026-11-23).
+creates logins (D51, amended 2026-11-23). The dashboard's Site team card does the same for Site
+Supervisors, as does Projects on a supervisor's row of the Users page (2026-11-24).
 
 ### The one rule that matters most
 
@@ -262,6 +263,9 @@ machine-checked when it is not is how it quietly stops being followed.
   (`components/domain`, `components/dialogs`) from reappearing — a domain component filed anywhere
   else in `components/` is a review catch, not a build failure.
 - **[review]** `actions.ts` must contain no business arithmetic. Guard, parse, delegate, revalidate.
+- **[review]** A Server Action starts from `authedAction` (or a role-guarded client), which refuses
+  while an admin is previewing another role. `previewAllowedAction` is only for the D68 allow-list:
+  preview control, marking a notification read, and pure reads.
 - **[review]** `components/ui/` holds generic primitives. Do not add domain logic there. Do not
   restyle them.
 - **[review]** Dependency direction is strictly downward. Nothing depends on `app/`.
@@ -290,14 +294,28 @@ machine-checked when it is not is how it quietly stops being followed.
 5. **Index every column referenced in an RLS policy.** Unindexed policy predicates are the
    top cause of Supabase performance collapse.
 
-6. **`stock_movements` and `audit_log` are append-only.** No role, including `owner`, gets
-   update or delete. Corrections are compensating rows.
+6. **`stock_movements`, `audit_log`, `bill_events` and `stock_request_events` are append-only.**
+   No role, including the table owner, may update, delete or truncate them — a `trg_append_only`
+   trigger refuses it (D68). Corrections are compensating rows. Test cleanup alone sets the
+   transaction-local `apex.ledger_maintenance = 'on'` first (`tests/integration/db.ts`).
 
 7. **Soft delete only** (`deleted_at`). GST record retention and stock arithmetic both break
    if rows disappear. Every query filters `deleted_at is null`.
 
 8. Test RLS policies **from a client SDK session**, never from the SQL editor or
    `supabase db execute` — those bypass RLS and will tell you a broken policy works.
+
+9. **A new column on `projects` is not readable until granted.** `authenticated` has column-level
+   SELECT on `projects`, deliberately excluding `contract_value`, `mobilisation_advance` and
+   `mobilisation_recovered` (read through `v_project_finance`, D68). A migration adding a column
+   must `grant select (<column>) on public.projects to authenticated` — pgTAP 15 fails otherwise.
+
+10. **A new SECURITY DEFINER function revokes EXECUTE from `public, anon`** and grants only what it
+    needs. A helper (not `rpc_*`) reachable by `authenticated`, or anything reachable by `anon`,
+    must be added to the allow-list in `supabase/tests/15_security_hardening_test.sql` on purpose.
+
+11. **Role-scoped definer views check the role, not just membership** (D68): `*_client` views admit
+    admin or client, `*_site` stock views admin or site. A new one does the same.
 
 ---
 

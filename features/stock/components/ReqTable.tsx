@@ -1,19 +1,15 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useAction } from "next-safe-action/hooks";
-import { useApp } from "@/context/AppContext";
 import type { Role } from "@/lib/rbac/roles";
 import type { StockRequestDTO } from "@/features/stock/queries";
-import { availableTransitions, isDeadlineAtRisk } from "@/features/stock/service";
-import { transitionStockRequest } from "@/features/stock/actions";
+import { isDeadlineAtRisk } from "@/features/stock/service";
 import { todayIst } from "@/lib/dates";
 import { dmy } from "@/lib/logic";
 import { formatINR } from "@/lib/money";
 import { StockRequestStatusBadge } from "@/components/shared/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, sub } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
+import { StockRequestActions } from "./StockRequestActions";
 import { Empty } from "@/components/ui/Empty";
 
 /**
@@ -35,13 +31,10 @@ export function ReqTable({
   role: Role;
   isAdmin: boolean;
 }) {
-  const { openDialog } = useApp();
-  const router = useRouter();
   // The one "today" this business keeps (lib/dates) — the same answer on the
   // server and in any browser timezone, so the red date cannot differ between
   // the server render and hydration. Never `new Date()` here.
   const today = todayIst();
-  const transition = useAction(transitionStockRequest, { onSuccess: () => router.refresh() });
 
   if (!requests.length) {
     return (
@@ -83,7 +76,6 @@ export function ReqTable({
       </thead>
       <tbody>
         {requests.map((r) => {
-          const transitions = availableTransitions(r.status, role);
           // Red from two business days before the needed-by date, and red
           // from then on once it has passed — while the request is still
           // pending approval. `isDeadlineAtRisk` is the whole rule and is
@@ -112,34 +104,23 @@ export function ReqTable({
               <td className={atRisk ? `${td} text-status-destructive font-medium` : td}>{dmy(r.neededBy)}</td>
               <td className={td}>
                 <StockRequestStatusBadge status={r.status} />
+                {/* APX-39: why it stopped — the reason was stored but never shown. */}
+                {r.status === "rejected" && r.rejectedReason && (
+                  <span className={`${sub} max-w-[220px] truncate`} title={r.rejectedReason}>
+                    {r.rejectedReason}
+                  </span>
+                )}
+                {r.status === "cancelled" && (
+                  <span className={`${sub} max-w-[220px] truncate`} title={r.cancelledReason ?? undefined}>
+                    {r.cancelledReason ?? "Withdrawn by the requester"}
+                  </span>
+                )}
+                {r.splitFromId && r.status !== "cancelled" && (
+                  <span className={sub}>Remainder of a part delivery</span>
+                )}
               </td>
               <td className={td}>
-                {transitions.length > 0 && (
-                  <div className="flex gap-1.5 flex-wrap justify-end">
-                    {transitions.map((t) =>
-                      t.to === "rejected" ? (
-                        <Button
-                          key={t.to}
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => openDialog({ kind: "rejectStockRequest", requestId: r.id })}
-                        >
-                          {t.label}
-                        </Button>
-                      ) : (
-                        <Button
-                          key={t.to}
-                          variant={t.to === "approved" ? "primary" : "default"}
-                          size="sm"
-                          disabled={transition.isPending}
-                          onClick={() => transition.execute({ requestId: r.id, toStatus: t.to })}
-                        >
-                          {t.label}
-                        </Button>
-                      )
-                    )}
-                  </div>
-                )}
+                <StockRequestActions request={r} role={role} />
               </td>
             </tr>
           );

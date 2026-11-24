@@ -173,3 +173,29 @@ describe("getSession — no bearer token (web cookie path, unchanged)", () => {
     expect(session?.impersonating).toEqual({ role: "site", projectId: PROJECT });
   });
 });
+
+describe("getSession — a role claim older than the profile (APX-59)", () => {
+  it("refuses a bearer token whose role no longer matches the profile", async () => {
+    h.requestHeaders = new Headers({ authorization: "Bearer mobile-token" });
+    h.getClaims.mockResolvedValue(claimsFor("admin"));
+    profileAs("site");
+
+    expect(await getSession()).toBeNull();
+    await expect(requireSession()).rejects.toBeInstanceOf(UnauthenticatedError);
+  });
+
+  it("refuses the same stale claim on the web", async () => {
+    h.getClaims.mockResolvedValue(claimsFor("site"));
+    profileAs("client");
+
+    expect(await getSession()).toBeNull();
+  });
+
+  it("treats the retired owner claim as the admin it became", async () => {
+    h.requestHeaders = new Headers({ authorization: "Bearer mobile-token" });
+    h.getClaims.mockResolvedValue(claimsFor("owner"));
+    profileAs("admin");
+
+    expect((await getSession())?.role).toBe("admin");
+  });
+});

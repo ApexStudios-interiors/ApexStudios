@@ -93,6 +93,7 @@ export type Database = {
           uploaded_by: string;
           created_at: string;
           deleted_at: string | null;
+          kind: string;
         };
         Insert: {
           id?: string;
@@ -108,6 +109,7 @@ export type Database = {
           uploaded_by: string;
           created_at?: string;
           deleted_at?: string | null;
+          kind?: string;
         };
         Update: {
           id?: string;
@@ -123,6 +125,7 @@ export type Database = {
           uploaded_by?: string;
           created_at?: string;
           deleted_at?: string | null;
+          kind?: string;
         };
         Relationships: [];
       };
@@ -930,6 +933,24 @@ export type Database = {
         };
         Relationships: [];
       };
+      login_throttle: {
+        Row: {
+          username_hash: string;
+          window_start: string;
+          failures: number;
+        };
+        Insert: {
+          username_hash: string;
+          window_start?: string;
+          failures?: number;
+        };
+        Update: {
+          username_hash?: string;
+          window_start?: string;
+          failures?: number;
+        };
+        Relationships: [];
+      };
       rate_limits: {
         Row: {
           profile_id: string;
@@ -1055,6 +1076,10 @@ export type Database = {
           updated_by: string | null;
           deleted_at: string | null;
           created_by: string | null;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          cancelled_reason: string | null;
+          split_from_id: string | null;
         };
         Insert: {
           id?: string;
@@ -1084,6 +1109,10 @@ export type Database = {
           updated_by?: string | null;
           deleted_at?: string | null;
           created_by?: string | null;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          cancelled_reason?: string | null;
+          split_from_id?: string | null;
         };
         Update: {
           id?: string;
@@ -1113,6 +1142,10 @@ export type Database = {
           updated_by?: string | null;
           deleted_at?: string | null;
           created_by?: string | null;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          cancelled_reason?: string | null;
+          split_from_id?: string | null;
         };
         Relationships: [];
       };
@@ -1254,6 +1287,18 @@ export type Database = {
           pct_billed: number | null;
           amount: number | null;
           internal_cost: number | null;
+          phase_id: string | null;
+          mas_recovery: number | null;
+          blocked_by_bill_no: string | null;
+        };
+        Relationships: [];
+      };
+      v_project_finance: {
+        Row: {
+          id: string | null;
+          contract_value: number | null;
+          mobilisation_advance: number | null;
+          mobilisation_recovered: number | null;
         };
         Relationships: [];
       };
@@ -1276,6 +1321,7 @@ export type Database = {
           reorder_level: number | null;
           location: string | null;
           stock_status: string | null;
+          updated_at: string | null;
         };
         Relationships: [];
       };
@@ -1311,6 +1357,8 @@ export type Database = {
           href: string | null;
           created_at: string | null;
           for_roles: unknown | null;
+          for_profile_id: string | null;
+          for_profile_role: Database["public"]["Enums"]["app_role"] | null;
         };
         Relationships: [];
       };
@@ -1395,6 +1443,25 @@ export type Database = {
         };
         Relationships: [];
       };
+      v_stock_request_notify: {
+        Row: {
+          id: string | null;
+          project_id: string | null;
+          ref_no: string | null;
+          material_name: string | null;
+          status: Database["public"]["Enums"]["stock_request_status"] | null;
+          requested_by: string | null;
+          requester_role: Database["public"]["Enums"]["app_role"] | null;
+          needed_by: string | null;
+          created_at: string | null;
+          approved_at: string | null;
+          ordered_at: string | null;
+          delivered_at: string | null;
+          rejected_at: string | null;
+          rejected_reason: string | null;
+        };
+        Relationships: [];
+      };
       v_stock_request_site: {
         Row: {
           id: string | null;
@@ -1415,6 +1482,9 @@ export type Database = {
           delivered_at: string | null;
           rejected_reason: string | null;
           created_at: string | null;
+          cancelled_at: string | null;
+          cancelled_reason: string | null;
+          split_from_id: string | null;
         };
         Relationships: [];
       };
@@ -1468,6 +1538,12 @@ export type Database = {
         };
         Returns: string;
       };
+      fn_shares_project: {
+        Args: {
+          p_profile_id: string;
+        };
+        Returns: boolean;
+      };
       fn_recompute_progress: {
         Args: {
           p_package_id: string;
@@ -1493,13 +1569,32 @@ export type Database = {
         };
         Returns: unknown;
       };
-      rpc_check_rate_limit: {
+      rpc_check_rate_limit:
+        | {
+            Args: {
+              p_action: string;
+            };
+            Returns: boolean;
+          }
+        | {
+            Args: {
+              p_action: string;
+              p_max_per_window: number;
+              p_window_seconds?: number;
+            };
+            Returns: boolean;
+          };
+      rpc_login_allowed: {
         Args: {
-          p_action: string;
-          p_max_per_window: number;
-          p_window_seconds?: number;
+          p_username: string;
         };
         Returns: boolean;
+      };
+      rpc_login_record_failure: {
+        Args: {
+          p_username: string;
+        };
+        Returns: unknown;
       };
       rpc_claim_jobs: {
         Args: {
@@ -1530,6 +1625,8 @@ export type Database = {
           p_bill_date?: string;
           p_notes?: string;
           p_idempotency_key?: string;
+          p_period_from?: string;
+          p_period_to?: string;
         };
         Returns: unknown;
       };
@@ -1556,6 +1653,7 @@ export type Database = {
           p_rate?: number;
           p_needed_by?: string;
           p_note?: string;
+          p_id?: string;
         };
         Returns: unknown;
       };
@@ -1644,6 +1742,14 @@ export type Database = {
         };
         Returns: number;
       };
+      rpc_set_project_status: {
+        Args: {
+          p_project_id: string;
+          p_status: Database["public"]["Enums"]["project_status"];
+          p_reason?: string;
+        };
+        Returns: Database["public"]["Enums"]["project_status"];
+      };
       rpc_set_task_progress: {
         Args: {
           p_task_id: string;
@@ -1678,8 +1784,48 @@ export type Database = {
           p_request_id: string;
           p_to_status: Database["public"]["Enums"]["stock_request_status"];
           p_note?: string;
+          p_rate?: number;
+          p_delivered_qty?: number;
         };
         Returns: unknown;
+      };
+      rpc_edit_stock_request: {
+        Args: {
+          p_request_id: string;
+          p_qty: number;
+          p_needed_by?: string;
+          p_note?: string;
+        };
+        Returns: Json;
+      };
+      rpc_set_stock_request_rate: {
+        Args: {
+          p_request_id: string;
+          p_rate: number;
+        };
+        Returns: Json;
+      };
+      rpc_set_inventory_reorder_level: {
+        Args: {
+          p_item_id: string;
+          p_reorder_level: number;
+        };
+        Returns: Json;
+      };
+      rpc_record_stock_usage: {
+        Args: {
+          p_item_id: string;
+          p_package_id: string;
+          p_qty: number;
+          p_note?: string;
+        };
+        Returns: Json;
+      };
+      rpc_withdraw_approval: {
+        Args: {
+          p_approval_id: string;
+        };
+        Returns: Json;
       };
       trg_projects_completed_at: {
         Args: Record<string, never>;
@@ -1710,7 +1856,7 @@ export type Database = {
       package_status: "not_started" | "design" | "in_progress" | "completed";
       phase_billing_status: "unresolved" | "billable" | "billed" | "paid";
       project_status: "planning" | "active" | "on_hold" | "completed" | "archived";
-      stock_request_status: "pending" | "approved" | "ordered" | "delivered" | "rejected";
+      stock_request_status: "pending" | "approved" | "ordered" | "delivered" | "rejected" | "cancelled";
     };
   };
 };

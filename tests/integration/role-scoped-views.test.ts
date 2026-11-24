@@ -157,6 +157,63 @@ describe("v_client_name (non-admin client-name lookup, D21)", () => {
   });
 });
 
+/**
+ * APX-09 (20261124100005): the definer views check the ROLE, not only
+ * membership — a site supervisor and a client are both members of the seeded
+ * project, so membership alone let each read the other's view.
+ */
+describe("role predicates on the role-scoped views (APX-09)", () => {
+  it("site reads no bill money and no contract value", async () => {
+    const supabase = await client(SITE_EMAIL);
+    for (const view of [
+      "v_bill_client",
+      "v_bill_line_client",
+      "v_package_client",
+      "v_phase_client",
+    ] as const) {
+      const { data, error } = await supabase.from(view).select("id").limit(5);
+      expect(error, view).toBeNull();
+      expect(data, view).toEqual([]);
+    }
+    const { data: finance, error: financeErr } = await supabase.from("v_project_finance").select("id");
+    expect(financeErr).toBeNull();
+    expect(finance).toEqual([]);
+  });
+
+  it("site cannot select projects.contract_value at all, but still reads the project", async () => {
+    const supabase = await client(SITE_EMAIL);
+    const { error } = await supabase.from("projects").select("contract_value").eq("id", SEED.project);
+    expect(error?.code).toBe("42501");
+    const { data, error: rowErr } = await supabase.from("projects").select("id, name").eq("id", SEED.project);
+    expect(rowErr).toBeNull();
+    expect(data).toHaveLength(1);
+  });
+
+  it("a client never sees a draft bill, and reads no stock view", async () => {
+    const supabase = await client(CLIENT_EMAIL);
+    const { data: drafts } = await supabase.from("v_bill_client").select("id").eq("status", "draft");
+    expect(drafts).toEqual([]);
+    const { data: sent } = await supabase.from("v_bill_client").select("id").neq("status", "draft");
+    expect((sent ?? []).length).toBeGreaterThan(0);
+    for (const view of ["v_stock_request_site", "v_inventory_site"] as const) {
+      const { data, error } = await supabase.from(view).select("id").limit(5);
+      expect(error, view).toBeNull();
+      expect(data, view).toEqual([]);
+    }
+  });
+
+  it("a client reads their own project's contract value through v_project_finance", async () => {
+    const supabase = await client(CLIENT_EMAIL);
+    const { data, error } = await supabase
+      .from("v_project_finance")
+      .select("contract_value")
+      .eq("id", SEED.project)
+      .maybeSingle();
+    expect(error).toBeNull();
+    expect(Number(data?.contract_value)).toBeGreaterThan(0);
+  });
+});
+
 describe("admin sees the full picture (control case)", () => {
   it("v_package_rollup carries internal_amount and committed for the admin role", async () => {
     const supabase = await client("suresh@beapex.in");

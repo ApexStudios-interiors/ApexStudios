@@ -84,8 +84,18 @@ beforeEach(() => {
 });
 
 describe("resetUserPassword", () => {
-  it("owner previewing as client is still owner: may reset an admin", async () => {
+  it("APX-25: refuses a reset while previewing, before the audit call or GoTrue", async () => {
     sessionAs("admin", OWNER_ID, PREVIEW_AS_CLIENT);
+    h.target = profile(ADMIN_ID, "admin");
+    const result = await resetUserPassword({ userId: ADMIN_ID });
+
+    expect(result.serverError).toBe("Preview is read-only. Exit preview to make changes.");
+    expect(h.rpc).not.toHaveBeenCalled();
+    expect(h.setAuthPassword).not.toHaveBeenCalled();
+  });
+
+  it("an admin may reset another admin", async () => {
+    sessionAs("admin", OWNER_ID);
     h.target = profile(ADMIN_ID, "admin");
     const result = await resetUserPassword({ userId: ADMIN_ID });
 
@@ -97,12 +107,12 @@ describe("resetUserPassword", () => {
     expect(result.data?.password).toBe(password);
   });
 
-  it("an admin may reset another admin, and a preview does not change that", async () => {
+  it("an admin may reset another admin — the former owner included", async () => {
     // Refused as privilege escalation until 2026-09-28 (D65), then allowed
     // against the owner only; D66 retired the owner and made admins equal, so
-    // any admin may reset any other. The preview cookie is irrelevant either
-    // way: the REAL role decides, which is the property this case pins.
-    sessionAs("admin", ADMIN_ID, PREVIEW_AS_CLIENT);
+    // any admin may reset any other. (A preview no longer reaches this far at
+    // all — APX-25, the case above.)
+    sessionAs("admin", ADMIN_ID);
     h.target = profile(OWNER_ID, "admin");
     const result = await resetUserPassword({ userId: OWNER_ID });
 
@@ -115,7 +125,7 @@ describe("resetUserPassword", () => {
     // The only target rule left since D66, and the case that pins "refused
     // before anything is written or changed" — which the admin → admin case
     // used to provide.
-    sessionAs("admin", OWNER_ID, PREVIEW_AS_CLIENT);
+    sessionAs("admin", OWNER_ID);
     h.target = profile(OWNER_ID, "admin");
     const result = await resetUserPassword({ userId: OWNER_ID });
 
