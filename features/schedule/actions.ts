@@ -1,7 +1,7 @@
 "use server";
 
 import "server-only";
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { siteAction } from "@/lib/safe-action";
 import { requireSession } from "@/lib/auth/session";
@@ -26,7 +26,6 @@ export const createTask = siteAction.inputSchema(createTaskSchema).action(async 
   // mobile API so both write paths behave identically.
   const task = await createTaskFor(ctx.session, parsedInput);
 
-  updateTag(`project:${task.projectId}`);
   revalidatePath(`/projects/${task.projectId}`, "layout");
   return { id: task.id };
 });
@@ -35,7 +34,6 @@ export const updateTask = siteAction.inputSchema(updateTaskSchema).action(async 
   // The update lives in ./tasks.ts, shared with the mobile API.
   const task = await updateTaskFor(ctx.session, parsedInput);
 
-  updateTag(`project:${task.projectId}`);
   revalidatePath(`/projects/${task.projectId}`, "layout");
   return { ok: true as const };
 });
@@ -47,7 +45,6 @@ export const setTaskProgress = siteAction
     // API so both write paths behave identically.
     const task = await setTaskProgressFor(ctx.session, parsedInput);
 
-    updateTag(`project:${task.projectId}`);
     // 'layout': the project's dashboard, packages table and every schedule
     // route can all show a number this progress change moved (the rollup
     // trigger updates both the package and the project's own progress_pct in

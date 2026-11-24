@@ -1,7 +1,7 @@
 "use server";
 
 import "server-only";
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { siteAction, clientAction } from "@/lib/safe-action";
 import { requireSession } from "@/lib/auth/session";
@@ -23,7 +23,6 @@ export const requestApproval = siteAction
     // the mobile API so both write paths behave identically.
     const created = await requestApprovalFor(ctx.session, parsedInput);
 
-    updateTag(`project:${parsedInput.projectId}`);
     revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
     return { id: created.id, refNo: created.refNo };
   });
@@ -57,7 +56,6 @@ export const addSamplePhotos = siteAction
       throw new Error("NOT_FOUND: one or more photos did not upload correctly — please retry them");
     }
 
-    updateTag(`project:${approval.projectId}`);
     revalidatePath(`/projects/${approval.projectId}`, "layout");
     return { id: approval.id };
   });
@@ -81,7 +79,6 @@ export const decideApproval = clientAction
     if (error) throw new Error(error.message);
     const row = data as { id: string; project_id: string; status: string };
 
-    updateTag(`project:${row.project_id}`);
     revalidatePath(`/projects/${row.project_id}`, "layout");
     return { id: row.id, status: row.status };
   });

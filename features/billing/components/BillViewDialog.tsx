@@ -9,7 +9,7 @@ import { BillFiles } from "@/features/billing/components/BillFiles";
 import { getBillDetailForDialog, getBillPdfUrl } from "@/features/billing/actions";
 import type { BillDetail } from "@/features/billing/queries";
 import { formatINR } from "@/lib/money";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 
 function Row({

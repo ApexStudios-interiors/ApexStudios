@@ -8,7 +8,7 @@ import type { StockRequestDTO } from "@/features/stock/queries";
 import { availableTransitions, isDeadlineAtRisk } from "@/features/stock/service";
 import { transitionStockRequest } from "@/features/stock/actions";
 import { todayIst } from "@/lib/dates";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import { formatINR } from "@/lib/money";
 import { StockRequestStatusBadge } from "@/components/shared/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";

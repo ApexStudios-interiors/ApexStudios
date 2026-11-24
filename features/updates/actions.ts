@@ -1,7 +1,7 @@
 "use server";
 
 import "server-only";
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { siteAction } from "@/lib/safe-action";
 import { requireSession } from "@/lib/auth/session";
@@ -20,7 +20,6 @@ export const postDailyUpdate = siteAction
   .action(async ({ parsedInput, ctx }) => {
     const posted = await postDailyUpdateFor(ctx.session, parsedInput);
 
-    updateTag(`project:${parsedInput.projectId}`);
     revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
     return { id: posted.id };
   });
@@ -30,7 +29,6 @@ export const editDailyUpdate = siteAction
   .action(async ({ parsedInput, ctx }) => {
     const edited = await editDailyUpdateFor(ctx.session, parsedInput);
 
-    updateTag(`project:${edited.projectId}`);
     revalidatePath(`/projects/${edited.projectId}`, "layout");
     return { id: edited.id };
   });

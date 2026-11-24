@@ -19,7 +19,7 @@ import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 import { LegacyDashboardCards } from "./LegacyDashboardCards";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import { formatINRCompact } from "@/lib/money";
 import { projectBase } from "@/lib/routing/current";
 

@@ -7,7 +7,7 @@ import { createBill, getBillableNowForAdmin, transitionBill } from "@/features/b
 import type { BillableNowLine, BillDTO } from "@/features/billing/queries";
 import { previewBill, type BillableLine } from "@/features/billing/service";
 import { formatINR, formatINRCompact } from "@/lib/money";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import type { Page } from "@/lib/pagination";
 import { TablePagination } from "@/components/shared/TablePagination";
 import { StatBar } from "@/components/ui/StatBar";
@@ -135,7 +135,7 @@ export function BillingAdmin({
       toast(result?.serverError ?? "Could not create this bill");
       return;
     }
-    // `router.refresh()` picks up createBill's own updateTag/revalidatePath
+    // `router.refresh()` picks up createBill's own revalidatePath
     // for everything server-rendered on this page (the Bills table, the stat
     // bar). Billable Now is this component's own client-side fetch and a
     // refresh does not re-run it — without the reload the rows just billed

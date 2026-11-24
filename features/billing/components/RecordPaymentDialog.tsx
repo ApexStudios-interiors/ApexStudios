@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useApp } from "@/context/AppContext";
 import { recordPayment, getBillPaymentsSummaryForDialog } from "@/features/billing/actions";
 import { formatINR } from "@/lib/money";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
 import {
   Select,

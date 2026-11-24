@@ -1,26 +1,9 @@
 import { Badge } from "@/components/ui/Badge";
-import type { RequestStatus } from "@/lib/types";
 import type { BillDTO } from "@/features/billing/queries";
-import { type InventoryStatus, type PhaseStatus } from "@/lib/logic";
 import type { StockRequestStatus } from "@/features/stock/service";
 import type { InventoryStatus as StockLevel } from "@/features/inventory/service";
 import { approvalTypeLabel, type ApprovalStatus } from "@/features/approvals/service";
 import type { ApprovalType } from "@/features/approvals/schema";
-
-export function RequestStatusBadge({ status }: { status: RequestStatus }) {
-  switch (status) {
-    case "Pending":
-      return <Badge variant="warning">Pending</Badge>;
-    case "Approved":
-      return <Badge variant="default">Approved</Badge>;
-    case "Ordered":
-      return <Badge variant="outline">Ordered</Badge>;
-    case "Delivered":
-      return <Badge variant="success">Delivered</Badge>;
-    case "Rejected":
-      return <Badge variant="destructive">Rejected</Badge>;
-  }
-}
 
 /**
  * build/08-approvals.md §2.5. Real `approvals.status` (lowercase enum,
@@ -69,6 +52,9 @@ export function BillStatusBadge({ status }: { status: BillDTO["status"] }) {
   }
 }
 
+/** A phase's billing state as the Billing tab labels it. */
+export type PhaseStatus = "Pending" | "Billable" | "Billed" | "Paid";
+
 export function PhaseStatusBadge({ status }: { status: PhaseStatus }) {
   switch (status) {
     case "Pending":
@@ -104,22 +90,10 @@ export function ModuleStatusBadge({
   return <Badge variant="secondary">{statusLabel}</Badge>;
 }
 
-export function InventoryStatusBadge({ status }: { status: InventoryStatus }) {
-  switch (status) {
-    case "OK":
-      return <Badge variant="success">OK</Badge>;
-    case "Low":
-      return <Badge variant="warning">Low</Badge>;
-    case "Critical":
-      return <Badge variant="destructive">Critical</Badge>;
-  }
-}
-
 /**
  * build/07-stock-inventory-notifications.md §2.5. Real `stock_requests.status`
- * (lowercase enum, `features/stock/service.ts`) — same colours as the mock's
- * `RequestStatusBadge` above, which stays for the billing engine's own
- * mock data until Build 09 converts it.
+ * (lowercase enum, `features/stock/service.ts`) — the same colours the
+ * prototype's retired `RequestStatusBadge` used.
  */
 export function StockRequestStatusBadge({ status }: { status: StockRequestStatus }) {
   switch (status) {
@@ -137,7 +111,7 @@ export function StockRequestStatusBadge({ status }: { status: StockRequestStatus
 }
 
 /** Real `inventoryStatus()` (lowercase, `features/inventory/service.ts`) —
- *  same colours as the mock's `InventoryStatusBadge` above. */
+ *  the same colours the prototype's retired `InventoryStatusBadge` used. */
 export function StockLevelBadge({ status }: { status: StockLevel }) {
   switch (status) {
     case "ok":

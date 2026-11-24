@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { UpdateDTO } from "@/features/updates/queries";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import { Badge } from "@/components/ui/Badge";
 import { DialogShell } from "@/components/ui/DialogShell";
 import { useApp } from "@/context/AppContext";

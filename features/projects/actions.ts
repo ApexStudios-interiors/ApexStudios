@@ -1,7 +1,7 @@
 "use server";
 
 import "server-only";
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminAction } from "@/lib/safe-action";
 import { requireRole, requireSession } from "@/lib/auth/session";
@@ -26,21 +26,18 @@ import { deleteProjectMember, insertProjectMember } from "./members";
 
 /**
  * build/04-projects-packages-phases.md §4.1: adminAction for all four, each
- * ending in revalidateTag('project:' + id) and revalidatePath('/'). No
- * business arithmetic here (AGENTS.md's layering rule) — createProject's only
- * non-trivial move, creating the project and its named packages atomically,
- * is pushed into rpc_create_project precisely because that atomicity can't be
- * expressed as two separate .insert() calls through PostgREST; everything
- * else here is a single-row, already-atomic write.
+ * ending in revalidatePath. No business arithmetic here (AGENTS.md's layering
+ * rule) — createProject's only non-trivial move, creating the project and its
+ * named packages atomically, is pushed into rpc_create_project precisely
+ * because that atomicity can't be expressed as two separate .insert() calls
+ * through PostgREST; everything else here is a single-row, already-atomic
+ * write.
  *
- * Next 16 breaking change (AGENTS.md's header: heed deprecation notices):
- * `revalidateTag` now takes a required second `cacheLife` profile argument,
- * and its own doc comment says to use `updateTag` instead inside a Server
- * Action for immediate, read-your-own-writes expiration — exactly this case.
- * No route yet opts into "use cache"/cacheTag (that lands with a later
- * build's caching pass), so today this is a no-op with nothing tagged; it's
- * still called here so every mutating path already carries the right
- * invalidation call once caching is added.
+ * No `updateTag` (APX-67): no route opts into "use cache"/cacheTag, so a tag
+ * invalidation had nothing to invalidate. revalidatePath is what actually
+ * refreshes the rendered routes. If a caching pass ever tags a read, add the
+ * matching `updateTag` (Next 16's Server Action form of revalidateTag) next
+ * to the revalidatePath it accompanies, in the same change.
  */
 
 export const createProject = adminAction.inputSchema(createProjectSchema).action(async ({ parsedInput }) => {
@@ -65,7 +62,6 @@ export const createProject = adminAction.inputSchema(createProjectSchema).action
   });
   if (error) throw new Error(error.message);
 
-  updateTag(`project:${data}`);
   revalidatePath("/");
   return { id: data as string };
 });
@@ -120,7 +116,6 @@ export const updateProject = adminAction.inputSchema(updateProjectSchema).action
     .eq("id", id);
   if (error) throw new Error(error.message);
 
-  updateTag(`project:${id}`);
   revalidatePath("/");
   // 'layout': every route under this project (dashboard, packages,
   // package detail) can render fields this action changes.
@@ -138,7 +133,6 @@ export const setProjectStatus = adminAction
       .eq("id", parsedInput.id);
     if (error) throw new Error(error.message);
 
-    updateTag(`project:${parsedInput.id}`);
     revalidatePath("/");
     revalidatePath(`/projects/${parsedInput.id}`, "layout");
     return { ok: true as const };
@@ -160,7 +154,6 @@ export const setProjectRateVisibility = adminAction
       .eq("id", parsedInput.id);
     if (error) throw new Error(error.message);
 
-    updateTag(`project:${parsedInput.id}`);
     revalidatePath(`/projects/${parsedInput.id}`, "layout");
     return { ok: true as const };
   });
@@ -232,7 +225,6 @@ export const addProjectMember = adminAction
       addedBy: ctx.session.userId,
     });
 
-    updateTag(`project:${parsedInput.projectId}`);
     revalidatePath("/");
     revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
     return { status };
@@ -250,7 +242,6 @@ export const removeProjectMember = adminAction
     const supabase = await createClient();
     const result = await deleteProjectMember(supabase, parsedInput);
     if (result.status === "removed") {
-      updateTag(`project:${parsedInput.projectId}`);
       revalidatePath("/");
       revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
       revalidatePath("/users");

@@ -31,7 +31,7 @@ const h = vi.hoisted(() => {
 });
 
 vi.mock("server-only", () => ({}));
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/auth/session", () => ({
   UnauthenticatedError: h.UnauthenticatedError,
   ForbiddenError: h.ForbiddenError,
