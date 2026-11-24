@@ -96,8 +96,19 @@ beforeEach(() => {
 });
 
 describe("setUserRole", () => {
-  it("an admin previewing as client still acts as admin: may demote a peer, and ends their sessions", async () => {
+  it("APX-25: refuses a role change while previewing, before the RPC or the revocation", async () => {
     sessionAs("admin", OWNER_ID, PREVIEW_AS_CLIENT);
+    h.target = profile(OTHER_ADMIN_ID, "admin");
+    h.activeOwners = 2;
+    const result = await setUserRole({ userId: OTHER_ADMIN_ID, role: "site" });
+
+    expect(result.serverError).toBe("Preview is read-only. Exit preview to make changes.");
+    expect(h.rpc).not.toHaveBeenCalled();
+    expect(h.revokeUserSessions).not.toHaveBeenCalled();
+  });
+
+  it("an admin may demote a peer, and that ends their sessions", async () => {
+    sessionAs("admin", OWNER_ID);
     h.target = profile(OTHER_ADMIN_ID, "admin");
     // Two active admins, so demoting one does not trip the last-admin guard
     // (D66) — that invariant has its own case below.
@@ -118,7 +129,7 @@ describe("setUserRole", () => {
   it("refuses SELF before the RPC or the revocation", async () => {
     // The only target rule left since D66 — and the case that pins "refused
     // before anything is changed", which admin → owner used to provide.
-    sessionAs("admin", ADMIN_ID, PREVIEW_AS_CLIENT);
+    sessionAs("admin", ADMIN_ID);
     h.target = profile(ADMIN_ID, "admin");
     h.activeOwners = 2;
     const result = await setUserRole({ userId: ADMIN_ID, role: "site" });

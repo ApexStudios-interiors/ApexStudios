@@ -74,6 +74,8 @@ export function FileUploader({
   maxFiles,
   maxBytes,
   onChange,
+  onBusyChange,
+  discardOnUnmount,
 }: {
   projectId: string;
   entityType: "approval" | "daily_update" | "bill" | "stock_request" | "project";
@@ -84,6 +86,17 @@ export function FileUploader({
   /** Called with every currently-confirmed attachment id, in order, whenever
    *  the set changes. */
   onChange: (attachmentIds: string[]) => void;
+  /** Optional (APX-46). Called with `true` while any file is still uploading
+   *  and `false` once none is, so a dialog can keep its OK button disabled
+   *  until every photo has either landed or failed. */
+  onBusyChange?: (busy: boolean) => void;
+  /** Optional (APX-46). Asked once, when the uploader unmounts: return `true`
+   *  to throw away everything it uploaded — delete each confirmed attachment
+   *  row, and delete any still in flight as soon as it confirms. A dialog
+   *  passes `() => !saved`, so Cancel (or Escape) leaves nothing attached,
+   *  while a successful save keeps it all. Omitted, nothing is discarded,
+   *  exactly as before. */
+  discardOnUnmount?: () => boolean;
 }) {
   const [items, setItems] = useState<UploadItem[]>([]);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -99,6 +112,40 @@ export function FileUploader({
    *  the one captured when its render closed over it. */
   const removedIds = useRef<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // APX-46. The latest items and discard callback, for the unmount cleanup
+  // below, which must see the state at unmount rather than at mount.
+  const itemsRef = useRef<UploadItem[]>(items);
+  const discardRef = useRef(discardOnUnmount);
+  useEffect(() => {
+    itemsRef.current = items;
+    discardRef.current = discardOnUnmount;
+  });
+  useEffect(() => {
+    // The Set itself is never replaced, only added to, so this is the one
+    // `processNext` will consult after unmount too.
+    const removed = removedIds.current;
+    return () => {
+      if (!discardRef.current?.()) return;
+      for (const item of itemsRef.current) {
+        if (item.status === "done" && item.attachmentId) {
+          // Same non-fatal delete as `remove`: a refused one costs a slot and
+          // leaves an R2 object for attachment.orphan_sweep.
+          void deleteAttachment({ attachmentId: item.attachmentId }).catch(() => {});
+        } else {
+          // Queued or uploading: no row yet. `processNext` deletes it the
+          // moment it confirms, and skips it if it has not started.
+          removed.add(item.id);
+        }
+      }
+      queue.current = [];
+    };
+  }, []);
+
+  const busy = items.some((i) => i.status === "uploading");
+  useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
 
   // Unmount only — the dialog closing must not leave every previewed photo
   // held in memory. Reads the current items through the state setter so the

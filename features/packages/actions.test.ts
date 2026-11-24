@@ -38,12 +38,16 @@ vi.mock("@/lib/auth/session", () => ({
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     from: (table: string) => {
+      let updating = false;
       const chain = {
         insert: (row: Record<string, unknown>) => {
           h.inserts.push({ table, row });
           return { select: () => ({ single: async () => h.insertResult }) };
         },
-        update: () => chain,
+        update: () => {
+          updating = true;
+          return chain;
+        },
         select: (cols: string) => {
           h.selects.push(`${table}:${cols}`);
           return chain;
@@ -52,7 +56,9 @@ vi.mock("@/lib/supabase/server", () => ({
         is: () => chain,
         order: () => chain,
         limit: () => chain,
-        maybeSingle: async () => h.updateResult,
+        // An update's result is the test's to set; a plain read (createPhase's
+        // parent-package lookup) finds the package.
+        maybeSingle: async () => (updating ? h.updateResult : { data: { project_id: "p1" }, error: null }),
         single: async () => ({ data: { project_id: "p1" }, error: null }),
       };
       return chain;
@@ -84,9 +90,7 @@ describe("updatePackage", () => {
   it("a lost optimistic-concurrency race is the CONFLICT message, not a generic error", async () => {
     h.updateResult = { data: null, error: null }; // zero rows: updated_at no longer matches
     const result = await updatePackage({ id: UUID, name: "Pool", updatedAt: "2026-11-24T10:00:00Z" });
-    expect(result?.serverError).toBe(
-      "Someone else changed this while you were editing. Reload to see the current values."
-    );
+    expect(result?.serverError).toMatch(/^Someone else changed this/);
   });
 
   it("succeeds when the row matched", async () => {

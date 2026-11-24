@@ -29,7 +29,7 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "Project",
         definition:
-          "One client job at one location. It holds packages and moves through Planning, Active, On hold, Completed and Archived.",
+          "One client job at one location. It holds packages and moves through Planning, Active, On hold, Completed and Archived. A completed project takes no new stock requests or daily updates; an archived one is read-only except for billing and payments.",
       },
       {
         term: "Package",
@@ -85,12 +85,12 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "Minimum stock",
         definition:
-          "The stock level at which an item should be re-ordered (this column used to be called \"Reorder level\"). While the quantity on hand is above zero but below this number, the row shows a Low badge and the item counts in the Low Stock tile. Exactly at this level the item still counts as OK; at zero it is Critical, not Low.",
+          "The stock level at which an item should be re-ordered (this column used to be called \"Reorder level\"). An admin sets it with Minimum on the item's row. While the quantity on hand is above zero but below this number, the row shows a Low badge and the item counts in the Low Stock tile. Exactly at this level the item still counts as OK; at zero it is Critical, not Low.",
       },
       {
         term: "Inventory",
         definition:
-          "What is physically on hand, per project, with an all-projects view under Inventory (ALL) in the sidebar. Quantities change only when a request is marked delivered.",
+          "What is physically on hand, per project, with an all-projects view under Inventory (ALL) in the sidebar. Quantities go up when a request is marked delivered, down when someone uses Record usage on a row (material used on a package — never more than is on hand), and to a counted figure when an admin uses Adjust (with a reason). A new item starts at 0; its opening balance is an Adjust.",
       },
       {
         term: "Committed",
@@ -142,7 +142,7 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "Billable Now",
         definition:
-          "The list of things ready to go on the next bill: phases whose tasks are all complete, and material that has been delivered.",
+          "The list of things ready to go on the next bill: phases whose tasks are all complete, and delivered material that has a rate and belongs to a phase not yet billed. Nothing starts ticked — tick each item, or use the box in the header to select all.",
       },
       {
         term: "Work value",
@@ -156,7 +156,7 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "MAS recovery",
         definition:
-          "Material-at-site recovery: the material advance already billed earlier that is now part of a phase being billed in full. It is taken off so the client is not charged twice.",
+          "Material-at-site recovery: the material advance already billed earlier that is now part of a phase being billed in full. It is taken off so the client is not charged twice. To keep that true, a material cannot go on the same bill as its own phase; a phase cannot be billed while one of its materials is on a draft (submit or cancel the draft first); material for a phase that is already billed is never billed again; and material not linked to a phase, or with no rate, is not billed as an advance at all. These rules await CA confirmation.",
       },
       {
         term: "Taxable value",
@@ -266,7 +266,12 @@ export const GLOSSARY: GlossaryGroup[] = [
       {
         term: "Notifications",
         definition:
-          "The bell in the header. It lists open WORK across all your projects — pending requests, submitted bills, low stock, pending approvals, depending on your role. The number on the bell counts the ones you have NOT opened yet, so it drops as you read them. Items you have already opened stay in the list, in grey without a dot, because reading something does not finish it — they leave only when the work is actually done. If the same thing comes up again (a request goes back to pending, stock drops low a second time), it counts as new again.",
+          "The bell in the header. It lists open WORK across all your projects — pending requests, submitted bills, low stock, pending approvals, depending on your role. The number on the bell counts the ones you have NOT opened yet, so it drops as you read them. Items you have already opened stay in the list, in grey without a dot, because reading something does not finish it — they leave only when the work is actually done. If the same thing comes up again (a request goes back to pending, stock drops low a second time), it counts as new again. It also tells you when something you care about CHANGES, for 14 days afterwards: your stock request was approved, ordered or rejected (with the reason); a delivery arrived (Admin); the client approved or rejected an approval (Admin, and whoever requested it) or certified or rejected a bill (Admin). Nothing from an archived project is shown, and no entry ever shows an amount.",
+      },
+      {
+        term: "Needs my action",
+        definition:
+          "One list of everything waiting on YOU across all your projects, oldest first, with how many days each has waited — open it from the sidebar or the foot of the bell. Admin: stock requests to decide, draft bills to submit, certified bills to record payment against, rejected approvals to revise. Site Supervisor: ordered materials to receive, and your rejected requests. Client: approvals and bills waiting for your decision. An item leaves the list the moment the work is done.",
       },
       {
         term: "Audit log",
@@ -287,13 +292,17 @@ export const ROLE_STORIES: RoleStory[] = [
     role: "Admin",
     can: [
       "see every project, including internal cost, committed spend and margin",
-      "create and edit projects, packages, phases and tasks, and set task progress",
+      "create projects and edit them (name, location, target end date, contract value and the billing constants) with Edit Project on the dashboard",
+      "change a project's status with Change Status — Planning, Active, On hold, Completed, Archived — and reopen a completed or archived one, giving a reason",
+      "add and edit packages, phases (Add Phase and Edit on the package's Budget tab, or Create phase from Add Task) and tasks, and set task progress",
+      "put a Site Supervisor on a project, or take them off it, with the Site team card on the dashboard or Projects on their row of the Users page",
       "post daily updates",
-      "raise stock requests, approve or reject them, mark them Ordered and mark them Delivered",
+      "raise stock requests, approve them (with a rate) or reject them, mark them Ordered and mark them Delivered, correct a rate until delivery, and cancel an approved or ordered request with a reason",
+      "adjust an inventory item's quantity after a count, set its minimum stock, and record material used",
       "request an approval from the client and add sample photos while it is pending",
       "create a bill from Billable Now, submit it, and record payments once the client has certified it",
       "add users from the Users page — Admin, Site Supervisor, or Client (with the project they will see) — grant an existing client access to another project, and remove a client from one project",
-      "edit a project's billing constants (GST, retention, material-at-site and TDS percentages)",
+      "edit a project's billing constants (GST, retention, material-at-site and TDS percentages, the mobilisation advance and its recovery %) — they apply to the next bill, never to one already made",
       "change the role of, deactivate or reset the password of ANY user except myself — including another Admin",
       "preview a project as a Site Supervisor or Client",
       "see Failed Jobs and retry one",
@@ -303,6 +312,8 @@ export const ROLE_STORIES: RoleStory[] = [
       "change my own role, deactivate myself or reset my own password — use Change my password instead",
       "demote, deactivate or delete the last remaining Admin, which would leave nobody able to administer the organisation",
       "edit a bill after it has been submitted — a correction is a credit note or an adjustment on the next bill",
+      "change a phase's allocated amount once it is on a bill (Billed or Paid)",
+      "change anything on an archived project except billing and payments — reopen it first",
       "change anything while previewing as another role",
     ],
   },
@@ -313,16 +324,20 @@ export const ROLE_STORIES: RoleStory[] = [
       "see the dashboard, packages, schedule, daily updates, inventory and stock requests of my projects",
       "add tasks and update task progress",
       "post a daily update with photos",
-      "raise a stock request, and mark an ordered request Delivered when it arrives",
+      "raise a stock request, edit or cancel my own while it is still pending, and mark an ordered request Delivered when it arrives — all of it, or the part that came",
+      "record material used on a package from the Inventory page",
+      "withdraw an approval I requested while the client has not yet decided",
       "request an approval and add sample photos while it is pending",
       "see the business-wide Inventory (ALL) view",
       "type a Rate on a new stock request, but only on a project where an admin has set Rate visibility to editable",
     ],
     cannot: [
       "see any money: no budgets, no contract value, no rates on existing requests, no Value column, no bills",
-      "approve or reject a stock request, or mark one Ordered",
+      "approve or reject a stock request, mark one Ordered, or cancel one an admin has approved",
+      "adjust inventory or set minimum stock",
       "see the Billing page or the Users page",
-      "create or edit a project, package or phase",
+      "create or edit a project, package or phase, or change a project's status — if a package has no phase, ask an admin to add one",
+      "raise a stock request or post a daily update on a completed project",
     ],
   },
   {
@@ -361,6 +376,32 @@ export type Flow = {
 
 export const FLOWS: Flow[] = [
   {
+    id: "flow-project",
+    title: "Setting up and closing a project",
+    purpose: "Everything a new project needs before site work starts, and what changes once it is finished.",
+    chain: [
+      { badge: <Badge variant="secondary">Planning</Badge>, who: "New Project creates it" },
+      { badge: <Badge variant="default">Active</Badge>, who: "An admin, once it is set up" },
+      { badge: <Badge variant="secondary">Completed</Badge>, who: "An admin, when the work is done" },
+      { badge: <Badge variant="secondary">Archived</Badge>, who: "Automatically 12 months later, or an admin" },
+    ],
+    exits: [
+      { badge: <Badge variant="secondary">On hold</Badge>, who: "An admin pauses an active project; it goes back to Active or on to Completed" },
+    ],
+    steps: [
+      "Create the project with + New Project. Its dashboard shows a Set up this project card listing what is still missing, each item with a link to where to do it. The card goes away when everything is done.",
+      "Give every package a budget (Edit on the package), then add its phases on the package's Budget tab with + Add Phase. Tasks belong to phases, and phases are what get billed.",
+      "Add tasks on each package's Schedule. If a package has no phase yet, Add Task offers Create phase and brings you back.",
+      "Put a Site Supervisor on the project with Add site supervisor on the Site team card, and give the client access with Add existing client on the Client access card. A supervisor sees only the projects they are on.",
+      "Click Change Status and move it to Active. Edit Project changes the name, location, target end date, contract value and billing constants at any time before it is archived.",
+      "When the work is done, Change Status → Completed. New stock requests and daily updates stop; billing, payments, deliveries and approvals carry on. Twelve months later it is archived, and from then on it is read-only except for billing and payments.",
+    ],
+    notes: [
+      "Reopening — Completed back to Active, or Archived back to Completed — needs a reason, which is kept in the audit log with every other status change.",
+      "A phase already on a bill keeps its allocated amount. Correct it with a credit note or an adjustment on the next bill.",
+    ],
+  },
+  {
     id: "flow-stock",
     title: "Stock request",
     purpose: "Getting material bought and onto site, with an admin's sign-off before anything is ordered.",
@@ -370,16 +411,25 @@ export const FLOWS: Flow[] = [
       { badge: <StockRequestStatusBadge status="ordered" />, who: "An admin marks Ordered" },
       { badge: <StockRequestStatusBadge status="delivered" />, who: "Site Supervisor or admin marks Delivered" },
     ],
-    exits: [{ badge: <StockRequestStatusBadge status="rejected" />, who: "An admin rejects a pending request, with a reason" }],
+    exits: [
+      { badge: <StockRequestStatusBadge status="rejected" />, who: "An admin rejects a pending request, with a reason" },
+      {
+        badge: <StockRequestStatusBadge status="cancelled" />,
+        who: "Its requester cancels it while pending, or an admin cancels an approved or ordered one with a reason",
+      },
+    ],
     steps: [
       "Open the project's Stock Requests page and click + New Request. Pick the package, material, quantity, unit and Needed By date. Phase is optional — leave it as None, and if the package has no phases the field simply reads \"No phases in this package\". If an identical order (same material, quantity and Needed By) has already been delivered, the form warns: \"This order has already been delivered with the mentioned quantity and deadline date.\"",
-      "An admin opens the pending request and clicks Approve or Reject. Rejecting requires a reason. Approving adds the request's value to the package's Committed figure.",
+      "If you typed something wrong, click Edit on your pending request to change the quantity, Needed By or note, or Cancel to withdraw it. Once an admin has approved it, only an admin can cancel it, and they must give a reason.",
+      "An admin opens the pending request and clicks Approve or Reject. Approve asks for the rate (₹ per unit — 0 for free-issue material) and cannot be done without one; it adds quantity × rate to the package's Committed figure. Rejecting requires a reason. An admin can correct the rate with Rate until the material is delivered.",
       "Once the material is ordered, an admin clicks Mark Ordered.",
-      "When it arrives, the Site Supervisor (or admin) clicks Mark Delivered. Inventory goes up by that quantity and the material appears in Billable Now.",
+      "When it arrives, the Site Supervisor (or admin) clicks Mark Delivered and confirms the quantity. If less arrived than was ordered, lower the delivered quantity: the rest stays Ordered as a new request with its own number, linked to this one. Inventory goes up by what arrived, and the material appears in Billable Now.",
     ],
     notes: [
       "Red deadline: a pending request's Needed By date turns red from two working days before the date and stays red once the date has passed. Working days are Monday to Friday; there is no holiday calendar, so a public holiday still counts as a working day. Approved, ordered, delivered and rejected requests never show red.",
-      "A request cannot skip a step: Pending cannot go straight to Delivered, and a delivered or rejected request cannot be changed.",
+      "A request cannot skip a step: Pending cannot go straight to Delivered, and a delivered, rejected or cancelled request cannot be changed.",
+      "Pressing Submit twice — for example after the connection dropped — never raises a second request; the form says \"Request already submitted\".",
+      "If the material you type is already in this project's inventory (same name, ignoring capitals and spacing, and the same unit), the form says so and the delivery adds to that item rather than starting a new one.",
     ],
   },
   {
@@ -420,17 +470,19 @@ export const FLOWS: Flow[] = [
       { badge: <BillStatusBadge status="paid" />, who: "Automatic once recorded payments cover the net payable" },
     ],
     exits: [
-      { badge: <BillStatusBadge status="cancelled" />, who: "A draft can be abandoned; its lines return to Billable Now. There is no Cancel button on the Billing page yet" },
+      { badge: <BillStatusBadge status="cancelled" />, who: "An admin clicks Cancel draft on a draft bill and confirms; its lines return to Billable Now. The client never sees a cancelled draft" },
       { badge: <BillStatusBadge status="draft" />, who: "Client rejects a submitted bill with a reason; it returns to draft with a new revision number" },
     ],
     steps: [
-      "On the project's Billing page tick the items in Billable Now and click + Create Bill. The bill is a Draft with the project's GST, retention and material-at-site rates copied onto it.",
-      "Click Submit. The bill is locked from here on and a PDF is rendered in the background. If the client rejects it, fix the draft and submit again — a fresh PDF is rendered for the new revision.",
+      "On the project's Billing page tick the items in Billable Now (nothing starts ticked; the header box selects all) and click + Create Bill. A confirmation shows the full breakdown — gross, MAS recovery, taxable, GST, retention, TDS, advance recovery and net payable — and lets you enter an optional billing period (both dates or neither). Confirm, and the bill is a Draft with the project's GST, retention and material-at-site rates copied onto it.",
+      "Click Submit and confirm the amounts. The bill is locked from here on, dated that day (India time), and a PDF is rendered in the background. If the client rejects it, fix the draft and submit again — it keeps its first date, and a fresh PDF is rendered for the new revision.",
       "The client opens Bills, views the bill and clicks Approve. The status becomes certified, which the app labels Payment Pending.",
       "As money arrives, an admin clicks Record Payment and enters the amount, date, mode and reference. Partial payments are fine; the moment they add up to the net payable the bill turns Paid on its own, and its phases are marked Paid too.",
     ],
     notes: [
       "The phases on a bill move with it: Billable → Billed when the bill is created, and → Paid when it is paid.",
+      "A greyed-out line in Billable Now says why it cannot be ticked: its phase is already ticked (the phase's value includes the material), or one of its materials is on a draft bill. Under the table, a note counts delivered materials that are not listed — no rate, not linked to a phase, or covered by a phase already billed.",
+      "Billed to Date counts submitted, certified and paid bills only. Received is every payment recorded, part-payments included.",
     ],
   },
   {
@@ -444,6 +496,7 @@ export const FLOWS: Flow[] = [
     steps: [
       "On the Users page click Add User, enter a username, name and role (Admin, Site Supervisor or Client). A Client also needs a Project — the one they will see. The username and a generated password are shown once, each with a Copy button — share them now, because the password cannot be viewed again.",
       "To give an existing client access to another project, open that project's dashboard and use Add existing client on the Client access card. To take a client off one project only, click Remove on their row of that card, or use Projects on their row of the Users page — their login and other projects stay. This works even on their only project: they can still sign in but see no projects until you give them one again, or deactivate the login.",
+      "Site Supervisors work the same way: a supervisor sees only the projects they are on. Put one on a project with Add site supervisor on its Site team card, or from Projects on their row of the Users page (which also has Add to project); Remove takes them off one project only.",
       "Reset password: on the Users page click Reset password next to the user. A new password is shown once, and the user is signed out everywhere. An admin may reset anyone but themselves — including another admin.",
       "Change your OWN password on the Users page, on your own row — the Change my password button sits where Reset sits for everyone else. It asks for your current password first, needs at least 12 characters, and signs you out of every other device while keeping you signed in here. Site supervisors and clients have no self-service route: they ask an admin to Reset theirs, and are given the new password once.",
       "Change role, deactivate or reactivate from the same row. An admin may act on anyone but themselves, and the last remaining admin cannot be demoted or deactivated — that would leave nobody able to administer the organisation. Deactivating signs the person out and blocks their login until it is reversed; nothing is deleted.",
@@ -485,7 +538,7 @@ export const JOB_SCHEDULE: { job: string; when: string; what: string }[] = [
 export const WHERE: { item: string; roles: string; what: string }[] = [
   { item: "All Projects", roles: "Everyone", what: "The portfolio: one card per project you can see. The button at the top of the sidebar opens a list to jump between projects." },
   { item: "Inventory (ALL)", roles: "Admin, Site", what: "Every project's stock in one table, with a project filter." },
-  { item: "Dashboard", roles: "Everyone", what: "A project's stats, its packages, and cards for pending approvals, pending requests and the latest updates. Admins also find the Client access and Rate visibility cards here." },
+  { item: "Dashboard", roles: "Everyone", what: "A project's status, stats, its packages, and cards for pending approvals, pending requests and the latest updates. Admins also find Edit Project, Change Status, the Set up this project checklist (while anything is missing), and the Site team, Client access and Rate visibility cards here." },
   { item: "Packages", roles: "Everyone", what: "The project's packages; expand in the sidebar to jump to one. A package page has its budget and phases, schedule, updates, stock requests and (admins) billing." },
   { item: "Schedule", roles: "Everyone", what: "The Gantt chart per package; click a task bar to edit progress and dates (clients see a read-only summary)." },
   { item: "Daily Updates", roles: "Everyone", what: "The site timeline with photos; + Post Update for staff." },
@@ -493,7 +546,7 @@ export const WHERE: { item: string; roles: string; what: string }[] = [
   { item: "Stock Requests", roles: "Admin, Site", what: "Raise and progress material requests. The sidebar badge counts pending ones." },
   { item: "Approvals", roles: "Everyone", what: "Client sign-offs on samples and drawings. The sidebar badge (clients only) counts those awaiting a decision." },
   { item: "Billing / Bills", roles: "Admin, Client", what: "Billable Now and the RA bills (admins); the bills to approve and pay (client, where the badge counts submitted bills)." },
-  { item: "Users", roles: "Admin", what: "Add staff, change roles, reset passwords, deactivate and reactivate." },
+  { item: "Users", roles: "Admin", what: "Add staff, change roles, reset passwords, deactivate and reactivate. Projects on a client's or Site Supervisor's row lists, adds and removes the projects they can see." },
   { item: "Failed Jobs", roles: "Admin", what: "Background jobs that gave up, with their last error and a Retry button." },
   { item: "Docs", roles: "Everyone", what: "This page." },
   { item: "Bell (header)", roles: "Everyone", what: "Open items across all your projects, scoped to your role. Each entry links to the page it concerns." },
@@ -533,6 +586,7 @@ export const LEGEND: { label: string; badges: ReactNode; meaning: string }[] = [
         <Badge variant="secondary">Archived</Badge>
       </>
     ),
-    meaning: "Set by an admin. Archived happens automatically 12 months after completion.",
+    meaning:
+      "Set by an admin with Change Status: Planning → Active → On hold or Completed → Archived. Archived also happens automatically 12 months after completion. Reopening needs a reason. Completed takes no new stock requests or daily updates; Archived is read-only except for billing and payments.",
   },
 ];

@@ -2,8 +2,21 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
-import { isUnread, receiptsByKey, type ReadReceipt } from "./service";
+import {
+  ACTION_KINDS,
+  ACTION_LABEL,
+  BELL_KINDS,
+  ageInDays,
+  audienceFilter,
+  audienceRole,
+  isUnread,
+  receiptsByKey,
+  type BellKind,
+  type NotificationKind,
+  type ReadReceipt,
+} from "./service";
 import { projectPath } from "@/lib/routing/paths";
+import { fetchPage, type Page, type PageRequest } from "@/lib/pagination";
 
 /**
  * build/07-stock-inventory-notifications.md §2.6. Replaces `buildNotifications()`
@@ -31,10 +44,16 @@ import { projectPath } from "@/lib/routing/paths";
  * The prototype's `buildNotifications` gave site users submitted-bill
  * notifications too — build §2.6 calls that out as a bug being fixed here,
  * not carried forward.
+ *
+ * D72 (2026-11-24): the bell reads only BELL_KINDS (the view also emits
+ * inbox-only state rows), and "is this mine" is `audienceFilter` — the role's
+ * own rows OR rows naming this person as recipient (a requester told their
+ * request was approved). While previewing, everything is scoped to the
+ * previewed project (APX-65).
  */
 
 export type NotificationDTO = {
-  kind: "stock_request" | "bill_submitted" | "approval_pending" | "inventory_low";
+  kind: BellKind;
   entityId: string;
   projectId: string | null;
   projectName: string | null;
@@ -55,13 +74,13 @@ type NotificationRow = {
 };
 
 export async function getNotifications(session: Session): Promise<NotificationDTO[]> {
-  const effectiveRole = session.impersonating?.role ?? session.role;
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("v_notifications")
     .select("kind, entity_id, project_id, title, href, created_at")
-    .contains("for_roles", [effectiveRole])
+    .in("kind", [...BELL_KINDS])
+    .or(audienceFilter(session))
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
 
@@ -85,6 +104,78 @@ export async function getNotifications(session: Session): Promise<NotificationDT
     createdAt: r.created_at,
     unread: isUnread({ kind: r.kind, entityId: r.entity_id, createdAt: r.created_at }, readAtByKey),
   }));
+}
+
+/** One row of the "Needs my action" inbox (APX-72). No amount, ever: the
+ *  view's titles carry none, and the inbox adds nothing but an age. */
+export type ActionItemDTO = {
+  kind: NotificationKind;
+  /** Plain words for what is waiting: "Submit bill", "Receive delivery". */
+  action: string;
+  entityId: string;
+  projectId: string | null;
+  projectName: string | null;
+  title: string;
+  href: string;
+  /** When it started waiting on you (the transition that made it yours). */
+  since: string;
+  /** Whole days waiting, as of this request. */
+  ageDays: number;
+};
+
+/**
+ * Everything waiting on this session across every project it can access,
+ * OLDEST first — the item waiting longest is the one to chase. Built on
+ * `v_notifications` (same RLS, same archived-project exclusion, same
+ * audience rule as the bell) restricted to the role's ACTION_KINDS, one page
+ * at a time (lib/pagination.ts).
+ */
+export async function getActionItems(session: Session, req: PageRequest): Promise<Page<ActionItemDTO>> {
+  const supabase = await createClient();
+  const kinds = ACTION_KINDS[audienceRole(session)];
+
+  const page = await fetchPage(
+    (from, to) =>
+      supabase
+        .from("v_notifications")
+        .select("kind, entity_id, project_id, title, href, created_at", { count: "exact" })
+        .in("kind", [...kinds])
+        .or(audienceFilter(session))
+        // Ties broken by kind then id, so a page boundary never shows one row
+        // twice or skips one when several items started waiting together.
+        .order("created_at", { ascending: true })
+        .order("kind", { ascending: true })
+        .order("entity_id", { ascending: true })
+        .range(from, to),
+    req
+  );
+  // The view's columns come back nullable in the generated types; every one
+  // of these is populated on every row the view emits.
+  const rows = page.rows as NotificationRow[];
+
+  const projectRefs = await fetchProjectRefs(
+    rows.map((r) => r.project_id).filter((id): id is string => id != null)
+  );
+  const now = Date.now();
+
+  return {
+    ...page,
+    rows: rows.map((r) => {
+      const kind = r.kind as NotificationKind;
+      const ref = r.project_id ? projectRefs.get(r.project_id) : undefined;
+      return {
+        kind,
+        action: ACTION_LABEL[kind] ?? r.kind,
+        entityId: r.entity_id,
+        projectId: r.project_id,
+        projectName: ref?.name ?? null,
+        title: r.title,
+        href: r.project_id ? canonicalHref(r.href, r.project_id, ref) : r.href,
+        since: r.created_at,
+        ageDays: ageInDays(r.created_at, now),
+      };
+    }),
+  };
 }
 
 type ProjectRefRow = { name: string; code: string };

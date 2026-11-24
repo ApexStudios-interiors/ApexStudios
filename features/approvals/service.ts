@@ -57,6 +57,13 @@ export function canSupersede(status: ApprovalStatus, alreadySuperseded: boolean)
   return status === "rejected" && !alreadySuperseded;
 }
 
+/** APX-42: the person who requested an approval may withdraw it while it is
+ *  still pending (rpc_withdraw_approval — a soft delete). Nobody else may:
+ *  a client decides it, an admin who did not raise it leaves it alone. */
+export function canWithdraw(status: ApprovalStatus, isRequester: boolean): boolean {
+  return status === "pending" && isRequester;
+}
+
 const AGED_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** architecture.md §9.1's "Approvals pending > 7 days" telemetry figure —

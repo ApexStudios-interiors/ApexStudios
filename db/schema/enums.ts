@@ -29,6 +29,8 @@ export const stockRequestStatus = pgEnum("stock_request_status", [
   "ordered",
   "delivered",
   "rejected",
+  // 20261124400001 (APX-42).
+  "cancelled",
 ]);
 export const approvalStatus = pgEnum("approval_status", ["pending", "approved", "rejected"]);
 export const approvalType = pgEnum("approval_type", [

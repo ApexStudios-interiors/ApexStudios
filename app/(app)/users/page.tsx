@@ -1,7 +1,7 @@
 import { requireRoleForPage } from "@/lib/auth/session";
 import { countActiveOwners, listUsers } from "@/features/users/queries";
-import { listClientProjects, listProjectOptions } from "@/features/projects/queries";
-import { ClientProjectsButton } from "@/features/users/components/ClientProjectsButton";
+import { listMemberProjects, listProjectOptions } from "@/features/projects/queries";
+import { UserProjectsButton } from "@/features/users/components/UserProjectsButton";
 import { UserRoleSelect } from "@/features/users/components/UserRoleSelect";
 import { DeactivateUserButton } from "@/features/users/components/DeactivateUserButton";
 import { ResetPasswordButton } from "@/features/users/components/ResetPasswordButton";
@@ -43,9 +43,10 @@ export default async function UsersPage({
     countActiveOwners(),
     listProjectOptions(),
   ]);
-  // D51: each listed client's projects, for the row's Projects button.
-  const clientProjects = await listClientProjects(
-    users.rows.filter((u) => u.role === "client").map((u) => u.id)
+  // D51, APX-12: each listed client's and Site Supervisor's projects, for the
+  // row's Projects button.
+  const memberProjects = await listMemberProjects(
+    users.rows.filter((u) => u.role === "client" || u.role === "site").map((u) => u.id)
   );
 
   return (
@@ -98,11 +99,13 @@ export default async function UsersPage({
                   </td>
                   <td className={td} style={{ textAlign: "right" }}>
                     <div className="flex justify-end gap-1">
-                      {u.role === "client" && (
-                        <ClientProjectsButton
+                      {(u.role === "client" || u.role === "site") && (
+                        <UserProjectsButton
+                          role={u.role}
                           profileId={u.id}
                           fullName={u.fullName}
-                          projects={clientProjects[u.id] ?? []}
+                          projects={memberProjects[u.id] ?? []}
+                          allProjects={projects}
                         />
                       )}
                       {/* Your own row gets "Change my password" instead of

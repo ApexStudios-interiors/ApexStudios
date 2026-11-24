@@ -61,7 +61,7 @@ export default async function InventoryPage({
       />
 
       <Card>
-        <InventoryTable items={items.rows} isAdmin={isAdmin} />
+        <InventoryTable items={items.rows} isAdmin={isAdmin} role={effectiveRole} />
         <TablePagination page={items.page} pageSize={items.pageSize} total={items.total} />
       </Card>
     </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { billPdfFileName, billPdfJobKey } from "./pdf";
+import { billHasInvoice, billPdfFileName, billPdfJobKey } from "./pdf";
 
 /**
  * 100% branch on the billing change these two functions carry (AGENTS.md's
@@ -55,5 +55,15 @@ describe("billPdfFileName", () => {
   it("a bill number past 99 is carried through whole — the bill_no truncation bug is not reintroduced", () => {
     expect(billPdfFileName("RA-BHEL-NCH-174", 1)).toBe("RA-BHEL-NCH-174.pdf");
     expect(billPdfFileName("RA-BHEL-NCH-174", 2)).toBe("RA-BHEL-NCH-174-R2.pdf");
+  });
+});
+
+describe("billHasInvoice", () => {
+  it.each(["submitted", "certified", "paid"])("an issued bill (%s) has an invoice to render", (status) => {
+    expect(billHasInvoice(status)).toBe(true);
+  });
+
+  it.each(["draft", "cancelled", "anything-else"])("a %s bill never does", (status) => {
+    expect(billHasInvoice(status)).toBe(false);
   });
 });

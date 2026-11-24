@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { connect } from "./db";
+import { connect, withLedgerMaintenance } from "./db";
 import { SEED } from "./db";
 import { one } from "./expect-row";
 import { inventorySearchFilter } from "@/features/inventory/service";
@@ -56,16 +56,22 @@ async function client(email: string) {
 const trackedRequestIds: string[] = [];
 const trackedItemIds: string[] = [];
 afterEach(async () => {
+  // stock_movements and stock_request_events are append-only
+  // (20261124100008) — see withLedgerMaintenance.
   if (trackedRequestIds.length) {
-    await sql`delete from public.stock_request_events where request_id = any(${trackedRequestIds})`;
-    await sql`delete from public.stock_movements where ref_type = 'stock_request' and ref_id = any(${trackedRequestIds})`;
-    await sql`update public.stock_requests set inventory_item_id = null where id = any(${trackedRequestIds})`;
-    await sql`delete from public.stock_requests where id = any(${trackedRequestIds})`;
+    await withLedgerMaintenance(sql, async (tx) => {
+      await tx`delete from public.stock_request_events where request_id = any(${trackedRequestIds})`;
+      await tx`delete from public.stock_movements where ref_type = 'stock_request' and ref_id = any(${trackedRequestIds})`;
+      await tx`update public.stock_requests set inventory_item_id = null where id = any(${trackedRequestIds})`;
+      await tx`delete from public.stock_requests where id = any(${trackedRequestIds})`;
+    });
     trackedRequestIds.length = 0;
   }
   if (trackedItemIds.length) {
-    await sql`delete from public.stock_movements where inventory_item_id = any(${trackedItemIds})`;
-    await sql`delete from public.inventory_items where id = any(${trackedItemIds})`;
+    await withLedgerMaintenance(sql, async (tx) => {
+      await tx`delete from public.stock_movements where inventory_item_id = any(${trackedItemIds})`;
+      await tx`delete from public.inventory_items where id = any(${trackedItemIds})`;
+    });
     trackedItemIds.length = 0;
   }
 });
@@ -289,8 +295,10 @@ describe("rpc_adjust_inventory — organisation scope (20261008090001)", () => {
 
   afterAll(async () => {
     if (created.length) {
-      await sql`delete from public.stock_movements where inventory_item_id = any(${created})`;
-      await sql`delete from public.inventory_items where id = any(${created})`;
+      await withLedgerMaintenance(sql, async (tx) => {
+        await tx`delete from public.stock_movements where inventory_item_id = any(${created})`;
+        await tx`delete from public.inventory_items where id = any(${created})`;
+      });
     }
     await sql`delete from public.projects where id = ${otherProject}`;
     await sql`delete from public.clients where id = ${otherClient}`;
@@ -566,8 +574,10 @@ describe("rpc_inventory_drift — T-10", () => {
       // there is nothing further to restore — this just confirms the drift
       // clears once the item (and its movements) is gone.
       // No cascade on this FK (migration 0006) — movements first, item second.
-      await sql`delete from public.stock_movements where inventory_item_id = ${itemId}`;
-      await sql`delete from public.inventory_items where id = ${itemId}`;
+      await withLedgerMaintenance(sql, async (tx) => {
+        await tx`delete from public.stock_movements where inventory_item_id = ${itemId}`;
+        await tx`delete from public.inventory_items where id = ${itemId}`;
+      });
       trackedItemIds.splice(trackedItemIds.indexOf(itemId), 1);
       const clean = await sql`select item_id from public.rpc_inventory_drift()`;
       expect(clean.some((d) => d.item_id === itemId)).toBe(false);
@@ -949,16 +959,12 @@ describe("stock_requests — inventory_item_id belongs to this request's org and
 });
 
 describe("inventory_sku_uq", () => {
-  // KNOWN FAILURE APX-TBD: inventory_sku_uq is `unique nulls not distinct
+  // Was a KNOWN FAILURE: inventory_sku_uq was `unique nulls not distinct
   // (org_id, project_id, sku)` (migration 20260909170006), so two items with
-  // no SKU collide in the same project. Nothing in the app sets a SKU, and
-  // rpc_transition_stock_request creates a SKU-less item whenever it delivers
-  // a material that was never in inventory, so the second such delivery on a
-  // project fails with a unique violation. Found 2026-11-23, the first time
-  // this suite ran (on CI's local stack). The fix is a migration (e.g. a
-  // partial unique index `where sku is not null`) and an owner sign-off, not a
-  // CI change. Un-skip this when it lands.
-  it.skip("lets one project hold two items that have no SKU", async () => {
+  // no SKU collided in the same project — and every new-material delivery
+  // creates a SKU-less item. 20261124400002 replaced it with a partial unique
+  // index over rows that have a SKU.
+  it("lets one project hold two items that have no SKU", async () => {
     for (const name of ["SKU-less item A", "SKU-less item B"]) {
       const rows = await sql`
         insert into public.inventory_items (org_id, project_id, name, unit, qty_on_hand, reorder_level, unit_cost, created_by)
@@ -967,5 +973,17 @@ describe("inventory_sku_uq", () => {
       trackedItemIds.push(one(rows, "inserted SKU-less item").id);
     }
     expect(trackedItemIds).toHaveLength(2);
+  });
+
+  it("still refuses two items with the same SKU in one project", async () => {
+    const sku = `SKU-DUP-${Date.now()}`;
+    const first = await sql`
+      insert into public.inventory_items (org_id, project_id, name, sku, unit, created_by)
+      values (${SEED.org}, ${SEED.project}, 'SKU dup A', ${sku}, 'bag', ${SEED.adminProfile}) returning id`;
+    trackedItemIds.push(one(first, "first SKU item").id);
+    await expect(
+      sql`insert into public.inventory_items (org_id, project_id, name, sku, unit, created_by)
+           values (${SEED.org}, ${SEED.project}, 'SKU dup B', ${sku}, 'bag', ${SEED.adminProfile})`
+    ).rejects.toThrow(/inventory_sku_uq/);
   });
 });

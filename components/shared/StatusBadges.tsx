@@ -133,6 +133,9 @@ export function StockRequestStatusBadge({ status }: { status: StockRequestStatus
       return <Badge variant="success">Delivered</Badge>;
     case "rejected":
       return <Badge variant="destructive">Rejected</Badge>;
+    case "cancelled":
+      // Flat gray: closed, but not a failure the way a rejection is (APX-42).
+      return <Badge variant="secondary">Cancelled</Badge>;
   }
 }
 

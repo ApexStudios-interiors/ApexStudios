@@ -3,7 +3,7 @@ import { z } from "zod";
 /** 02-lld.md §7. `numeric(14,2)` amounts travel as strings end to end — the
  *  form, the action, and lib/money's Decimal arithmetic never round-trip
  *  through a JS number (docs/code-standards.md §6). */
-const moneyString = z
+export const moneyString = z
   .string()
   .trim()
   .regex(/^\d+(\.\d{1,2})?$/, "Enter an amount like 125000 or 125000.50");
@@ -61,8 +61,11 @@ export type CreatePhaseInput = z.infer<typeof createPhaseSchema>;
 
 export const updatePhaseSchema = z.object({
   id: z.uuid(),
-  name: z.string().trim().min(1).optional(),
+  name: z.string().trim().min(1, "Name is required").optional(),
   allocatedAmount: moneyString.optional(),
   internalAmount: moneyString.optional(),
+  /** Optimistic concurrency, exactly as updatePackageSchema: the update is
+   *  scoped to this `updated_at`, and zero rows back is a CONFLICT. */
+  updatedAt: z.string().min(1),
 });
 export type UpdatePhaseInput = z.infer<typeof updatePhaseSchema>;

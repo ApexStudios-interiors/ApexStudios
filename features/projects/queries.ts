@@ -4,7 +4,16 @@ import Decimal from "decimal.js";
 import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
 import { getPackageNavLists } from "@/features/packages/queries";
-import { parseRateVisibility, projectStatusLabel, type RateVisibility } from "./service";
+import {
+  parseProjectStatus,
+  parseRateVisibility,
+  projectStatusLabel,
+  type MemberRole,
+  type ProjectStatus,
+  type RateVisibility,
+  type SetupFacts,
+} from "./service";
+import { isIssuedBill, sumAmounts, type BillStatus } from "@/features/billing/service";
 
 /**
  * Three separate functions, not one with a role ternary on the select list
@@ -58,7 +67,9 @@ async function fetchProjectRows(session: Session) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("projects")
-    .select("id, code, name, location, status, progress_pct, start_date, contract_value, client_id")
+    // No contract_value: authenticated has no SELECT on it (APX-09) — site
+    // must never see it. The client portfolio reads it from v_project_finance.
+    .select("id, code, name, location, status, progress_pct, start_date, client_id")
     .is("deleted_at", null)
     // start_date, not created_at: every row in supabase/seed.sql's multi-row
     // INSERT gets the identical now() (Postgres evaluates it once per
@@ -169,7 +180,10 @@ async function getPortfolioForClient(session: Session): Promise<PortfolioClient>
   // (a client decides their own project's approvals directly, §6.10), but
   // bills is admin-only on select — v_bill_client is the client-safe read.
   // The two counts are independent, so they go out together (APX-26).
-  const [approvalsRes, billsRes] = await Promise.all([
+  //
+  // contract_value lives behind v_project_finance (admin or client only,
+  // APX-09), not on projects, so a site session has no path to it at all.
+  const [approvalsRes, billsRes, financeRes] = await Promise.all([
     supabase
       .from("approvals")
       .select("id", { count: "exact", head: true })
@@ -180,13 +194,18 @@ async function getPortfolioForClient(session: Session): Promise<PortfolioClient>
       .select("id", { count: "exact", head: true })
       .eq("status", "submitted")
       .in("project_id", projectIds),
+    supabase.from("v_project_finance").select("id, contract_value").in("id", projectIds),
   ]);
   if (approvalsRes.error) throw new Error(approvalsRes.error.message);
   if (billsRes.error) throw new Error(billsRes.error.message);
+  if (financeRes.error) throw new Error(financeRes.error.message);
   const pendingApprovals = approvalsRes.count;
   const pendingBills = billsRes.count;
 
   const awaitingApproval = (pendingApprovals ?? 0) + (pendingBills ?? 0);
+
+  // Strings, not Numbers: the total is summed with decimal.js (APX-52).
+  const contractValue = new Map(financeRes.data.map((f) => [f.id, String(f.contract_value ?? 0)]));
 
   const projectCards: ProjectCardDTO[] = projects.map((p) => ({
     id: p.id,
@@ -198,7 +217,7 @@ async function getPortfolioForClient(session: Session): Promise<PortfolioClient>
     progressPct: p.progress_pct,
     start: p.start_date,
     packageCount: packageCountByProject.get(p.id) ?? 0,
-    headlineAmount: String(p.contract_value),
+    headlineAmount: contractValue.get(p.id) ?? "0",
     budgetUsedPct: null,
   }));
 
@@ -207,7 +226,7 @@ async function getPortfolioForClient(session: Session): Promise<PortfolioClient>
     stats: {
       // decimal.js, not a float sum: a money total (APX-52).
       totalContractValue: projects
-        .reduce((a, p) => a.plus(new Decimal(String(p.contract_value))), new Decimal(0))
+        .reduce((a, p) => a.plus(new Decimal(contractValue.get(p.id) ?? "0")), new Decimal(0))
         .toFixed(2),
       activeProjects: projects.filter((p) => p.status === "active").length,
       awaitingApproval,
@@ -297,6 +316,9 @@ export type ProjectHeaderDTO = {
   location: string | null;
   start: string | null;
   status: string;
+  /** The enum value behind `status` (APX-11/41): the status control and the
+   *  read-only rule key on this, never on the display label. */
+  statusKey: ProjectStatus;
   progressPct: number;
   /** D55 — per-project Rate visibility for Site Supervisors. Not money: it is
    *  the policy about who may type a rate, and every role may read it. */
@@ -331,10 +353,29 @@ export async function getProjectHeader(
     location: p.location,
     start: p.start_date,
     status: projectStatusLabel(p.status),
+    statusKey: parseProjectStatus(p.status) ?? "planning",
     progressPct: p.progress_pct,
     rateVisibility: parseRateVisibility(p.rate_visibility),
   };
 }
+
+/**
+ * Just the status, for the read-only rule (APX-41) on every page and layout
+ * under a project. Readable by every member (projects_select), and it carries
+ * no money. `cache`: the layout, the banner and the page each ask during one
+ * request, and that is one round trip, not three.
+ */
+export const getProjectStatus = cache(async (projectId: string): Promise<ProjectStatus | null> => {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("projects")
+    .select("status")
+    .eq("id", projectId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return parseProjectStatus(data?.status);
+});
 
 /** Client dashboard's "Bills Raised" / "Awaiting Your Approval" extra stats
  *  (ui-guide §6.2). `bills` is admin-only on select — v_bill_client is the
@@ -360,12 +401,16 @@ export async function getClientBillingStats(projectId: string): Promise<ClientBi
   const { data: bills, error } = billsRes;
   if (error) throw new Error(error.message);
 
-  const billedNet = bills
-    .filter((b) => b.status !== "draft")
-    .reduce((a, b) => a + Number(b.net_payable ?? 0), 0);
-  const paidNet = bills
-    .filter((b) => b.status === "paid")
-    .reduce((a, b) => a + Number(b.net_payable ?? 0), 0);
+  // Issued bills only (APX-32): a cancelled draft was never sent. Summed in
+  // Decimal, never a float running total.
+  const netOf = (pred: (status: BillStatus) => boolean) =>
+    sumAmounts(
+      bills
+        .filter((b) => b.status != null && pred(b.status))
+        .map((b) => ({ amount: Number(b.net_payable ?? 0) }))
+    ).toNumber();
+  const billedNet = netOf(isIssuedBill);
+  const paidNet = netOf((s) => s === "paid");
   const billsSubmitted = bills.filter((b) => b.status === "submitted").length;
 
   const { count: approvalsPending, error: apErr } = approvalsRes;
@@ -405,7 +450,7 @@ export async function getSiteStockStats(projectId: string): Promise<SiteStockSta
 export type ClientLoginDTO = { id: string; fullName: string; email: string | null };
 
 /** A client login on this project, with how many live projects it can see in
- *  all — the card disables Remove when this is its only one (D51). */
+ *  all — the Remove confirm warns when this is its only one (D51). */
 export type ClientMemberDTO = ClientLoginDTO & { projectCount: number };
 
 export type ProjectClientAccess = {
@@ -415,41 +460,59 @@ export type ProjectClientAccess = {
   others: ClientLoginDTO[];
 };
 
+/** The Site team card's shape (APX-12) — the same as Client access, for the
+ *  org's Site Supervisors. */
+export type ProjectSiteTeam = ProjectClientAccess;
+
 /**
- * D51: client logins are created and granted per project. Owner/admin only —
- * the page calls this for those roles alone, and both reads are RLS-scoped
- * (`profiles_select` to the org, `pm_select` via is_member_of, which is true
- * for every project for an admin). profiles carries no money columns.
+ * The profiles of one role that can see this project, and the ones that
+ * cannot yet. Owner/admin only — the page calls it for those roles alone,
+ * and both reads are RLS-scoped (`profiles_select` to the org, `pm_select`
+ * via is_member_of, which is true for every project for an admin). profiles
+ * carries no money columns. A deactivated login is never offered as one to
+ * add, though a deactivated member is still listed so it can be removed.
  */
-export async function getProjectClientAccess(projectId: string): Promise<ProjectClientAccess> {
+async function projectMembersOfRole(projectId: string, role: MemberRole): Promise<ProjectClientAccess> {
   const supabase = await createClient();
-  const [clients, members] = await Promise.all([
+  const [profiles, members] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, full_name, email")
-      .eq("role", "client")
+      .select("id, full_name, email, is_active")
+      .eq("role", role)
       .is("deleted_at", null)
       .order("full_name", { ascending: true }),
     supabase.from("project_members").select("profile_id").eq("project_id", projectId),
   ]);
-  if (clients.error) throw new Error(clients.error.message);
+  if (profiles.error) throw new Error(profiles.error.message);
   if (members.error) throw new Error(members.error.message);
 
   const memberIds = new Set(members.data.map((m) => m.profile_id));
-  const projectsByClient = await clientProjectMap([...memberIds]);
+  const ofRole = profiles.data.filter((p) => memberIds.has(p.id)).map((p) => p.id);
+  const projectsByProfile = await memberProjectMap(ofRole);
   const result: ProjectClientAccess = { members: [], others: [] };
-  for (const p of clients.data) {
+  for (const p of profiles.data) {
     const dto = { id: p.id, fullName: p.full_name, email: p.email };
     if (memberIds.has(p.id)) {
-      result.members.push({ ...dto, projectCount: projectsByClient.get(p.id)?.length ?? 0 });
-    } else {
+      result.members.push({ ...dto, projectCount: projectsByProfile.get(p.id)?.length ?? 0 });
+    } else if (p.is_active) {
       result.others.push(dto);
     }
   }
   return result;
 }
 
-/** A project a client login can see, as the Users page lists it. */
+/** D51: the project's client logins, and the ones that could be added. */
+export async function getProjectClientAccess(projectId: string): Promise<ProjectClientAccess> {
+  return projectMembersOfRole(projectId, "client");
+}
+
+/** APX-12: the project's Site Supervisors, and the ones that could be added. */
+export async function getProjectSiteTeam(projectId: string): Promise<ProjectSiteTeam> {
+  return projectMembersOfRole(projectId, "site");
+}
+
+/** A project a client login or Site Supervisor can see, as the Users page
+ *  lists it. */
 export type ClientProjectDTO = { id: string; code: string; name: string };
 
 /**
@@ -458,7 +521,7 @@ export type ClientProjectDTO = { id: string; code: string; name: string };
  * lets an admin read every membership row in the org, and projects_select is
  * org-scoped. id, code and name only — no money column.
  */
-async function clientProjectMap(profileIds: string[]): Promise<Map<string, ClientProjectDTO[]>> {
+async function memberProjectMap(profileIds: string[]): Promise<Map<string, ClientProjectDTO[]>> {
   const byProfile = new Map<string, ClientProjectDTO[]>();
   if (profileIds.length === 0) return byProfile;
 
@@ -490,9 +553,10 @@ async function clientProjectMap(profileIds: string[]): Promise<Map<string, Clien
   return byProfile;
 }
 
-/** For the Users page: each listed client login's projects (D51). */
-export async function listClientProjects(clientIds: string[]): Promise<Record<string, ClientProjectDTO[]>> {
-  return Object.fromEntries(await clientProjectMap(clientIds));
+/** For the Users page: each listed client login's or Site Supervisor's
+ *  projects (D51, APX-12). */
+export async function listMemberProjects(profileIds: string[]): Promise<Record<string, ClientProjectDTO[]>> {
+  return Object.fromEntries(await memberProjectMap(profileIds));
 }
 
 /** A project as a form's Project select lists it. */
@@ -516,4 +580,69 @@ export async function listProjectOptions(): Promise<ProjectOptionDTO[]> {
     .order("name", { ascending: true });
   if (error) throw new Error(error.message);
   return data;
+}
+
+/**
+ * What the setup checklist (APX-70) needs to know about one project. Admin
+ * only — the dashboard renders the card for admins alone — and every read is
+ * RLS-scoped: packages and phases are admin-only base tables, which is why
+ * this must never be called for another role. Only `allocated_amount` is read
+ * from packages (to tell "has a budget"), and it never leaves this function
+ * as anything but a figure the admin already sees in the Packages table.
+ */
+export async function getProjectSetupFacts(projectId: string): Promise<SetupFacts & { code: string }> {
+  const supabase = await createClient();
+  const [project, packages, phases, tasks, members] = await Promise.all([
+    supabase.from("projects").select("status, code").eq("id", projectId).is("deleted_at", null).maybeSingle(),
+    supabase
+      .from("packages")
+      .select("id, seq_no, name, allocated_amount")
+      .eq("project_id", projectId)
+      .is("deleted_at", null),
+    supabase.from("phases").select("package_id").eq("project_id", projectId).is("deleted_at", null),
+    supabase.from("tasks").select("package_id").eq("project_id", projectId).is("deleted_at", null),
+    supabase.from("project_members").select("profile_id").eq("project_id", projectId),
+  ]);
+  if (project.error) throw new Error(project.error.message);
+  if (packages.error) throw new Error(packages.error.message);
+  if (phases.error) throw new Error(phases.error.message);
+  if (tasks.error) throw new Error(tasks.error.message);
+  if (members.error) throw new Error(members.error.message);
+
+  const countByPackage = (rows: { package_id: string }[]) => {
+    const m = new Map<string, number>();
+    for (const r of rows) m.set(r.package_id, (m.get(r.package_id) ?? 0) + 1);
+    return m;
+  };
+  const phasesBy = countByPackage(phases.data);
+  const tasksBy = countByPackage(tasks.data);
+
+  const memberIds = members.data.map((m) => m.profile_id);
+  let siteMembers = 0;
+  let clientMembers = 0;
+  if (memberIds.length > 0) {
+    const { data: roles, error } = await supabase
+      .from("profiles")
+      .select("role")
+      .in("id", memberIds)
+      .is("deleted_at", null);
+    if (error) throw new Error(error.message);
+    siteMembers = roles.filter((p) => p.role === "site").length;
+    clientMembers = roles.filter((p) => p.role === "client").length;
+  }
+
+  return {
+    code: project.data?.code ?? "",
+    status: project.data?.status ?? "planning",
+    packages: packages.data.map((p) => ({
+      id: p.id,
+      seqNo: p.seq_no,
+      name: p.name,
+      allocated: Number(p.allocated_amount),
+      phases: phasesBy.get(p.id) ?? 0,
+      tasks: tasksBy.get(p.id) ?? 0,
+    })),
+    siteMembers,
+    clientMembers,
+  };
 }

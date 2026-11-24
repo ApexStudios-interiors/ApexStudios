@@ -70,6 +70,8 @@ const BILL = {
   id: BILL_ID,
   org_id: ORG,
   project_id: PROJECT,
+  // An issued bill: the handler renders only those (billHasInvoice, APX-35).
+  status: "submitted",
   bill_no: "RA-BHEL-NCH-01",
   revision: 0,
   bill_date: "2026-11-01",
