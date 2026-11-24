@@ -129,6 +129,15 @@ select throws_ok(
 
 reset role;
 
+-- A real bill on c1 for the bill-attachment check below. Since 20261124100004
+-- (APX-05/APX-37) an uploaded attachment must point at a record that exists in
+-- its project, with a key under that record's own prefix — so the fixture
+-- creates the bill rather than naming an id that does not exist.
+insert into public.bills (id, org_id, project_id, seq_no, bill_no, gst_rate_pct, retention_pct, tds_pct, created_by)
+values ('00000000-0000-4000-8000-000000000401', '00000000-0000-4000-8000-0000000000a0',
+        '00000000-0000-4000-8000-0000000000c1', 990, 'RA-PGTAP-990', 18, 5, 0,
+        '00000000-0000-4000-8000-0000000000d2');
+
 -- ── archived: read-only (as the migration owner; the trigger fires anyway) ──
 update public.projects set status = 'archived' where id = '00000000-0000-4000-8000-0000000000c1';
 
@@ -165,7 +174,9 @@ select lives_ok(
 select lives_ok(
   $$ insert into public.attachments (org_id, project_id, entity_type, entity_id, r2_key, file_name, mime_type, size_bytes, uploaded_by)
      values ('00000000-0000-4000-8000-0000000000a0', '00000000-0000-4000-8000-0000000000c1', 'bill',
-             '00000000-0000-4000-8000-000000000401', 'pgtap/archived-bill.pdf', 'bill.pdf', 'application/pdf', 10,
+             '00000000-0000-4000-8000-000000000401',
+             'org/00000000-0000-4000-8000-0000000000a0/project/00000000-0000-4000-8000-0000000000c1/bill/00000000-0000-4000-8000-000000000401/archived-bill.pdf',
+             'bill.pdf', 'application/pdf', 10,
              '00000000-0000-4000-8000-0000000000d2') $$,
   'a bill attachment (PDF, uploaded copy) still attaches on an archived project'
 );
