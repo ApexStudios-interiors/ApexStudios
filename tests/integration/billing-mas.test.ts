@@ -2,7 +2,7 @@ import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { Decimal } from "decimal.js";
-import { connect, SEED } from "./db";
+import { connect, SEED, withLedgerMaintenance } from "./db";
 import { one } from "./expect-row";
 import { previewBill, type BillableLine } from "@/features/billing/service";
 
@@ -63,23 +63,27 @@ const trackedSrIds: string[] = [];
 const trackedBillIds: string[] = [];
 
 afterEach(async () => {
-  if (trackedBillIds.length) {
-    await sql`delete from public.payments where bill_id = any(${trackedBillIds})`;
-    await sql`delete from public.bill_events where bill_id = any(${trackedBillIds})`;
-    await sql`delete from public.bill_lines where bill_id = any(${trackedBillIds})`;
-    await sql`update public.stock_requests set billed_on_bill_id = null where billed_on_bill_id = any(${trackedBillIds})`;
-    await sql`delete from public.jobs where payload->>'billId' = any(${trackedBillIds})`;
-    await sql`delete from public.bills where id = any(${trackedBillIds})`;
-    trackedBillIds.length = 0;
-  }
-  if (trackedSrIds.length) {
-    await sql`delete from public.stock_requests where id = any(${trackedSrIds})`;
-    trackedSrIds.length = 0;
-  }
-  if (trackedPhaseIds.length) {
-    await sql`delete from public.phases where id = any(${trackedPhaseIds})`;
-    trackedPhaseIds.length = 0;
-  }
+  // Ledgers are append-only (20261124100008); cleanup runs with the
+  // transaction-local maintenance switch on.
+  await withLedgerMaintenance(sql, async (tx) => {
+    if (trackedBillIds.length) {
+      await tx`delete from public.payments where bill_id = any(${trackedBillIds})`;
+      await tx`delete from public.bill_events where bill_id = any(${trackedBillIds})`;
+      await tx`delete from public.bill_lines where bill_id = any(${trackedBillIds})`;
+      await tx`update public.stock_requests set billed_on_bill_id = null where billed_on_bill_id = any(${trackedBillIds})`;
+      await tx`delete from public.jobs where payload->>'billId' = any(${trackedBillIds})`;
+      await tx`delete from public.bills where id = any(${trackedBillIds})`;
+      trackedBillIds.length = 0;
+    }
+    if (trackedSrIds.length) {
+      await tx`delete from public.stock_requests where id = any(${trackedSrIds})`;
+      trackedSrIds.length = 0;
+    }
+    if (trackedPhaseIds.length) {
+      await tx`delete from public.phases where id = any(${trackedPhaseIds})`;
+      trackedPhaseIds.length = 0;
+    }
+  });
 });
 afterAll(async () => {
   await Promise.all(openClients.map((c) => c.auth.signOut()));
