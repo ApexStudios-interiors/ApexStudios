@@ -144,31 +144,21 @@ describe("isSameProjectName", () => {
 });
 
 describe("clientAccessRemovalRefusal (D51)", () => {
-  it("allows removing a client from one of several projects", () => {
-    expect(clientAccessRemovalRefusal({ role: "client", isMember: true, projectCount: 2 })).toBeNull();
-  });
-
-  it("refuses a client's last project", () => {
-    expect(clientAccessRemovalRefusal({ role: "client", isMember: true, projectCount: 1 })).toBe(
-      "last_project"
-    );
-    expect(clientAccessRemovalRefusal({ role: "client", isMember: true, projectCount: 0 })).toBe(
-      "last_project"
-    );
+  // Whether it is their only project does not matter (owner decision, 2026-11-23).
+  it("allows removing a client who is on the project", () => {
+    expect(clientAccessRemovalRefusal({ role: "client", isMember: true })).toBeNull();
   });
 
   it("refuses a client who is not on the project", () => {
-    expect(clientAccessRemovalRefusal({ role: "client", isMember: false, projectCount: 3 })).toBe(
-      "not_member"
-    );
+    expect(clientAccessRemovalRefusal({ role: "client", isMember: false })).toBe("not_member");
   });
 
   it.each(["site", "admin", "owner"])("refuses a %s — only client access is managed here", (role) => {
-    expect(clientAccessRemovalRefusal({ role, isMember: true, projectCount: 3 })).toBe("not_client");
+    expect(clientAccessRemovalRefusal({ role, isMember: true })).toBe("not_client");
   });
 
   it("has copy for every refusal", () => {
-    for (const reason of ["not_client", "not_member", "last_project"] as const) {
+    for (const reason of ["not_client", "not_member"] as const) {
       expect(CLIENT_ACCESS_REMOVAL_REFUSAL_COPY[reason]).toBeTruthy();
     }
   });

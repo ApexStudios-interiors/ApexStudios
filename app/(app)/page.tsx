@@ -134,7 +134,13 @@ export default async function HomePage({
       ) : (
         <div className="rounded-[10px] border border-dashed border-border px-5 py-10 text-center text-muted-foreground text-[13.5px]">
           {total === 0
-            ? "No projects yet."
+            ? // A client can be left with no project (removed from their last
+              // one); a new site supervisor starts with none (#90).
+              portfolio.role === "client"
+              ? "You don't have access to any project yet. Contact Apex Studios to be given access."
+              : portfolio.role === "site"
+                ? "You haven't been added to any project yet. Ask an admin to add you."
+                : "No projects yet."
             : q
               ? `No projects match “${q}”.`
               : "No projects with this status."}
