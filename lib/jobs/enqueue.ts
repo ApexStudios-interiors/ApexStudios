@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { kickDrain } from "./kick";
 
 /**
  * The one way a normal, signed-in request enqueues background work — through
@@ -23,5 +24,8 @@ export async function enqueue(
     p_run_after: (opts.runAfter ?? new Date()).toISOString(),
   });
   if (error) throw new Error(error.message);
+  // APX-20: start working on it now rather than at the next (hours-late)
+  // scheduled tick. After the response, fire-and-forget — see ./kick.ts.
+  kickDrain();
   return data;
 }

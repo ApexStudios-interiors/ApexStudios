@@ -16,7 +16,15 @@ import { useClickOutside } from "@/hooks/useClickOutside";
  * shows everything, read or not, because a read notification is not finished
  * work — that is the part of D56 worth keeping.
  */
-export function NotificationsMenu({ items }: { items: NotificationDTO[] }) {
+export function NotificationsMenu({
+  items,
+  unreadCount: serverUnreadCount,
+}: {
+  /** The newest few (BELL_LIMIT) — not necessarily every notification. */
+  items: NotificationDTO[];
+  /** Unread across ALL notifications, counted in SQL (APX-52). */
+  unreadCount: number;
+}) {
   const [open, setOpen] = useState(false);
   /** Ids marked read in this tab, so the badge drops on click rather than
    *  waiting for the server round trip and the router refresh. Merged with
@@ -28,7 +36,10 @@ export function NotificationsMenu({ items }: { items: NotificationDTO[] }) {
 
   const keyOf = (n: NotificationDTO) => `${n.kind}-${n.entityId}`;
   const isUnread = (n: NotificationDTO) => n.unread && !justRead.has(keyOf(n));
-  const unreadCount = items.filter(isUnread).length;
+  // The server's count over every notification, less the listed ones opened
+  // in this tab since it was computed.
+  const openedHere = items.filter((n) => n.unread && justRead.has(keyOf(n))).length;
+  const unreadCount = Math.max(0, serverUnreadCount - openedHere);
 
   async function openNotification(n: NotificationDTO, e: React.MouseEvent) {
     // Let the browser handle a modified click (new tab, new window) exactly as

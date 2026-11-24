@@ -16,32 +16,50 @@ import { JOB_REGISTRY } from "./registry";
 
 export type DrainSummary = { claimed: number; succeeded: number; failed: number; durationMs: number };
 
-type JobRow = { id: string; name: string; payload: unknown };
+type JobRow = { id: string; name: string; payload: unknown; attempts: number };
 
 async function runOne(supabase: SupabaseClient, job: JobRow): Promise<boolean> {
   const handler = JOB_REGISTRY[job.name];
+  let ok: boolean;
+  let message: string | undefined;
   try {
     if (!handler) throw new Error(`no handler registered for job "${job.name}"`);
     await handler(job.payload, job.id);
-    await finish(supabase, job.id, true);
-    return true;
+    ok = true;
   } catch (e) {
     // The failure record is `jobs.last_error`, written by `rpc_finish_job`
     // below and surfaced on the Admin ops page — that row is the alert
     // (docs/architecture.md §9.2), so the message must always reach it.
-    const message = e instanceof Error ? e.message : String(e);
-    await finish(supabase, job.id, false, message);
-    return false;
+    ok = false;
+    message = e instanceof Error ? e.message : String(e);
   }
+  // Outside the try: a failure to RECORD a success must not be recorded as
+  // the job failing (it would back off and re-run work that already landed).
+  await finish(supabase, job, ok, message);
+  return ok;
 }
 
-async function finish(supabase: SupabaseClient, id: string, ok: boolean, error?: string): Promise<void> {
-  const { error: rpcError } = await supabase.rpc("rpc_finish_job", {
-    p_id: id,
+/**
+ * `p_attempt` is the attempt number this worker claimed. rpc_finish_job
+ * (migration 20261124600001) applies only while the row is still `running`
+ * under that attempt — so a worker that outlived its lease, was reaped and
+ * re-claimed by another tick, cannot overwrite the newer outcome (APX-23).
+ * A refused finish is logged, not thrown: the row's state already belongs to
+ * whoever holds it now.
+ */
+async function finish(supabase: SupabaseClient, job: JobRow, ok: boolean, error?: string): Promise<void> {
+  const { data, error: rpcError } = await supabase.rpc("rpc_finish_job", {
+    p_id: job.id,
     p_ok: ok,
     p_error: error ?? null,
+    p_attempt: job.attempts,
   });
   if (rpcError) throw new Error(rpcError.message);
+  if (data === false) {
+    console.warn(
+      `[jobs] finish of ${job.name} ${job.id} (attempt ${job.attempts}) ignored: no longer running under this attempt`
+    );
+  }
 }
 
 /**
@@ -110,18 +128,21 @@ export async function selfEnqueueAndDrain(
   return drain([name], { limit: 1 });
 }
 
-/** Hourly (build §3.4): requeues jobs whose lease expired, meaning the
- *  worker died mid-run. A plain admin-client update rather than a new RPC —
- *  reaping has no business logic beyond this one WHERE clause, and the
- *  mutation needs service_role regardless of how it's issued. */
-export async function reap(): Promise<{ requeued: number }> {
+export type ReapSummary = { requeued: number; failed: number };
+
+/** Hourly (build §3.4): deals with jobs whose lease expired, meaning the
+ *  worker died or timed out mid-run. `rpc_reap_jobs` (migration
+ *  20261124600001, APX-23) counts that as a failed attempt: the job is backed
+ *  off and requeued, or — once it has used max_attempts — marked `failed`
+ *  so it reaches the Failed Jobs page instead of looping silently forever. */
+export async function reap(): Promise<ReapSummary> {
   const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("jobs")
-    .update({ status: "pending", lease_until: null, last_error: "lease expired — worker timed out" })
-    .eq("status", "running")
-    .lt("lease_until", new Date().toISOString())
-    .select("id");
+  const { data, error } = await supabase.rpc("rpc_reap_jobs");
   if (error) throw new Error(error.message);
-  return { requeued: data?.length ?? 0 };
+  const row = data?.[0];
+  const summary = { requeued: row?.requeued ?? 0, failed: row?.failed ?? 0 };
+  if (summary.failed > 0) {
+    console.error(`[jobs] reap: ${summary.failed} job(s) timed out on every attempt and are now failed`);
+  }
+  return summary;
 }

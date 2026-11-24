@@ -23,8 +23,22 @@ export const JOB_REGISTRY: Record<string, JobHandler> = {
   "bill.pdf": generateBillPdf,
 };
 
-/** The names `jobs.drain` claims every minute — everything enqueued ad hoc
- *  from a request path, as opposed to a job a cron route self-enqueues on
- *  its own schedule (those are claimed by their own cron entry instead, see
- *  app/api/cron/[job]/route.ts). */
-export const DRAIN_JOB_NAMES = ["attachment.thumbnail", "bill.pdf"] as const;
+/** The names `jobs.drain` claims on every tick — every registered job.
+ *
+ *  It used to be only the two enqueued ad hoc from a request path, on the
+ *  theory that a scheduled job is claimed by its own cron entry. But that
+ *  entry runs once a day (or week): a scheduled job that FAILED was backed
+ *  off by rpc_finish_job and then sat `pending` until the next day's tick —
+ *  a failed backup.verify retried 24 hours later, not in minutes (APX-23).
+ *  Draining them too gives every job the same 1/2/4/8/16-minute retry curve.
+ *  The cron route still self-enqueues and runs each one on schedule; the
+ *  drain only picks up the retries. Idempotency keys (a date or ISO week)
+ *  keep that from ever becoming a second run of the same period. */
+export const DRAIN_JOB_NAMES = [
+  "attachment.thumbnail",
+  "bill.pdf",
+  "inventory.reconcile",
+  "attachment.orphan_sweep",
+  "project.archive",
+  "backup.verify",
+] as const;

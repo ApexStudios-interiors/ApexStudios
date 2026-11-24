@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
 import { packageStatusLabel } from "./service";
@@ -227,6 +228,24 @@ export type PackageNavItem = {
  * column-omitting views otherwise.
  */
 export async function getPackageNavLists(
+  session: Session,
+  projectIds: string[]
+): Promise<Record<string, PackageNavItem[]>> {
+  // React cache() compares arguments by identity, and every caller builds a
+  // fresh array — so the memo is keyed on the ids joined into one string.
+  // The shell, the portfolio's package counts and a page asking for the same
+  // portfolio therefore share one query per render (APX-26).
+  return packageNavListsCached(session, projectIds.join(","));
+}
+
+const packageNavListsCached = cache(
+  async (session: Session, idsKey: string): Promise<Record<string, PackageNavItem[]>> => {
+    const projectIds = idsKey === "" ? [] : idsKey.split(",");
+    return fetchPackageNavLists(session, projectIds);
+  }
+);
+
+async function fetchPackageNavLists(
   session: Session,
   projectIds: string[]
 ): Promise<Record<string, PackageNavItem[]>> {

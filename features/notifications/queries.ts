@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
 import { isUnread, receiptsByKey, type ReadReceipt } from "./service";
@@ -136,3 +137,30 @@ async function fetchReadReceipts(profileId: string): Promise<ReadReceipt[]> {
   if (error) throw new Error(error.message);
   return data.map((r) => ({ kind: r.kind, entityId: r.entity_id, readAt: r.read_at }));
 }
+
+// ── The web bell (APX-26, APX-52) ────────────────────────────────────────────
+
+/** How many items the web bell's dropdown carries to the browser. The badge
+ *  still counts every unread one (APX-52). */
+export const BELL_LIMIT = 30;
+
+export type BellNotifications = { items: NotificationDTO[]; unreadCount: number };
+
+/**
+ * The bell as the app shell renders it: getNotifications' list (its audience
+ * rule unchanged), cut to the newest BELL_LIMIT for the dropdown, with the
+ * unread count taken over the whole list before the cut. React cache()d, so
+ * the shell and anything else in the same render share one read; the session
+ * object is itself cache()d (lib/auth/session.ts), so it is a stable key.
+ *
+ * The count covers what one PostgREST read returns (its 1,000-row cap): far
+ * above any real bell. Counting in SQL instead would need a second copy of
+ * the notifications audience rule, which lives in ./service.ts.
+ */
+export const getBellNotifications = cache(async (session: Session): Promise<BellNotifications> => {
+  const all = await getNotifications(session);
+  return {
+    items: all.slice(0, BELL_LIMIT),
+    unreadCount: all.reduce((n, item) => n + (item.unread ? 1 : 0), 0),
+  };
+});
