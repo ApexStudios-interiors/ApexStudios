@@ -200,6 +200,16 @@ create trigger trg_packages_after_change
   on public.packages
   for each row execute function public.trg_packages_after_change();
 
+-- Internal helpers, never called by a session: no EXECUTE for anyone but the
+-- owner (the security branch's definer allow-list in 15_security_hardening
+-- asserts exactly this). A trigger fires its function without an EXECUTE
+-- check, so revoking does not stop the triggers.
+revoke execute on function public.fn_recompute_project_progress(uuid) from public, anon, authenticated;
+revoke execute on function public.fn_refresh_phase_billing(uuid) from public, anon, authenticated;
+revoke execute on function public.fn_recompute_progress(uuid, uuid) from public, anon, authenticated;
+revoke execute on function public.trg_packages_after_change() from public, anon, authenticated;
+revoke execute on function public.trg_tasks_after_update() from public, anon, authenticated;
+
 -- ── Views ────────────────────────────────────────────────────────────────────
 create or replace view public.v_phase_billing
 with (security_invoker = on) as
@@ -246,7 +256,13 @@ left join lateral (
   from public.tasks tk
   where tk.phase_id = ph.id and tk.deleted_at is null
 ) t on true
-where ph.deleted_at is null and public.is_member_of(ph.project_id);
+where ph.deleted_at is null
+  and public.is_member_of(ph.project_id)
+  -- The role predicate from 20261124100005 (APX-09, security hardening): a
+  -- site supervisor is a member too, and must not read contract values.
+  -- Repeated here because `create or replace view` replaces the whole
+  -- definition — dropping it would silently reopen that hole.
+  and (public.is_admin() or public.auth_role() = 'client');
 
 comment on view public.v_phase_client is
   'Client-facing. OMITS internal_amount. billing_status is shown because the client needs to know what has been billed; the cost behind it is not. is_complete is computed inline against tasks directly (not via v_phase_billing) so this definer view does not depend on an invoker-mode view''s RLS evaluation; same rule as v_phase_billing (APX-43).';

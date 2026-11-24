@@ -14,19 +14,24 @@ select is_empty(
   'rpc_reap_jobs, rpc_r2_keys_referenced, rpc_finish_job and rpc_claim_jobs are not executable by anon or authenticated'
 );
 
--- ── the two shell aggregates are invoker-mode, so RLS still decides ──────────
+-- ── the shell aggregate is invoker-mode, so RLS still decides ────────────────
 select is_empty(
   $$ select p.proname::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public' and p.prosecdef
-        and p.proname in ('rpc_portfolio_money', 'rpc_notification_unread_count') $$,
-  'rpc_portfolio_money and rpc_notification_unread_count are SECURITY INVOKER'
+      where n.nspname = 'public' and p.prosecdef and p.proname = 'rpc_portfolio_money' $$,
+  'rpc_portfolio_money is SECURITY INVOKER'
 );
 
+-- ── the new definer helpers and trigger functions are callable by nobody ─────
 select is_empty(
-  $$ select r.routine_name::text from information_schema.role_routine_grants r
-      where r.routine_schema = 'public' and r.grantee in ('anon', 'PUBLIC')
-        and r.routine_name in ('rpc_portfolio_money', 'rpc_notification_unread_count') $$,
-  'the shell aggregates are not executable by anon'
+  $$ select p.proname::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname in ('fn_recompute_project_progress', 'fn_refresh_phase_billing', 'fn_recompute_progress',
+                          'trg_packages_after_change', 'trg_tasks_after_update',
+                          'trg_packages_set_updated_at', 'trg_phases_set_updated_at',
+                          'trg_packages_assign_seq', 'trg_phases_assign_seq', 'rpc_portfolio_money')
+        and (has_function_privilege('anon', p.oid, 'execute')
+             or (p.proname <> 'rpc_portfolio_money' and has_function_privilege('authenticated', p.oid, 'execute'))) $$,
+  'APX-21/43/45 helpers are executable by neither anon nor authenticated; rpc_portfolio_money not by anon'
 );
 
 -- ── evidence foreign keys from projects are RESTRICT (APX-66) ────────────────

@@ -49,6 +49,34 @@ drop trigger if exists trg_packages_updated_at on public.packages;
 create trigger trg_packages_updated_at before update on public.packages
   for each row execute function public.trg_packages_set_updated_at();
 
+-- The same for phases. Since 20261124600002 the task trigger maintains
+-- phases.billing_status on every task write, and Edit Phase (APX-10, the
+-- project-setup branch) uses phases.updated_at as its concurrency token too —
+-- so without this, moving a task slider would make an admin's phase edit
+-- report a conflict, the exact APX-45 failure on the next table down. A
+-- billing transition is not an edit of the phase's own fields either: what
+-- it must protect (the allocated amount of a billed phase) is guarded by
+-- trg_phases_allocated_locked, not by this token.
+create or replace function public.trg_phases_set_updated_at()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if (to_jsonb(new) - array['billing_status', 'updated_at', 'updated_by'])
+     = (to_jsonb(old) - array['billing_status', 'updated_at', 'updated_by']) then
+    new.updated_at := old.updated_at;
+  else
+    new.updated_at := now();
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_phases_updated_at on public.phases;
+create trigger trg_phases_updated_at before update on public.phases
+  for each row execute function public.trg_phases_set_updated_at();
+
 -- ── seq_no allocation ────────────────────────────────────────────────────────
 -- security definer: the max must see soft-deleted rows, which the admin select
 -- policies filter out, and the parent lock must be taken whatever the caller's
@@ -95,3 +123,9 @@ create trigger trg_packages_assign_seq before insert on public.packages
   for each row execute function public.trg_packages_assign_seq();
 create trigger trg_phases_assign_seq before insert on public.phases
   for each row execute function public.trg_phases_assign_seq();
+
+-- Trigger functions only; nobody calls them directly.
+revoke execute on function public.trg_packages_set_updated_at() from public, anon, authenticated;
+revoke execute on function public.trg_phases_set_updated_at() from public, anon, authenticated;
+revoke execute on function public.trg_packages_assign_seq() from public, anon, authenticated;
+revoke execute on function public.trg_phases_assign_seq() from public, anon, authenticated;

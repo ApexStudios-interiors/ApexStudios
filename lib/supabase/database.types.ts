@@ -1639,12 +1639,6 @@ export type Database = {
         };
         Returns: unknown;
       };
-      rpc_notification_unread_count: {
-        Args: {
-          p_role: Database["public"]["Enums"]["app_role"];
-        };
-        Returns: number;
-      };
       rpc_portfolio_money: {
         Args: {
           p_project_ids: string[];

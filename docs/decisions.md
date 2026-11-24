@@ -2123,9 +2123,17 @@ web-only.
 
 ---
 
-### APX-06 — The orphan sweep checks each R2 page against the database, and deletes nothing until opted in
+### D73 — Reliability, performance and data-model fixes from the 2026-11-24 audit
 
 **Answered:** 2026-11-24 by Voola
+**Answer:** The eleven fixes below (APX-06, -19, -20, -21, -23, -26, -43, -45, -52, -53, -66; tests
+for APX-54), shipped in migrations `20261124600001`–`20261124600006`. Those sort after the
+security, billing, setup, stock and notifications migrations (`20261124100001`–`20261124500001`)
+and were tested on top of them: `v_phase_client` keeps the security work's role predicate, and every
+new definer helper has EXECUTE revoked from `anon` and `authenticated`.
+
+#### APX-06 — The orphan sweep checks each R2 page against the database, and deletes nothing until opted in
+
 **Answer:** `attachment.orphan_sweep` no longer loads "every referenced key" in one select (PostgREST
 silently capped it at 1,000 rows, so objects of rows past the cap were deleted). For each
 `ListObjectsV2` page it asks `rpc_r2_keys_referenced` (service_role only, migration
@@ -2146,9 +2154,8 @@ stores an R2 key must be added to that function.
 - Still recommended, outside code: turn on R2 object versioning (or a lifecycle rule that keeps
   deleted versions for 30 days) on the app bucket, so a wrong delete is recoverable.
 
-### APX-19 — Backup verification checks size; the dump's integrity is checked before upload; admins see a banner
+#### APX-19 — Backup verification checks size; the dump's integrity is checked before upload; admins see a banner
 
-**Answered:** 2026-11-24 by Voola
 **Answer:** `backup.verify` now fails when the day's object is 10 KB or less (`BACKUP_TOO_SMALL`) or
 under 50% of the previous day's (`BACKUP_SHRANK`); a missing previous day is not a failure.
 `backup-nightly.yml` runs `gunzip -t`, a size floor and a check for pg_dump's "dump complete"
@@ -2161,9 +2168,8 @@ Not done here, still recommended: a monthly restore of the dump into the CI data
 pgTAP suite run against it, a named owner on GitHub Actions failure emails, and a free uptime
 monitor on `/api/health`.
 
-### APX-20 — A drain is started right after work is enqueued; the schedule is the fallback
+#### APX-20 — A drain is started right after work is enqueued; the schedule is the fallback
 
-**Answered:** 2026-11-24 by Voola
 **Answer:** The repository is public, so Actions minutes are not the constraint the audit feared,
 but GitHub's `schedule:` was observed running the 5-minute drain only every 5–8 hours. `enqueue()`
 (bill submitted → `bill.pdf`, upload confirmed → `attachment.thumbnail`) now calls
@@ -2173,17 +2179,15 @@ the user's action. Production only (`NODE_ENV=production`), and only when `NEXT_
 a non-localhost origin, so `pnpm dev` never drains the live queue. `jobs-drain.yml` stays as the
 fallback for anything the kick misses.
 
-### APX-21 — Project progress is recomputed when packages change, with a plain-mean fallback
+#### APX-21 — Project progress is recomputed when packages change, with a plain-mean fallback
 
-**Answered:** 2026-11-24 by Voola
 **Answer:** A trigger on `packages` (insert, delete, update of `allocated_amount`, `deleted_at`,
 `project_id`) recomputes the project's progress (`fn_recompute_project_progress`, migration
 `20261124600002`), so adding or re-pricing a package moves the figure clients see immediately.
 When the live allocations sum to 0, progress is the plain mean of package progress instead of 0%.
 
-### APX-23 — A job that keeps timing out goes terminal; a late finisher cannot overwrite a newer result
+#### APX-23 — A job that keeps timing out goes terminal; a late finisher cannot overwrite a newer result
 
-**Answered:** 2026-11-24 by Voola
 **Answer:** Reaping is `rpc_reap_jobs()` (migration `20261124600001`): an expired lease counts as a
 failed attempt, backed off like any other, and once a job has used `max_attempts` it is marked
 `failed` and appears on Failed Jobs. `rpc_claim_jobs` requires `attempts < max_attempts`.
@@ -2192,9 +2196,8 @@ the attempt the worker claimed (`p_attempt`, optional for compatibility). Every 
 including the scheduled ones, is in `DRAIN_JOB_NAMES`, so a failed `backup.verify` or
 `inventory.reconcile` retries on the 1/2/4/8/16-minute curve instead of waiting a day.
 
-### APX-26 / APX-43 — Shell reads are cached and parallel; a manual phase completion yields to real tasks
+#### APX-26 / APX-43 — Shell reads are cached and parallel; a manual phase completion yields to real tasks
 
-**Answered:** 2026-11-24 by Voola
 **Answer:** `getPortfolio`, `getBellNotifications` and `getPackageNavLists` are wrapped in React
 `cache()`; the portfolio's package counts reuse the sidebar's package list; independent counts on
 the portfolio and dashboards run in parallel. `v_phase_billing` aggregates per phase through a
@@ -2206,12 +2209,12 @@ being complete — and leaves Billable Now — as soon as a task below 100% exis
 write, not only `rpc_set_task_progress`; billed and paid phases are never touched.
 `manual_complete_at/_by` are kept as the record of who marked it.
 
-### APX-45 / APX-66 — No false package-edit conflicts; seq_no allocated in SQL; evidence FKs restrict hard deletes
+#### APX-45 / APX-66 — No false package-edit conflicts; seq_no allocated in SQL; evidence FKs restrict hard deletes
 
-**Answered:** 2026-11-24 by Voola
 **Answer:** `packages.updated_at` (Edit Package's concurrency token) no longer moves when only the
 trigger-maintained `progress_pct` changes, so a supervisor moving a task slider no longer makes an
-admin's package edit fail. A real conflict now raises the mapped `CONFLICT` domain error ("Someone
+admin's package edit fail. The same holds for `phases.updated_at` (Edit Phase's token) when only
+`billing_status` changes, which the task trigger now does on task writes. A real conflict now raises the mapped `CONFLICT` domain error ("Someone
 else changed this while you were editing. Reload to see the current values.") instead of "Something
 went wrong". Package and phase `seq_no` is allocated by a BEFORE INSERT trigger under a lock on the
 parent row, over every row **including soft-deleted ones** (a deleted package's number is never
@@ -2219,22 +2222,21 @@ reused); the column default is 0, meaning "allocate". The foreign keys from `sto
 `approvals`, `daily_updates` and `attachments` to `projects` are `ON DELETE RESTRICT`, so a hard
 delete of a project with evidence fails instead of silently erasing it.
 
-### APX-52 — The shell degrades instead of failing; money totals are summed in SQL; the bell is bounded
+#### APX-52 — The shell degrades instead of failing; money totals are summed in SQL; the bell is bounded
 
-**Answered:** 2026-11-24 by Voola
 **Answer:** The app shell reads the bell, the portfolio, the sidebar package lists, the badge counts
 and the backup status with `Promise.allSettled`; a failed read is logged (`[shell] … failed`) and
 that piece is omitted, so one transient error no longer takes down every route.
 `app/global-error.tsx` replaces Next.js's unstyled default when the root layout itself fails. The
 admin portfolio's allocated/internal/committed totals come from `rpc_portfolio_money` (numeric
 summed in Postgres, returned as text; security invoker); the client's contract total is summed
-with decimal.js. The bell's dropdown lists the newest 30 notifications; the badge's unread count
-covers all of them and is computed by `rpc_notification_unread_count` with the same rule as
-`isUnread`.
+with decimal.js. The bell's dropdown carries only the newest 30 notifications to the browser; the
+badge's unread count is taken over the whole list first (`getBellNotifications`). It stays in the
+application rather than SQL on purpose: the notifications audience rule (D72) lives in
+`features/notifications/service.ts`, and a SQL copy would drift from it.
 
-### APX-53 — db/schema mirrors the database, and the drift check runs both ways
+#### APX-53 — db/schema mirrors the database, and the drift check runs both ways
 
-**Answered:** 2026-11-24 by Voola
 **Answer:** `db/schema` gains `projects.completed_at` and the retained `'owner'` value of `app_role`
 (`notification_reads` landed on `main` separately). The drift test now also fails on a database
 column missing from `db/schema` and on any enum whose values differ. Generated types are not

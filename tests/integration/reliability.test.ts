@@ -316,6 +316,31 @@ describe("package seq_no and updated_at (APX-45, APX-66)", () => {
     expect(afterEdit).not.toBe(before);
   });
 
+  it("a billing_status flip from the task trigger keeps phases.updated_at (Edit Phase's token)", async () => {
+    const project = await fixtureProject("REL45E");
+    const pkg = await addPackage(project, 100);
+    const phase = await addPhase(project, pkg);
+    const before = one(
+      await sql`select updated_at::text as ts from public.phases where id = ${phase}`,
+      "phase"
+    ).ts;
+
+    await addTask(project, pkg, phase, 100); // the trigger sets billing_status = 'billable'
+    const after = one(
+      await sql`select updated_at::text as ts, billing_status from public.phases where id = ${phase}`,
+      "phase after task"
+    );
+    expect(after.billing_status).toBe("billable");
+    expect(after.ts).toBe(before);
+
+    await sql`update public.phases set name = 'Renamed phase' where id = ${phase}`;
+    const edited = one(
+      await sql`select updated_at::text as ts from public.phases where id = ${phase}`,
+      "phase"
+    ).ts;
+    expect(edited).not.toBe(before);
+  });
+
   it("a hard delete of a project with evidence is refused (RESTRICT, not CASCADE)", async () => {
     const project = await fixtureProject("REL66");
     const pkg = await addPackage(project, 0);
@@ -396,17 +421,15 @@ describe("the shell aggregates through real sessions (APX-52)", () => {
     for (const r of siteRows) expect(Number(r.internal)).toBe(0);
   });
 
-  it("rpc_notification_unread_count answers for each role's own session", async () => {
-    const roles = [
-      [ADMIN_EMAIL, "admin"],
-      [SITE_EMAIL, "site"],
-      [CLIENT_EMAIL, "client"],
-    ] as const;
-    for (const [email, role] of roles) {
-      const s = await signedInAs(email);
-      const { data, error } = await s.rpc("rpc_notification_unread_count", { p_role: role });
-      expect(error).toBeNull();
-      expect(typeof data).toBe("number");
+  it("rpc_portfolio_money gives a client session no internal figures either", async () => {
+    const clientSession = await signedInAs(CLIENT_EMAIL);
+    const res = await clientSession.rpc("rpc_portfolio_money", { p_project_ids: [SEED.project] });
+    expect(res.error).toBeNull();
+    const rows = (res.data ?? []) as { project_id: string | null; internal: string; committed: string }[];
+    expect(rows.filter((r) => r.project_id !== null)).toEqual([]);
+    for (const r of rows) {
+      expect(Number(r.internal)).toBe(0);
+      expect(Number(r.committed)).toBe(0);
     }
   });
 });
