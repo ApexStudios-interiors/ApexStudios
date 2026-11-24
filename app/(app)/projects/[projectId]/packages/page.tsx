@@ -16,6 +16,7 @@ import { Empty } from "@/components/ui/Empty";
 import { Icon } from "@/components/ui/Icon";
 import { projectBase } from "@/lib/routing/current";
 import { plural } from "@/lib/plural";
+import { projectWriteRefusal } from "@/features/projects/service";
 
 /** build/04-projects-packages-phases.md §4.4 step 3: the same table as the
  *  dashboard, full width. From PACKAGE_FILTER_THRESHOLD packages up it also
@@ -39,6 +40,8 @@ export default async function PackagesPage({
   const packages = await getPackagesForProject(session, projectId);
   const effectiveRole = session.impersonating?.role ?? session.role;
   const isMoney = effectiveRole === "admin";
+  // APX-41: an archived project takes no new package.
+  const readOnly = projectWriteRefusal(header.statusKey, "edit");
 
   const filterable = packages.packages.length >= PACKAGE_FILTER_THRESHOLD;
   const filtered = filterable && (q.trim() !== "" || status !== "");
@@ -59,7 +62,12 @@ export default async function PackagesPage({
         </div>
         <div className="ml-auto flex gap-2">
           {isMoney && (
-            <OpenDialogButton dialog={{ kind: "addModule", projectId }} variant="primary">
+            <OpenDialogButton
+              dialog={{ kind: "addModule", projectId }}
+              variant="primary"
+              disabled={!!readOnly}
+              title={readOnly ?? undefined}
+            >
               <Icon name="plus" className="w-[15px] h-[15px]" />
               Add Package
             </OpenDialogButton>

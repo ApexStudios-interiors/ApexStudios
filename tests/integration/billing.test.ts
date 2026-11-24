@@ -1,7 +1,7 @@
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
-import { connect, SEED } from "./db";
+import { connect, SEED, withLedgerMaintenance } from "./db";
 import { one } from "./expect-row";
 
 /**
@@ -65,15 +65,22 @@ const trackedBillIds: string[] = [];
 
 afterEach(async () => {
   if (trackedBillIds.length) {
-    await sql`delete from public.payments where bill_id = any(${trackedBillIds})`;
-    await sql`delete from public.bill_events where bill_id = any(${trackedBillIds})`;
-    await sql`delete from public.bill_lines where bill_id = any(${trackedBillIds})`;
-    await sql`update public.stock_requests set billed_on_bill_id = null where billed_on_bill_id = any(${trackedBillIds})`;
-    await sql`delete from public.bills where id = any(${trackedBillIds})`;
+    // bill_events is append-only (20261124100008) — see withLedgerMaintenance.
+    await withLedgerMaintenance(sql, async (tx) => {
+      await tx`delete from public.payments where bill_id = any(${trackedBillIds})`;
+      await tx`delete from public.bill_events where bill_id = any(${trackedBillIds})`;
+      await tx`delete from public.bill_lines where bill_id = any(${trackedBillIds})`;
+      await tx`update public.stock_requests set billed_on_bill_id = null where billed_on_bill_id = any(${trackedBillIds})`;
+      await tx`delete from public.bills where id = any(${trackedBillIds})`;
+    });
     trackedBillIds.length = 0;
   }
   if (trackedSrIds.length) {
-    await sql`delete from public.stock_requests where id = any(${trackedSrIds})`;
+    // Cascades to stock_request_events, which is append-only too.
+    await withLedgerMaintenance(
+      sql,
+      (tx) => tx`delete from public.stock_requests where id = any(${trackedSrIds})`
+    );
     trackedSrIds.length = 0;
   }
   if (trackedPhaseIds.length) {
@@ -209,25 +216,26 @@ describe("rpc_create_bill — T-02 MAS recovery", () => {
     expect(Number(phaseBill.taxable_amount)).toBe(50000 - Number(phaseBill.mas_recovery_amount));
   });
 
-  it("a still-draft material bill does not reduce another bill's MAS recovery", async () => {
-    // Real bug, found in a pre-merge review pass, not a live smoke test:
-    // the MAS recovery join had no filter on the owning bill's own status,
-    // so a material bill left in draft (never submitted or cancelled) was
-    // counted exactly like a real, committed invoice. If that draft bill
-    // were later cancelled, the other bill's already-snapshotted figures
-    // would permanently understate what the client owes. Fixed in
-    // migration 20260916090008 by excluding status = 'draft'.
+  it("a phase cannot be billed while its material sits on a still-draft bill", async () => {
+    // History: the MAS recovery join once counted a draft bill's material
+    // lines (fixed in 20260916090008 by excluding drafts). Excluding them
+    // alone left a double bill open — bill the phase with no recovery, then
+    // submit the draft (APX-07). Since 20261124200001 the phase is refused
+    // until that draft is submitted (and recovered) or cancelled.
+    // tests/integration/billing-mas.test.ts covers every ordering.
     const admin = await client(ADMIN_EMAIL);
     const phaseId = await insertTestPhase({ allocated: 50000, internal: 30000, refSuffix: "t02-draft" });
     const srId = await insertTestDeliveredMaterial({ qty: 4, rate: 1000, refSuffix: "t02-draft", phaseId });
 
-    // Billed but deliberately left in draft — never submitted.
     const materialBill = await createBill(admin, [{ source_type: "material", source_id: srId }]);
     expect(materialBill.status).toBe("draft");
 
-    const phaseBill = await createBill(admin, [{ source_type: "phase", source_id: phaseId }]);
-    expect(Number(phaseBill.mas_recovery_amount)).toBe(0);
-    expect(Number(phaseBill.taxable_amount)).toBe(50000);
+    const { error } = await admin.rpc("rpc_create_bill", {
+      p_project_id: SEED.project,
+      p_lines: [{ source_type: "phase", source_id: phaseId }],
+      p_idempotency_key: randomUUID(),
+    });
+    expect(error?.message).toMatch(/MAS_DRAFT_PENDING/);
   });
 });
 
@@ -381,6 +389,10 @@ describe("rpc_transition_bill — lifecycle and T-05", () => {
     });
     expect(error).toBeNull();
     expect((data as BillRow).status).toBe("certified");
+    // APX-02: the RPC's own response carries no internal block for a client.
+    const row = data as Record<string, unknown>;
+    expect(row.internal_cost_amount).toBeNull();
+    expect(row.margin_amount).toBeNull();
   });
 
   it("client rejection returns the bill to draft with revision 2 and the reason recorded", async () => {
@@ -414,7 +426,20 @@ describe("rpc_transition_bill — lifecycle and T-05", () => {
   it("cancelling a draft returns its phase to billable and clears billed_on_bill_id", async () => {
     const admin = await client(ADMIN_EMAIL);
     const phaseId = await insertTestPhase({ allocated: 6000, internal: 3000, refSuffix: "cancel-phase" });
-    const srId = await insertTestDeliveredMaterial({ qty: 2, rate: 500, refSuffix: "cancel-mat" });
+    // The material belongs to a DIFFERENT, unbilled phase: a material with no
+    // phase is not billable at all, and one of the billed phase cannot share
+    // its bill (MAS rules R4 and R2, migration 20261124200001).
+    const materialPhaseId = await insertTestPhase({
+      allocated: 9000,
+      internal: 6000,
+      refSuffix: "cancel-mat-ph",
+    });
+    const srId = await insertTestDeliveredMaterial({
+      qty: 2,
+      rate: 500,
+      refSuffix: "cancel-mat",
+      phaseId: materialPhaseId,
+    });
     const bill = await createBill(admin, [
       { source_type: "phase", source_id: phaseId },
       { source_type: "material", source_id: srId },

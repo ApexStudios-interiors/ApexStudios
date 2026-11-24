@@ -89,6 +89,7 @@ export default async function InventoryPage({
         <InventoryTable
           items={items.rows}
           isAdmin={isAdmin}
+          role={effectiveRole}
           empty={status ? `No ${status === "low" ? "low-stock" : "out-of-stock"} items.` : undefined}
         />
         <TablePagination page={items.page} pageSize={items.pageSize} total={items.total} />

@@ -2123,12 +2123,323 @@ web-only.
 
 ---
 
+### D68 — Security hardening from the 2026-11-24 audit (APX-01 … APX-59)
+
+**Question:** The 2026-11-24 audit found a set of places where the database or the action layer
+trusted the caller more than the product's rules allow. What does each rule become?
+**Answered:** 2026-11-24 by Voola
+**Answer:** Migrations `20261124100001`–`20261124100010`, with pgTAP coverage in
+`supabase/tests/15_security_hardening_test.sql`. Decisions that are not obvious from the code:
+
+- **Helper functions (APX-01, APX-56).** `fn_audit` and `fn_recompute_progress` are no longer
+  executable by `anon` or `authenticated` — only definer functions and triggers call them.
+  `fn_cost_to_client_factor` stays executable by `authenticated` (the invoker view `v_billable_now`
+  calls it as the admin reading it) but answers NULL to anyone but an admin, and `anon` loses it.
+  `rpc_check_rate_limit` now takes the action only; the limit per action is decided in SQL. The old
+  three-argument form remains as a shim that ignores the caller's numbers, to be dropped once no
+  deployment calls it. pgTAP keeps an allow-list of every non-RPC definer function reachable by
+  `authenticated`, and of every definer function reachable by `anon`: a new one fails CI until it is
+  added on purpose.
+- **Role-scoped views (APX-09).** `*_client` views admit admin or client, `v_stock_request_site`
+  and `v_inventory_site` admin or site; the bill views show a client only bills that have been sent
+  (`status <> 'draft'` and `submitted_at` set). **`v_package_site` and `v_phase_site` are not
+  narrowed**: despite the name they are the money-free package/phase lists, and clients read them
+  on purpose (Schedule, Approvals, Daily Updates, search). `v_inventory_site` also gains the missing
+  `org_id = auth_org()` on central-store rows.
+- **`projects` money columns (APX-09).** `authenticated` has column-level SELECT on every column of
+  `projects` except `contract_value`, `mobilisation_advance` and `mobilisation_recovered`, which are
+  read through the definer view `v_project_finance` (admin, or a client on their own project). This
+  is the only way to hide a column from one app role, since every app role is the database role
+  `authenticated`. **Consequence: a new column on `projects` must be granted to `authenticated`**
+  (AGENTS.md database rule 9); pgTAP asserts the exact ungranted set.
+- **Approvals (APX-04).** No direct INSERT policy; `rpc_create_approval` is the only way in.
+  `du_insert` and `tasks_insert` were reviewed and kept: daily updates and tasks are inserted
+  directly by design, and the columns that matter are guarded by triggers.
+- **Attachments (APX-05, APX-37).** `attachments.kind` (`upload` | `generated_invoice`) marks the
+  bill.pdf job's own document; a signed-in session can only insert `upload`, and the invoice served
+  is selected by `kind`, never by file name. A signed-in insert must name a project and an `r2_key`
+  under `org/{org}/project/{project}/{entity_type}/{entity_id}/`, its entity must belong to that
+  project, and only admin or site may attach to a bill (02-lld.md §7's "bill copy").
+- **Jobs (APX-35).** The audit suggested revoking `rpc_enqueue_job` and enqueueing from definer RPCs.
+  Not done, because Vercel deploys on merge and `pnpm db:push` runs separately, so either order
+  would leave one side missing its half. Instead the RPC re-derives the job for a signed-in caller:
+  a thumbnail only for the caller's own upload, a bill PDF only by an admin for a `submitted` bill,
+  with the payload, the idempotency key (`billPdfJobKey`) and `run_after` rebuilt server-side. The
+  handler renders only an issued bill (`submitted`, `certified` or `paid` — certified and paid
+  included deliberately, since a client may certify before the job runs and the figures are
+  immutable); a draft or cancelled bill is a no-op, not a failure.
+- **Profiles (APX-36).** A non-admin sees themselves, the org's admins, (if site) the other
+  supervisors, and anyone sharing a project with them. A direct self-update may change only
+  `full_name` and `phone`. Columns are not narrowed (an admin's email stays visible to their
+  projects' members) — a view would be needed; recorded as a follow-up.
+- **Counters, ledgers, tasks (APX-34).** A direct (PostgREST) update may not change `projects`'
+  `next_*_seq`, `mobilisation_recovered`, `progress_pct`, `org_id` or `created_*`, and nobody may
+  change a project's `code` once a bill exists. A direct task update may change only name, dates,
+  duration, note and owner; progress goes through `rpc_set_task_progress`. The guards test
+  `current_user`, so every SECURITY DEFINER path is unaffected. `stock_movements`, `audit_log`,
+  `bill_events` and `stock_request_events` refuse UPDATE, DELETE and TRUNCATE from **every** role,
+  the owner included; the only escape is a transaction-local `apex.ledger_maintenance = 'on'`, which
+  no API path can set, used by the test suites' cleanup. A movement is `in` or `out`, never `adjust`
+  (D31 as a constraint). `inventory_insert` is out of this decision's scope (stock work).
+- **Preview is read-only (APX-25).** `authedAction` — and so every role-guarded client — refuses
+  while previewing, with "Preview is read-only". `previewAllowedAction` is the explicit allow-list:
+  start/stop preview, mark a notification read, search, a download URL.
+- **Sign-in (APX-27, APX-38, APX-59).** `?next=` refuses control characters and backslashes and must
+  resolve to the same origin. A per-username throttle (10 failures in 15 minutes, keyed by a hash of
+  the normalised username, unknown usernames counted alike) runs before GoTrue; it fails open if the
+  throttle itself errors. A session whose JWT role claim disagrees with `profiles.role` is refused
+  (web and mobile), so a role change takes effect immediately even with the hook registered.
+  Supabase CAPTCHA and leaked-password protection are dashboard settings, left to the owner.
+- **Web (APX-57).** CSP (`frame-ancestors 'none'`, R2 and Supabase origins allowed, `'unsafe-inline'`
+  scripts because nonces would force every page dynamic), HSTS, `X-Frame-Options`, nosniff,
+  referrer and permissions policies — `lib/security/headers.ts`. Cron/backup secrets compare in
+  constant time. `/api/health` keeps one connection per instance and reuses a check for 15 s.
+- **Organisation scope (APX-58).** `is_member_of` admits an admin only to their own org's projects.
+
+**Deployment order.** Several changes need both halves (the app reads `v_project_finance`,
+`attachments.kind`, the one-argument `rpc_check_rate_limit`; the database revokes the `projects`
+columns). Apply the migrations immediately after the merge deploy goes live; until then the
+portfolio, the admin Billing page, Download PDF and search error.
+### D69 — Billing correctness: material-at-site double billing, one preview definition, IST bill dates
+
+**Question:** The 2026-11 audit (APX-07, -14, -17, -22, -30, -31, -32, -33, -39, -49, -60) found that
+material at site (MAS) could be billed twice in four orderings, the Billable Now preview could disagree
+with the issued bill, a bill raised before 05:30 IST carried the previous day's date, and several smaller
+totals, rounding and confirmation gaps.
+**Decided:** 2026-11-24, by Voola (owner), on the audit's recommended fixes. **The MAS treatment and the
+date rules below are the conservative choice pending CA review — see "Open".**
+
+**Answer — the MAS rules** (migration `20261124200001_billing_mas_rules.sql`; enforced in
+`rpc_create_bill`, mirrored by the selector in `features/billing/service.ts`). Each is chosen so that it
+can never over-invoice; where one can under-invoice instead, it says so.
+
+| Rule | What it does | Ordering it closes |
+| --- | --- | --- |
+| R1 | A material is billable only while its phase is not on any bill (draft included). Once the phase is billed, its value covers the material, which leaves Billable Now. | Phase billed, material delivered later |
+| R2 | A material and its own phase cannot go on the same bill (`MAS_SAME_BILL`). Select-all leaves such materials out. | Both ticked together (was the default) |
+| R3 | A phase cannot be billed while one of its materials is on a draft (`MAS_DRAFT_PENDING`). Submit the draft (its advance is then recovered) or cancel it. | Material on a draft, phase billed, draft submitted |
+| R4 | Package-level material (no phase) is **not billed as an advance at all** — it is paid for when the package's phases are billed. | Package-level material never recovered |
+| R5 | Recovery larger than the bill's gross is refused (`MAS_EXCEEDS_GROSS`) instead of flooring taxable at 0 and silently losing the remainder. Add more lines to the bill. | APX-31 |
+| R6 | A delivered material with no rate (null or 0) is not billable — a ₹0 line would mark it billed for nothing. Billable Now says how many are left out and why. | APX-14 (billing part) |
+
+**Answer — one definition (APX-30).** `v_billable_now` now carries `mas_recovery` (committed advance to
+recover, per phase), `blocked_by_bill_no` (R3) and `phase_id`. `rpc_create_bill` sums those columns and
+the preview reads the same ones, so the figures in the Create Bill confirmation are the figures the draft
+stores. Material `amount` is computed from the rounded client value, so a line reconciles to the paisa
+(APX-60).
+
+**Answer — dates (APX-22).** `createBill` always passes today in Asia/Kolkata (the browser can no longer
+send a date); the column default and the RPC's own default are the IST date too. On a bill's **first**
+submission a trigger (`20261124200002_bill_date_at_submit.sql`) re-dates it to that day in IST — a draft
+is not an invoice. A bill a client rejected and that is then resubmitted **keeps its first date**. The
+optional billing period (both dates or neither, start ≤ end) is entered in the Create Bill confirmation.
+
+**Answer — the rest.**
+- Billable Now starts with nothing ticked; a header checkbox selects all; Create Bill opens a
+  confirmation with the full A–K preview; a draft has **Cancel draft** (with confirmation), which returns
+  its lines to Billable Now; Billable Now reloads after create and after cancel (APX-17, open-issues 9).
+- Submit, Cancel draft, Mark Complete and Mark all complete confirm first with the ₹ amount and hold a
+  pending state, so a double click sends one request (APX-39, billing part).
+- Billed to Date counts issued bills only (submitted, certified, paid); Received is the sum of payments,
+  part-payments included; a client's lists and totals never show a draft or a cancelled draft (APX-32).
+- Record Payment keeps its idempotency key when an attempt's answer was lost and renews it after any
+  definite answer or any edit, so a retry cannot record a payment twice and a corrected amount is never
+  swallowed (APX-33).
+- `rpc_record_payment` rounds to the paisa before comparing; the form refuses a third decimal (APX-60).
+- A phase whose tasks are all done reads **Billable**, not "In progress", on the package Billing tab
+  (APX-49).
+
+**Consequences.** Package-level material earns no advance (cash-flow cost, never a tax risk). A
+material advance recovered on a phase bill is not reversed if the material's own bill is later rejected
+and cancelled — the client is then under-invoiced by that advance, never over-invoiced; correcting it is
+an adjustment on the next bill. Bills issued before this migration are untouched (immutable); billing is
+still behind `BILLING_ENABLED`.
+
+**Open — CA review (not decided in code):**
+1. Package-level material: should it be advanced at all, and if so recovered against which phase bill?
+2. Recovery above gross: carry the remainder to the next bill, or issue a credit note? (Refused today.)
+3. A resubmitted (rejected) bill: keep its first date, take a new date, or be re-issued as a fresh invoice
+   with a credit note against the first?
+4. Bill date = first submission date, and the billing period: confirm against the GST invoice-date rule
+   and the return period.
+5. The existing D4 question (MAS as secured advance vs sale) still governs all of the above.
+### D70 — Project setup screens: phases, project edit and status, site team, read-only projects
+
+**Question:** The audit (APX-10, 11, 12, 41, 70) found that a project created in the app could not be
+run: no screen made phases, nothing edited a project or changed its status, a new Site Supervisor
+could not be put on any project, and finished projects stayed fully editable.
+**Answered:** 2026-11-24 by Voola (owner)
+**Answer:**
+
+- **Phases (APX-10).** Admins add and edit phases on a package's Budget tab, and from Add Task's
+  "Create phase" when the package has none (it returns to Add Task). Edit Phase uses the same
+  optimistic concurrency as Edit Package (`updated_at` scope; zero rows is a `CONFLICT` with its own
+  message). **A phase on a bill (Billed or Paid) keeps its allocated amount** — refused by
+  `updatePhase` and by `trg_phases_allocated_locked`; a correction is a credit note or an adjustment
+  on the next bill, as for the bill itself. Name and internal budget stay editable.
+- **Edit Project (APX-11).** Name, location, target end date, contract value and the per-project
+  billing constants (GST, retention, material-at-site, TDS, mobilisation advance and its recovery %).
+  Validation now matches packages: money is `moneyString`, percentages 0–100 with ≤3 decimals, so
+  NaN and negatives cannot reach the database; the target end date may not precede the start date
+  and the advance may not fall below what bills have recovered (inline field errors); the update is
+  scoped to `deleted_at is null` and zero rows is `NOT_FOUND`. Rates are snapshotted onto bills, so a
+  change applies to the next bill only. **This is not a change to the tax arithmetic** — the values a
+  project carries were always per-project columns; this only gives them a screen. Which values are
+  correct for a real contract is still CA-gated (HLD §8.4).
+- **Project status (APX-11).** Through `rpc_set_project_status` only (security definer, admin only,
+  row-locked, one `audit_log` `transition` row per move). Legal moves: Planning → Active; Active →
+  On Hold or Completed; On Hold → Active or Completed; Completed → Archived; and two **reopens**,
+  Completed → Active and Archived → Completed, which require a reason (stored in the audit row). A
+  signed-in user can no longer change `projects.status` with a plain update
+  (`trg_projects_status_via_rpc`); the `project.archive` job (service_role) is unaffected.
+  `completed_at` is now kept when a project is archived (it used to be cleared); un-archiving to
+  Completed restamps it, restarting the 12-month clock.
+- **Site team (APX-12).** A *Site team* card on the project dashboard (admins) lists the project's
+  Site Supervisors, with Remove and Add site supervisor, and *Projects* on a Site Supervisor's row of
+  the Users page lists, removes and adds projects (as it already did for clients, now with Add too).
+  The removal rule from PRs #89/#90 is generalised (`memberRemovalRefusal`): a client **or** a site
+  supervisor may be removed from a project, including their last one (they can sign in and see no
+  project); an admin is an implicit member and has no row; a card that manages one role refuses the
+  other (`expectedRole`). No migration: `pm_insert` / `pm_delete` already allow an admin.
+- **Read-only projects (APX-41).** Enforced by one BEFORE INSERT OR UPDATE trigger,
+  `trg_00_project_writable`, on stock_requests, approvals, daily_updates, tasks, phases, packages and
+  attachments, so it holds for the web, the mobile API and every RPC. **Archived:** every write is
+  refused (`PROJECT_ARCHIVED`) except what billing and payments need — a phase update that only
+  moves `billing_status`, the packages `progress_pct` rollup cache, and bill attachments. **Completed:**
+  only a *new* stock request or daily update is refused (`PROJECT_COMPLETED`); billing, payments,
+  delivering what was ordered, a client deciding an approval and correcting a task all carry on.
+  Both codes are mapped in `lib/safe-action.ts` (and to 409 on the mobile routes that create those
+  rows). The app disables the matching buttons and shows a banner on every page of the project.
+  Not covered by this entry (owned elsewhere): excluding archived projects from notifications.
+- **Setup checklist (APX-70).** A card on the dashboard for admins while anything is missing and the
+  project is not completed/archived: packages with budgets → phases in every package → a schedule in
+  every package → a site supervisor → client access → status Active. Each item links to where it is
+  done; the card disappears when all are done.
+
+**Migrations (apply with `pnpm db:push` after merge):** `20261124300000_project_status_rpc.sql`,
+`20261124300001_project_read_only_guards.sql`. pgTAP: `supabase/tests/15_project_status_and_read_only_test.sql`.
+### D71 — Stock and inventory corrections: rate on approval, cancel and edit, usage and part deliveries, one item per material
+
+**Question:** The 2026-11 audit found the stock workflow could not be corrected and inventory could
+not be trusted: a supervisor could read `unit_cost` (APX-03), Site-raised requests reached bills at
+₹0 (APX-14), every delivery created a new inventory item and nothing set minimum stock (APX-15),
+nothing could be cancelled or edited (APX-42), a retried submit raised a second request (APX-44),
+stock only ever went up and deliveries always booked the full quantity (APX-69). What are the rules?
+**Answered:** 2026-11-24 by Voola
+**Answer:** Migrations `20261124400001` and `20261124400002`:
+
+- **`unit_cost` is withheld by column privilege (APX-03).** `authenticated` has SELECT on every
+  `inventory_items` column except `unit_cost`; rows stay visible to admin and site as before
+  (`inventory_select`), so names and quantities — and the bell's low-stock branch — keep working. An
+  admin reads cost through `v_inventory_status` (now a definer view filtered to `is_admin()` and the
+  org) and `rpc_inventory_stats` (now security definer, same scoping in its body).
+  `stock_movements` is admin-only by row policy. A **new** `inventory_items` column must be granted
+  by its own migration — deliberately, so a money column can never leak by default.
+- **A rate is required to approve (APX-14).** Approve opens a dialog; `rpc_transition_stock_request`
+  takes an admin-only `p_rate` on pending → approved and refuses a rate-less approval
+  (`RATE_REQUIRED`). An admin may set or correct the rate up to delivery with
+  `rpc_set_stock_request_rate` (audited); from delivery it is fixed. The mobile transition route
+  accepts `rate`; an app build that does not send one gets a 422 when approving a rate-less request.
+- **One inventory item per material (APX-15).** The New Request form resolves a typed material to
+  this project's existing item (same normalised name and unit). Delivery of an unlinked request
+  reuses the project's oldest live item with the same normalised name and unit before creating one,
+  under an advisory lock. The supporting index is **not unique**: production already holds duplicate
+  items from before this rule, and they are left as they are (merging them is two compensating
+  movements per row — Adjust). An item created at ₹0 takes the first real delivered rate.
+  `inventory_sku_uq` becomes a partial unique index over rows **with** a SKU, so a project can hold
+  more than one SKU-less item. Minimum stock is set by `rpc_set_inventory_reorder_level` (admin,
+  audited). The web Adjust dialog is PR #81's.
+- **Opening balances (APX-34).** A direct `inventory_items` insert must have `qty_on_hand = 0`; the
+  balance is then entered with Adjust, so the ledger explains every unit.
+- **Cancel and edit (APX-42).** New terminal status `cancelled`. Pending → cancelled by the person
+  who raised it (no reason needed); approved/ordered → cancelled by an admin with a required reason,
+  kept in `cancelled_reason`. `rpc_edit_stock_request` changes quantity, needed-by and note while
+  pending, for the requester or an admin. A pending **approval** may be withdrawn by its requester
+  (`rpc_withdraw_approval`, a soft delete — it leaves the client's list and bell).
+- **Retries (APX-44).** The form sends a client-generated id; a second submit with the same id is
+  `ALREADY_SUBMITTED` and the form says "already submitted".
+- **Usage and part deliveries (APX-69).** "Record usage" (admin or site) writes an `out` movement
+  against a package (`ref_type 'usage'`), never more than on hand. Mark Delivered takes an optional
+  delivered quantity: **less than ordered splits the request** — this one is delivered for what
+  arrived, and the remainder becomes a new request, status Ordered, with its own number,
+  `split_from_id` pointing back, and the same rate, package and approval. Chosen over a
+  `delivered_qty` column because every reader (committed budget, Billable Now, MAS, the bell, mobile)
+  already reads `qty` with `status` and stays correct unchanged.
+
+The low-stock rule everywhere is the page's: **Critical** at `qty_on_hand = 0`, **Low** when
+`qty_on_hand < reorder_level`; an item is "low stock" for the bell when either holds. Purchase
+orders and GRNs remain out of scope (HLD §2.2).
+### D72 — Status changes notify the people they concern; a "Needs my action" inbox per role
+
+**Question:** The bell had four kinds only (APX-18). A client rejecting a sample told no staff
+member; a request being approved, ordered, delivered or rejected told nobody — the rejection reason
+was never seen. Admins were not told a bill was certified or rejected (APX-62). Archived projects
+stayed in every bell (APX-41). Previewing a client showed every project's items (APX-65). And there
+was no single place to see what is waiting on me (APX-72).
+**Answered:** 2026-11-24 by Voola
+**Answer:** `v_notifications` gains branches and two recipient columns (migration
+`20261124500001`); the app gains a `/inbox` page. Still no notifications table (ADR-014): every row
+exists exactly as long as its source row says so, and read state stays in `notification_reads`
+(D60).
+
+**Who is told (HLD §8.1–§8.3).** Status changes are news, so each is windowed to the **last 14
+days** and dated by the transition itself (`approved_at`, `ordered_at`, `delivered_at`, the
+rejection event, `decided_at`, `certified_at`). That keeps D60's timestamp read receipts correct,
+and each transition is its own kind, so reading "approved" never silences the later "ordered".
+
+| Kind | Who |
+|---|---|
+| `stock_approved` | the request's requester |
+| `stock_ordered` | Site Supervisors on the project, and the requester |
+| `stock_delivered` | Admins |
+| `stock_rejected` (with reason) | the requester |
+| `approval_approved` / `approval_rejected` (with reason) | Admins, and the approval's requester |
+| `bill_certified` / `bill_rejected` (with reason) | Admins |
+
+"The requester" is a named recipient: `for_profile_id` (and `for_profile_role`, so a preview can
+show what that role would receive). A row is a session's when its role is in `for_roles` OR it
+names that person — a display rule applied by the app, as `for_roles` always was. What a session
+may read at all is still each source's RLS. Admin-only branches also check `is_admin()` in the view,
+so a non-admin reading it directly gets none of them.
+
+**The inbox ("Needs my action", `/inbox`, linked from the bell and the sidebar).** Everything waiting
+on the current user across projects, oldest first, with the days it has waited, paginated:
+
+| Role | Waiting on them |
+|---|---|
+| Admin | pending stock requests · draft bills to submit · certified bills awaiting payment · rejected approvals not yet revised |
+| Site | ordered deliveries to receive · their own rejected requests (14 days) |
+| Client | pending approvals · submitted bills |
+
+The four inbox-only kinds (`bill_draft`, `bill_unpaid`, `approval_revision`, `delivery_due`) are
+state, not news: they are not windowed and never appear in the bell.
+
+**Also decided here.**
+- **Archived projects are excluded from every branch** (APX-41). Central-store inventory, which has
+  no project, is kept.
+- **Low stock is `qty_on_hand = 0 or qty_on_hand < reorder_level`** — the Inventory page's own
+  rule, so an item at zero with no reorder level is Critical in the bell too.
+- **Preview is scoped to the previewed project** (APX-65), for the bell, search and the inbox. A
+  preview is of a role, not a person: named rows count when their recipient holds the previewed
+  role.
+- **Role boundaries are unchanged.** No title carries an amount; bill kinds never reach Site;
+  stock kinds never reach a client, and the new `v_stock_request_notify` (no `rate`, no
+  `billed_on_bill_id`) returns nothing to a client session.
+
+**Not done here.** Showing the rejection reason in the stock requests table (APX-18's second half)
+belongs to the stock module and is left to it. The mobile app receives the new bell kinds from
+`GET /api/mobile/v1/notifications` unchanged in shape; it should treat an unknown `kind` as a plain
+link.
+
+---
+
 ## Still open
 
 | Item | Owner | Blocks | Raised |
 |---|---|---|---|
 | **Apex Studios' legal identity — ON HOLD at Voola's request (2026-09-10).** legal_name, GSTIN, PAN and registered address are placeholders in the seed. `pnpm check:release` reports it; it is a hard gate on any production deploy, and deliberately not a failing unit test, because development is not blocked by it. | Voola | First real bill (Build 09), production deploy | 2026-09-10 |
 | CA confirmation: material-at-site as secured advance (D4) | Voola → CA | First real bill | 2026-09-09 |
+| CA review of D68's conservative choices: package-level material not advanced, recovery above gross refused, a resubmitted bill keeps its first date, bill dated at first submission, billing period | Voola → CA | First real bill | 2026-11-24 |
 | CA confirmation: statutory retention period (A-5) | Voola → CA | Build 10 R2 lifecycle rules | 2026-09-09 |
 | CA sign-off: the five tax questions in `01-hld.md` §8.4 | Voola → CA | Build 09 go-live | 2026-09-09 |
 | DPDP Act 2023 obligation set (`architecture.md` §12) | Voola → counsel | Launch | 2026-09-09 |

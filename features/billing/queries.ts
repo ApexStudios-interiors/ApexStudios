@@ -1,9 +1,11 @@
 import "server-only";
+import { Decimal } from "decimal.js";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession, type Session } from "@/lib/auth/session";
 import { presignGet } from "@/lib/r2/presign";
 import { fetchPage, type Page, type PageRequest } from "@/lib/pagination";
 import { billPdfFileName } from "./pdf";
+import { billingTotals, isIssuedBill, sumAmounts, type BillStatus } from "./service";
 
 /**
  * build/09-billing.md §4.4. `v_billable_now` and `v_bill_client` both
@@ -19,23 +21,30 @@ export type BillableNowLine = {
   pctBilled: number;
   amount: number;
   internalCost: number;
-  /** Feeds `previewBill`'s own `priorMaterialAdvanceOnThisPhase` — only
-   *  meaningful on a phase line. Computed here, not in the browser, so the
-   *  client-side preview agrees with `rpc_create_bill`'s own step 5. */
-  priorMaterialAdvanceOnThisPhase: number;
+  /** `v_billable_now.mas_recovery` — on a phase line, the material advance on
+   *  committed bills that `rpc_create_bill` recovers at step D. The preview
+   *  reads this same column, so it cannot disagree with the bill (APX-30).
+   *  Always 0 on a material line. */
+  masRecovery: number;
+  /** A material's own phase; the phase's own id on a phase line. */
+  phaseId: string | null;
+  /** A draft bill holding one of this phase's materials (MAS rule R3): the
+   *  phase cannot be billed until that draft is submitted or cancelled. */
+  blockedByBillNo: string | null;
 };
 
 /** Admin only (`v_billable_now`'s own RLS-invoker policies already enforce
  *  this — a non-admin session simply sees the base tables it joins refuse
- *  it). Attaches each phase line's own prior-MAS-advance figure so the
- *  Billable Now selector's running total (features/billing/service.ts)
- *  matches `rpc_create_bill`'s own step 5 exactly. */
+ *  it). Every figure, including each phase's MAS recovery, comes straight
+ *  from the view `rpc_create_bill` reads — nothing is recomputed here. */
 export async function getBillableNow(projectId: string): Promise<BillableNowLine[]> {
   await requireSession();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("v_billable_now")
-    .select("source_type, source_id, description, client_value, pct_billed, amount, internal_cost")
+    .select(
+      "source_type, source_id, description, client_value, pct_billed, amount, internal_cost, phase_id, mas_recovery, blocked_by_bill_no"
+    )
     .eq("project_id", projectId);
   if (error) throw new Error(error.message);
 
@@ -48,38 +57,6 @@ export async function getBillableNow(projectId: string): Promise<BillableNowLine
       r.source_type != null && r.source_id != null && r.description != null
   );
 
-  const phaseIds = rows.filter((r) => r.source_type === "phase").map((r) => r.source_id);
-  const priorAdvanceByPhase = new Map<string, number>();
-  if (phaseIds.length > 0) {
-    // bill_lines.source_id is a polymorphic reference (a phase id or a
-    // stock_request id depending on source_type) with no declared foreign
-    // key — PostgREST can't embed across it, so this is two plain queries
-    // joined client-side rather than one embedded select.
-    const { data: srRows, error: srErr } = await supabase
-      .from("stock_requests")
-      .select("id, phase_id")
-      .in("phase_id", phaseIds);
-    if (srErr) throw new Error(srErr.message);
-    const phaseIdByStockRequest = new Map(srRows.map((sr) => [sr.id, sr.phase_id as string]));
-
-    if (srRows.length > 0) {
-      const { data: priorLines, error: priorErr } = await supabase
-        .from("bill_lines")
-        .select("source_id, amount")
-        .eq("source_type", "material")
-        .in(
-          "source_id",
-          srRows.map((sr) => sr.id)
-        );
-      if (priorErr) throw new Error(priorErr.message);
-      for (const line of priorLines) {
-        const phaseId = line.source_id ? phaseIdByStockRequest.get(line.source_id) : undefined;
-        if (phaseId)
-          priorAdvanceByPhase.set(phaseId, (priorAdvanceByPhase.get(phaseId) ?? 0) + Number(line.amount));
-      }
-    }
-  }
-
   return rows.map((r) => ({
     sourceType: r.source_type,
     sourceId: r.source_id,
@@ -88,9 +65,54 @@ export async function getBillableNow(projectId: string): Promise<BillableNowLine
     pctBilled: Number(r.pct_billed),
     amount: Number(r.amount),
     internalCost: Number(r.internal_cost),
-    priorMaterialAdvanceOnThisPhase:
-      r.source_type === "phase" ? (priorAdvanceByPhase.get(r.source_id) ?? 0) : 0,
+    masRecovery: Number(r.mas_recovery ?? 0),
+    phaseId: r.phase_id,
+    blockedByBillNo: r.blocked_by_bill_no,
   }));
+}
+
+/** Delivered, unbilled materials that Billable Now does NOT list, and why
+ *  (APX-14, MAS rules R1/R4/R6 in migration 20261124200001). Shown as a note
+ *  under Billable Now so a material never silently disappears. Admin only:
+ *  `stock_requests` is an admin-only base table. */
+export type UnlistedMaterials = {
+  /** No rate, or a rate of 0 — billing it would be a ₹0 line (R6). */
+  noRate: number;
+  /** Package-level, not tied to a phase (R4, CA review). */
+  noPhase: number;
+  /** Its phase is already on a bill, which already covers it (R1). */
+  coveredByPhaseBill: number;
+};
+
+export async function getUnlistedMaterials(projectId: string): Promise<UnlistedMaterials> {
+  await requireSession();
+  const supabase = await createClient();
+  const [{ data: requests, error }, { data: listed, error: listedErr }] = await Promise.all([
+    supabase
+      .from("stock_requests")
+      .select("id, rate, phase_id")
+      .eq("project_id", projectId)
+      .eq("status", "delivered")
+      .is("billed_on_bill_id", null)
+      .is("deleted_at", null),
+    supabase
+      .from("v_billable_now")
+      .select("source_id")
+      .eq("project_id", projectId)
+      .eq("source_type", "material"),
+  ]);
+  if (error) throw new Error(error.message);
+  if (listedErr) throw new Error(listedErr.message);
+  const listedIds = new Set(listed.map((r) => r.source_id));
+
+  const result: UnlistedMaterials = { noRate: 0, noPhase: 0, coveredByPhaseBill: 0 };
+  for (const r of requests) {
+    if (listedIds.has(r.id)) continue;
+    if (r.rate == null || Number(r.rate) <= 0) result.noRate++;
+    else if (!r.phase_id) result.noPhase++;
+    else result.coveredByPhaseBill++;
+  }
+  return result;
 }
 
 export type BillLineDTO = {
@@ -148,6 +170,10 @@ export type BillDTO = {
 const ADMIN_BILL_COLUMNS =
   "id, project_id, bill_no, bill_date, period_from, period_to, status, revision, work_value, material_value, gross_amount, mas_recovery_amount, taxable_amount, gst_amount, invoice_total, retention_amount, tds_amount, advance_recovery, net_payable, gst_rate_pct, retention_pct, tds_pct, notes, submitted_at, certified_at, certification_note, paid_at, created_at, internal_cost_amount, margin_amount";
 
+/** The statuses a client's own lists and totals ever show: issued bills only
+ *  (`isIssuedBill` in ./service.ts). */
+const CLIENT_VISIBLE_BILL_STATUSES: BillStatus[] = ["submitted", "certified", "paid"];
+
 const CLIENT_BILL_COLUMNS =
   "id, project_id, bill_no, bill_date, period_from, period_to, status, revision, work_value, material_value, gross_amount, mas_recovery_amount, taxable_amount, gst_amount, invoice_total, retention_amount, tds_amount, advance_recovery, net_payable, gst_rate_pct, retention_pct, tds_pct, notes, submitted_at, certified_at, certification_note, paid_at, created_at";
 
@@ -184,13 +210,14 @@ type AdminBillRow = {
   margin_amount?: number;
 };
 
-async function paidByBill(billIds: string[]): Promise<Map<string, number>> {
+/** Σ payments per bill, in Decimal — never a float running total. */
+async function paidByBill(billIds: string[]): Promise<Map<string, Decimal>> {
   if (billIds.length === 0) return new Map();
   const supabase = await createClient();
   const { data, error } = await supabase.from("payments").select("bill_id, amount").in("bill_id", billIds);
   if (error) throw new Error(error.message);
-  const map = new Map<string, number>();
-  for (const p of data) map.set(p.bill_id, (map.get(p.bill_id) ?? 0) + Number(p.amount));
+  const map = new Map<string, Decimal>();
+  for (const p of data) map.set(p.bill_id, (map.get(p.bill_id) ?? new Decimal(0)).plus(p.amount));
   return map;
 }
 
@@ -434,9 +461,9 @@ export async function getBillsPageForAdmin(projectId: string, req: PageRequest):
   return { ...page, rows: rows.map((r) => toBillDTO(r, true, labels.get(r.id) ?? [])) };
 }
 
-/** One page of the client Bills table. A draft bill has never been sent and
- *  the client table has never shown one — that filter moves into the query
- *  here, where it has to be, so the page and the count agree with the rows. */
+/** One page of the client Bills table. Only issued bills: a draft has never
+ *  been sent, and a cancelled draft never was (APX-32) — the filter is in the
+ *  query, where it has to be, so the page and the count agree with the rows. */
 export async function getBillsPageForClient(projectId: string, req: PageRequest): Promise<Page<BillDTO>> {
   await requireSession();
   const supabase = await createClient();
@@ -446,7 +473,7 @@ export async function getBillsPageForClient(projectId: string, req: PageRequest)
         .from("v_bill_client")
         .select(CLIENT_BILL_COLUMNS, { count: "exact" })
         .eq("project_id", projectId)
-        .neq("status", "draft")
+        .in("status", CLIENT_VISIBLE_BILL_STATUSES)
         .order("seq_no", { ascending: false })
         .range(from, to),
     req
@@ -597,6 +624,10 @@ export async function getCurrentBillPdfKey(session: Session, billId: string): Pr
     .select("r2_key")
     .eq("entity_type", "bill")
     .eq("entity_id", billId)
+    // APX-05: only the row the bill.pdf job itself recorded. A file name is
+    // whatever an uploader sent, so the name alone never identifies the
+    // invoice; `kind` cannot be set by a signed-in session (att_insert).
+    .eq("kind", "generated_invoice")
     .eq("mime_type", "application/pdf")
     .eq("file_name", billPdfFileName(bill.bill_no, bill.revision))
     .is("deleted_at", null)
@@ -613,6 +644,7 @@ export type AdminBillingStats = {
    *  in the component over whichever page of the table is showing. */
   billedCount: number;
   received: number;
+  /** Issued bills with at least one payment recorded. */
   paidCount: number;
   outstanding: number;
   billableNowCount: number;
@@ -623,36 +655,28 @@ export type AdminBillingStats = {
  *  mini "Bills Raised" summary (`getClientBillingStats`, features/projects),
  *  which is the client's shape, not this one.
  *
- *  Outstanding is `02-lld.md` §3.8's own formula, verbatim: "Σ
- *  bills.net_payable (certified, paid) − Σ payments.amount." Summing both
- *  certified AND paid bills' net_payable, then subtracting every payment
- *  against them, nets to exactly the unpaid remainder — a fully-paid bill's
- *  own payments already sum to its own net_payable, contributing zero. */
+ *  APX-32: "Billed to Date" counts issued bills only (submitted, certified,
+ *  paid) — a cancelled draft was never sent and is not billed. "Received" is
+ *  the sum of every payment recorded, part-payments included, not the net
+ *  payable of fully-paid bills. Outstanding is `02-lld.md` §3.8's formula:
+ *  Σ net_payable (certified, paid) − Σ payments on them. The arithmetic is
+ *  `billingTotals` in ./service.ts, in Decimal. */
 export async function getAdminBillingStats(projectId: string): Promise<AdminBillingStats> {
   await requireSession();
   const [bills, billable] = await Promise.all([getBillsForAdmin(projectId), getBillableNow(projectId)]);
 
-  const billed = bills.filter((b) => b.status !== "draft");
-  const paid = bills.filter((b) => b.status === "paid");
-  const billedToDate = billed.reduce((a, b) => a + b.invoiceTotal, 0);
-  const received = paid.reduce((a, b) => a + b.netPayable, 0);
-
-  const certifiedOrPaid = bills.filter((b) => b.status === "certified" || b.status === "paid");
-  const netPayableTotal = certifiedOrPaid.reduce((a, b) => a + b.netPayable, 0);
-  const paidByCertifiedOrPaid = await paidByBill(certifiedOrPaid.map((b) => b.id));
-  const paidTotal = [...paidByCertifiedOrPaid.values()].reduce((a, v) => a + v, 0);
-  const outstanding = Math.max(netPayableTotal - paidTotal, 0);
-
-  const billableNowValue = billable.reduce((a, l) => a + l.amount, 0);
+  const issued = bills.filter((b) => isIssuedBill(b.status));
+  const paid = await paidByBill(issued.map((b) => b.id));
+  const totals = billingTotals(issued, paid);
 
   return {
-    billedToDate,
-    billedCount: billed.length,
-    received,
-    paidCount: paid.length,
-    outstanding,
+    billedToDate: totals.billedToDate.toNumber(),
+    billedCount: totals.billedCount,
+    received: totals.received.toNumber(),
+    paidCount: totals.paidCount,
+    outstanding: totals.outstanding.toNumber(),
     billableNowCount: billable.length,
-    billableNowValue,
+    billableNowValue: sumAmounts(billable).toNumber(),
   };
 }
 
@@ -670,7 +694,7 @@ export async function getBillPaymentsSummary(billId: string): Promise<{
     .eq("bill_id", billId)
     .order("paid_on", { ascending: false });
   if (error) throw new Error(error.message);
-  const paidSoFar = data.reduce((a, p) => a + Number(p.amount), 0);
+  const paidSoFar = sumAmounts(data).toNumber();
   return {
     paidSoFar,
     payments: data.map((p) => ({
@@ -697,16 +721,19 @@ export type ClientBillsStats = {
  *  Awaiting Approval, Approved Unpaid, Paid") — a different shape from the
  *  dashboard's mini stat (`getClientBillingStats`). */
 export async function getClientBillsStats(projectId: string): Promise<ClientBillsStats> {
-  const bills = await getBillsForClient(projectId);
-  const sum = (pred: (b: BillDTO) => boolean) => bills.filter(pred).reduce((a, b) => a + b.netPayable, 0);
-  const count = (pred: (b: BillDTO) => boolean) => bills.filter(pred).length;
+  const bills = (await getBillsForClient(projectId)).filter((b) => isIssuedBill(b.status));
+  const pick = (pred: (b: BillDTO) => boolean) => bills.filter(pred);
+  const sum = (pred: (b: BillDTO) => boolean) =>
+    sumAmounts(pick(pred).map((b) => ({ amount: b.netPayable }))).toNumber();
+  const count = (pred: (b: BillDTO) => boolean) => pick(pred).length;
+  const all = () => true;
   return {
-    billsRaised: sum((b) => b.status !== "draft"),
+    billsRaised: sum(all),
     awaitingApproval: sum((b) => b.status === "submitted"),
     approvedUnpaid: sum((b) => b.status === "certified"),
     paid: sum((b) => b.status === "paid"),
     counts: {
-      raised: count((b) => b.status !== "draft"),
+      raised: count(all),
       awaitingApproval: count((b) => b.status === "submitted"),
       approvedUnpaid: count((b) => b.status === "certified"),
       paid: count((b) => b.status === "paid"),
@@ -727,6 +754,10 @@ export type PhaseBillingRow = {
   tasksDone: number;
   allocatedAmount: number;
   billingStatus: "unresolved" | "billable" | "billed" | "paid";
+  /** All tasks at 100%, or marked complete by hand (`v_phase_billing`). With
+   *  an open billing status this is what makes a phase billable — the badge
+   *  reads it through `phaseBillingLabel` (APX-49). */
+  isComplete: boolean;
   /** Mirrors `rpc_mark_phase_complete`'s own guard exactly: zero tasks, not
    *  already manually completed, still in an open status. */
   canMarkComplete: boolean;
@@ -783,6 +814,7 @@ export async function getPhaseBillingStatus(packageId: string): Promise<PhaseBil
     tasksDone: p.tasks_done ?? 0,
     allocatedAmount: Number(p.allocated_amount),
     billingStatus: p.billing_status,
+    isComplete: p.is_complete === true,
     canMarkComplete:
       p.task_count === 0 &&
       !p.is_complete &&
@@ -793,10 +825,22 @@ export async function getPhaseBillingStatus(packageId: string): Promise<PhaseBil
 
 /** "Material at Site": delivered materials — Cost, Client Value, Billable
  *  (at `mas_billable_pct`), Status. Every delivered material for the
- *  package, billed or not — unlike `v_billable_now`, which only shows the
- *  still-unbilled ones. `fn_cost_to_client_factor` isn't exposed over
- *  PostgREST for a plain select, so its own phase-then-package fallback is
- *  replicated here in TypeScript from the same allocated/internal columns. */
+ *  package, billed or not. The figures come from where they are decided: a
+ *  billed material's from its own bill line, a billable one's from
+ *  `v_billable_now` (the view `rpc_create_bill` bills from). Only a material
+ *  that is neither shows a computed client value — `fn_cost_to_client_factor`
+ *  replicated here in Decimal — and no billable amount, with the reason it is
+ *  not billable as material at site (MAS rules R1/R4/R6, D68). */
+export type MaterialAtSiteState =
+  | "billed"
+  | "billable"
+  /** No rate, or a rate of 0 (R6). */
+  | "no_rate"
+  /** Package-level, not tied to a phase (R4). */
+  | "no_phase"
+  /** Its phase is already on a bill, which covers it (R1). */
+  | "covered_by_phase";
+
 export type MaterialAtSiteRow = {
   id: string;
   materialName: string;
@@ -805,10 +849,17 @@ export type MaterialAtSiteRow = {
   unit: string;
   cost: number;
   clientValue: number;
-  billableAmount: number;
+  /** Null when the material is not billable as material at site. */
+  billableAmount: number | null;
+  state: MaterialAtSiteState;
   billRefNo: string | null;
   billStatus: BillDTO["status"] | null;
 };
+
+function factorOf(allocated: unknown, internal: unknown): Decimal | null {
+  const i = new Decimal(Number(internal ?? 0));
+  return i.greaterThan(0) ? new Decimal(Number(allocated ?? 0)).dividedBy(i) : null;
+}
 
 export async function getMaterialAtSite(packageId: string): Promise<MaterialAtSiteRow[]> {
   await requireSession();
@@ -828,18 +879,11 @@ export async function getMaterialAtSite(packageId: string): Promise<MaterialAtSi
     .eq("id", packageId)
     .single();
   if (pkgErr) throw new Error(pkgErr.message);
-  const { data: project, error: projErr } = await supabase
-    .from("projects")
-    .select("mas_billable_pct")
-    .eq("id", pkg.project_id)
-    .single();
-  if (projErr) throw new Error(projErr.message);
-  const masBillablePct = Number(project.mas_billable_pct);
-  const packageInternal = Number(pkg.internal_amount);
-  const packageFactor = packageInternal > 0 ? Number(pkg.allocated_amount) / packageInternal : 1;
+  const packageFactor = factorOf(pkg.allocated_amount, pkg.internal_amount) ?? new Decimal(1);
 
+  const ids = data.map((r) => r.id);
   const phaseIds = [...new Set(data.map((r) => r.phase_id).filter((id): id is string => id != null))];
-  const phaseFactorById = new Map<string, number>();
+  const phaseFactorById = new Map<string, Decimal>();
   if (phaseIds.length > 0) {
     const { data: phaseRows, error: phaseErr } = await supabase
       .from("phases")
@@ -847,10 +891,26 @@ export async function getMaterialAtSite(packageId: string): Promise<MaterialAtSi
       .in("id", phaseIds);
     if (phaseErr) throw new Error(phaseErr.message);
     for (const ph of phaseRows) {
-      const internal = Number(ph.internal_amount);
-      phaseFactorById.set(ph.id, internal > 0 ? Number(ph.allocated_amount) / internal : packageFactor);
+      phaseFactorById.set(ph.id, factorOf(ph.allocated_amount, ph.internal_amount) ?? packageFactor);
     }
   }
+
+  const [{ data: listed, error: listedErr }, { data: billedLines, error: linesErr }] = await Promise.all([
+    supabase
+      .from("v_billable_now")
+      .select("source_id, client_value, amount")
+      .eq("source_type", "material")
+      .in("source_id", ids),
+    supabase
+      .from("bill_lines")
+      .select("source_id, client_value, amount")
+      .eq("source_type", "material")
+      .in("source_id", ids),
+  ]);
+  if (listedErr) throw new Error(listedErr.message);
+  if (linesErr) throw new Error(linesErr.message);
+  const listedById = new Map(listed.map((l) => [l.source_id, l]));
+  const lineById = new Map(billedLines.map((l) => [l.source_id, l]));
 
   const billIds = [...new Set(data.map((r) => r.billed_on_bill_id).filter((id): id is string => id != null))];
   const billById = new Map<string, { billNo: string; status: BillDTO["status"] }>();
@@ -864,19 +924,48 @@ export async function getMaterialAtSite(packageId: string): Promise<MaterialAtSi
   }
 
   return data.map((r) => {
-    const cost = Math.round(Number(r.qty) * Number(r.rate ?? 0) * 100) / 100;
+    const rate = new Decimal(Number(r.rate ?? 0));
+    const cost = new Decimal(Number(r.qty)).times(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
     const factor = r.phase_id ? (phaseFactorById.get(r.phase_id) ?? packageFactor) : packageFactor;
-    const clientValue = Math.round(cost * factor * 100) / 100;
+    const computedClientValue = new Decimal(Number(r.qty))
+      .times(rate)
+      .times(factor)
+      .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
     const bill = r.billed_on_bill_id ? billById.get(r.billed_on_bill_id) : undefined;
+    const line = lineById.get(r.id);
+    const view = listedById.get(r.id);
+
+    let state: MaterialAtSiteState;
+    let clientValue = computedClientValue.toNumber();
+    let billableAmount: number | null = null;
+    if (bill || line) {
+      state = "billed";
+      if (line) {
+        clientValue = Number(line.client_value);
+        billableAmount = Number(line.amount);
+      }
+    } else if (view) {
+      state = "billable";
+      clientValue = Number(view.client_value);
+      billableAmount = Number(view.amount);
+    } else if (rate.lessThanOrEqualTo(0)) {
+      state = "no_rate";
+    } else if (!r.phase_id) {
+      state = "no_phase";
+    } else {
+      state = "covered_by_phase";
+    }
+
     return {
       id: r.id,
       materialName: r.material_name,
       refNo: r.ref_no,
       qty: Number(r.qty),
       unit: r.unit,
-      cost,
+      cost: cost.toNumber(),
       clientValue,
-      billableAmount: Math.round(clientValue * masBillablePct) / 100,
+      billableAmount,
+      state,
       billRefNo: bill?.billNo ?? null,
       billStatus: bill?.status ?? null,
     };
@@ -903,11 +992,13 @@ export async function outstandingByProject(projectIds: string[]): Promise<Record
     .is("deleted_at", null);
   if (error) throw new Error(error.message);
   const paid = await paidByBill(data.map((b) => b.id));
-  const out: Record<string, number> = {};
+  const sums = new Map<string, Decimal>();
   for (const b of data) {
-    out[b.project_id] = (out[b.project_id] ?? 0) + Number(b.net_payable) - (paid.get(b.id) ?? 0);
+    const remaining = new Decimal(b.net_payable).minus(paid.get(b.id) ?? 0);
+    sums.set(b.project_id, (sums.get(b.project_id) ?? new Decimal(0)).plus(remaining));
   }
-  for (const [id, value] of Object.entries(out)) out[id] = Math.max(value, 0);
+  const out: Record<string, number> = {};
+  for (const [id, value] of sums) out[id] = Decimal.max(value, 0).toNumber();
   return out;
 }
 
@@ -931,7 +1022,7 @@ export async function getBillingAttention(projectId: string): Promise<BillingAtt
   const certified = bills.filter((b) => b.status === "certified" || b.status === "paid");
   const paid = await paidByBill(certified.map((b) => b.id));
   const unpaid = certified
-    .map((b) => ({ bill: b, remaining: b.netPayable - (paid.get(b.id) ?? 0) }))
+    .map((b) => ({ bill: b, remaining: new Decimal(b.netPayable).minus(paid.get(b.id) ?? 0).toNumber() }))
     .filter((x) => x.remaining > 0);
   const submitted = bills.filter((b) => b.status === "submitted");
   const certifiedTimes = unpaid

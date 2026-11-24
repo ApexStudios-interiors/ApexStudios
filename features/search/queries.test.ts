@@ -28,15 +28,23 @@ vi.mock("@/lib/supabase/server", () => ({
           h.patterns.push(pattern);
           return chain;
         },
-        or: (filter: string) => {
-          h.reads.push(table);
-          h.orFilters.push([table, filter]);
-          return chain;
-        },
         is: () => chain,
         in: () => chain,
         neq: (col: string, value: unknown) => {
           h.filters.push([table, "neq", col, value]);
+          return chain;
+        },
+        eq: (col: string, value: unknown) => {
+          h.filters.push([table, "eq", col, value]);
+          return chain;
+        },
+        // An ilike OR-filter is a search read (APX-64, ref numbers); any
+        // other `or` is #101's preview scope on inventory.
+        or: (expr: string) => {
+          if (expr.includes(".ilike.")) {
+            h.reads.push(table);
+            h.orFilters.push([table, expr]);
+          } else h.filters.push([table, "or", expr]);
           return chain;
         },
         limit: () => chain,
@@ -213,5 +221,49 @@ describe("searchAll — ref numbers (APX-64)", () => {
     };
     const [result] = await searchAll(sessionAs("client"), "AP-BHEL");
     expect(result?.sub.startsWith("AP-BHEL-NCH-007")).toBe(true);
+  });
+});
+
+describe("searchAll — preview is scoped to the previewed project (APX-65)", () => {
+  function previewing(role: "site" | "client"): Session {
+    return { ...sessionAs("admin"), impersonating: { role, projectId: PROJECT_ID } };
+  }
+
+  it("client preview: every category it reads is narrowed to that project", async () => {
+    await searchAll(previewing("client"), "tile");
+
+    expect(h.filters).toContainEqual(["projects", "eq", "id", PROJECT_ID]);
+    expect(h.filters).toContainEqual(["v_package_client", "eq", "project_id", PROJECT_ID]);
+    expect(h.filters).toContainEqual(["approvals", "eq", "project_id", PROJECT_ID]);
+    expect(h.filters).toContainEqual(["v_bill_client", "eq", "project_id", PROJECT_ID]);
+    // Still the client's own views, and still nothing a client cannot see.
+    expect(h.reads.sort()).toEqual(["approvals", "projects", "v_bill_client", "v_package_client"].sort());
+  });
+
+  it("site preview: stock and packages narrowed; inventory keeps the central store", async () => {
+    await searchAll(previewing("site"), "tile");
+
+    expect(h.filters).toContainEqual(["v_stock_request_site", "eq", "project_id", PROJECT_ID]);
+    expect(h.filters).toContainEqual(["v_package_site", "eq", "project_id", PROJECT_ID]);
+    expect(h.filters).toContainEqual([
+      "v_inventory_site",
+      "or",
+      "project_id.eq." + PROJECT_ID + ",project_id.is.null",
+    ]);
+    expect(h.reads).not.toContain("profiles");
+  });
+
+  it("a preview project id that is not a UUID is never spliced into a filter string", async () => {
+    const odd = { ...sessionAs("admin"), impersonating: { role: "site" as const, projectId: "x,id.neq.0" } };
+    await searchAll(odd, "tile");
+
+    expect(h.filters).toContainEqual(["v_inventory_site", "eq", "project_id", "x,id.neq.0"]);
+    expect(h.filters.some((f) => f[1] === "or")).toBe(false);
+  });
+
+  it("no preview: no project filter at all, exactly as before", async () => {
+    await searchAll(sessionAs("admin"), "tile");
+
+    expect(h.filters.filter((f) => f[1] === "eq" || f[1] === "or")).toEqual([]);
   });
 });

@@ -41,6 +41,9 @@ export function PostUpdateDialog({ projectId, moduleId }: { projectId: string; m
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [packageError, setPackageError] = useState<string | null>(null);
+  // APX-46: Post waits for photos still uploading, or they would be left out.
+  const [uploading, setUploading] = useState(false);
 
   /** `items` is what lets `<SelectValue>` render the chosen package's NAME in
    *  the closed trigger; without it Base UI falls back to stringifying the
@@ -52,10 +55,10 @@ export function PostUpdateDialog({ projectId, moduleId }: { projectId: string; m
 
   useEffect(() => {
     getPackageOptions(projectId)
-      .then((opts) => {
-        setPackages(opts);
-        setPackageId((current) => current || (opts[0]?.id ?? ""));
-      })
+      // APX-50: no default. Opened from the project page, this used to
+      // pre-select package 01, so updates were silently filed under it. Only
+      // a package page (`moduleId`) pre-selects — its own package.
+      .then(setPackages)
       .catch(() => toast("Could not load packages."));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once for this dialog instance, matching the established AddTaskDialog pattern
   }, [projectId]);
@@ -66,7 +69,7 @@ export function PostUpdateDialog({ projectId, moduleId }: { projectId: string; m
       return;
     }
     if (!packageId) {
-      setError("Please select a package");
+      setPackageError("Choose the package this update is about");
       return;
     }
     setPending(true);
@@ -95,6 +98,7 @@ export function PostUpdateDialog({ projectId, moduleId }: { projectId: string; m
       title="Post Daily Update"
       okLabel={pending ? "Posting…" : "Post"}
       okPending={pending}
+      okDisabled={uploading}
       onClose={closeDialog}
       onOk={onSubmit}
     >
@@ -112,9 +116,16 @@ export function PostUpdateDialog({ projectId, moduleId }: { projectId: string; m
             // options load; with no items to resolve it against, the trigger
             // would print that UUID. Show the placeholder until they arrive.
             value={packages ? packageId || null : null}
-            onValueChange={(value) => setPackageId(value ?? "")}
+            onValueChange={(value) => {
+              setPackageId(value ?? "");
+              setPackageError(null);
+            }}
           >
-            <SelectTrigger id="pu-package" className="h-9 w-full text-[13.5px]">
+            <SelectTrigger
+              id="pu-package"
+              className="h-9 w-full text-[13.5px]"
+              aria-invalid={packageError ? true : undefined}
+            >
               <SelectValue placeholder={packages ? "Select a package" : "Loading…"} />
             </SelectTrigger>
             <SelectContent>
@@ -127,6 +138,7 @@ export function PostUpdateDialog({ projectId, moduleId }: { projectId: string; m
               </SelectGroup>
             </SelectContent>
           </Select>
+          {packageError && <p className="text-xs text-destructive mt-1">{packageError}</p>}
         </Field>
         <Field label="Date" htmlFor="pu-date">
           <DatePicker id="pu-date" value={updateDate} onChange={setUpdateDate} required />
@@ -152,6 +164,7 @@ export function PostUpdateDialog({ projectId, moduleId }: { projectId: string; m
               maxFiles={MAX_PHOTOS_PER_ENTITY}
               maxBytes={MAX_IMAGE_BYTES}
               onChange={setAttachmentIds}
+              onBusyChange={setUploading}
             />
           </Field>
         </div>

@@ -14,8 +14,16 @@ import { TablePagination } from "@/components/shared/TablePagination";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 import { projectBase } from "@/lib/routing/current";
+import { projectWriteRefusal } from "@/features/projects/service";
 
-const VALID_STATUSES: StockRequestStatus[] = ["pending", "approved", "ordered", "delivered", "rejected"];
+const VALID_STATUSES: StockRequestStatus[] = [
+  "pending",
+  "approved",
+  "ordered",
+  "delivered",
+  "rejected",
+  "cancelled",
+];
 
 /**
  * build/07-stock-inventory-notifications.md §2.5 step 1. Status tabs and the
@@ -67,6 +75,8 @@ export default async function StockPage({
     getPackageOptions(projectId),
   ]);
 
+  // APX-41: no new stock request on a completed or archived project.
+  const readOnly = projectWriteRefusal(header.statusKey, "stock_request");
   const basePath = `${await projectBase(projectId)}/stock`;
 
   return (
@@ -77,7 +87,12 @@ export default async function StockPage({
           <p className="mt-1 text-muted-foreground text-[13.5px]">{pendingCount} pending</p>
         </div>
         <div className="ml-auto flex gap-2">
-          <OpenDialogButton dialog={{ kind: "newRequest", projectId }} variant="primary">
+          <OpenDialogButton
+            dialog={{ kind: "newRequest", projectId }}
+            variant="primary"
+            disabled={!!readOnly}
+            title={readOnly ?? undefined}
+          >
             <Icon name="plus" className="w-[15px] h-[15px]" />
             New Request
           </OpenDialogButton>

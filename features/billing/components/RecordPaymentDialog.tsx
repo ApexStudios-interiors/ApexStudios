@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Decimal } from "decimal.js";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/context/AppContext";
 import { recordPayment, getBillPaymentsSummaryForDialog } from "@/features/billing/actions";
@@ -61,14 +62,16 @@ export function RecordPaymentDialog({
   const [paidOn, setPaidOn] = useState(todayIst());
   const [mode, setMode] = useState<PaymentMode>("neft");
   const [referenceNo, setReferenceNo] = useState("");
-  // Regenerated after every attempt, success or failure — the same fix
-  // BillingAdmin's own create-bill flow already carries. This dialog stays
-  // mounted after a failed submit (the error renders inside it), so a fixed
-  // key meant the retry reused the key of an attempt that may already have
-  // committed a payment row: `rpc_record_payment`'s own idempotency check
-  // would return the bill unchanged and the dialog would report success
-  // while the corrected amount was never recorded.
+  // APX-33: one key per distinct payment the admin means to record. It is
+  // KEPT when an attempt's answer was lost (the connection dropped after the
+  // payment may already have committed): the retry then finds that payment
+  // through rpc_record_payment's idempotency check instead of recording it a
+  // second time. It is REPLACED after any definite answer from the server
+  // (a refusal such as OVERPAYMENT), and whenever a field changes — a
+  // corrected amount is a different payment and must never be swallowed by
+  // the key of an earlier attempt.
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const renewKey = () => setIdempotencyKey(crypto.randomUUID());
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,19 +93,34 @@ export function RecordPaymentDialog({
       setError("Enter a positive amount");
       return;
     }
+    if (new Decimal(amount).decimalPlaces() > 2) {
+      setError("Use at most two decimals (paise)");
+      return;
+    }
     setPending(true);
     setError(null);
-    const result = await recordPayment({
-      billId,
-      amount: parsed,
-      paidOn,
-      mode,
-      referenceNo: referenceNo || undefined,
-      idempotencyKey,
-    });
+    let result: Awaited<ReturnType<typeof recordPayment>>;
+    try {
+      result = await recordPayment({
+        billId,
+        amount: parsed,
+        paidOn,
+        mode,
+        referenceNo: referenceNo || undefined,
+        idempotencyKey,
+      });
+    } catch {
+      // No answer: the payment may or may not have been recorded. Keep the
+      // key, so pressing Record Payment again cannot record it twice.
+      setPending(false);
+      setError(
+        "The connection dropped before an answer came back. Press Record Payment again — it will not be recorded twice."
+      );
+      return;
+    }
     setPending(false);
-    setIdempotencyKey(crypto.randomUUID());
     if (!result?.data) {
+      renewKey();
       setError(result?.serverError ?? "Could not record this payment");
       return;
     }
@@ -140,20 +158,34 @@ export function RecordPaymentDialog({
               step="0.01"
               className={inputClass}
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e) => {
+                setAmount(e.target.value);
+                renewKey();
+              }}
             />
           </Field>
           {error && <p className="text-xs text-destructive mt-1">{error}</p>}
         </div>
         <Field label="Paid On" htmlFor="rp-date">
-          <DatePicker id="rp-date" value={paidOn} onChange={setPaidOn} required />
+          <DatePicker
+            id="rp-date"
+            value={paidOn}
+            onChange={(v) => {
+              setPaidOn(v);
+              renewKey();
+            }}
+            required
+          />
         </Field>
         <Field label="Mode" htmlFor="rp-mode">
           <Select
             items={PAYMENT_MODES}
             value={mode}
             onValueChange={(v) => {
-              if (v) setMode(v);
+              if (v) {
+                setMode(v);
+                renewKey();
+              }
             }}
           >
             <SelectTrigger id="rp-mode" className="w-full text-[13.5px] data-[size=default]:h-9">
@@ -177,7 +209,10 @@ export function RecordPaymentDialog({
               className={inputClass}
               placeholder="Optional"
               value={referenceNo}
-              onChange={(e) => setReferenceNo(e.target.value)}
+              onChange={(e) => {
+                setReferenceNo(e.target.value);
+                renewKey();
+              }}
             />
           </Field>
         </div>

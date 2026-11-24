@@ -1,6 +1,8 @@
-import { HeadBucketCommand, S3Client } from "@aws-sdk/client-s3";
+import { HeadBucketCommand } from "@aws-sdk/client-s3";
 import postgres from "postgres";
 import { env } from "@/lib/env";
+import { r2Client } from "@/lib/r2/client";
+import { cachedProbe } from "@/lib/observability/cached-probe";
 
 /**
  * GET /api/health — architecture.md §9.3.
@@ -10,12 +12,19 @@ import { env } from "@/lib/env";
  * pipeline's smoke check, so it must never require authentication and must
  * never leak configuration: no URLs, no bucket names, no error strings from
  * the driver. A boolean is the whole contract.
+ *
+ * APX-57: because it is public, it no longer opens a NEW database connection
+ * (and a new S3 client) on every hit. One small connection is kept per server
+ * instance, and the result of a check is reused for CHECK_TTL_MS — so a flood
+ * of requests costs one real check per window per instance, not one each.
+ * `uptime` is still computed per response.
  */
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const startedAt = Date.now();
 const TIMEOUT_MS = 3000;
+const CHECK_TTL_MS = 15_000;
 
 async function withTimeout<T>(work: Promise<T>, label: string): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
@@ -31,39 +40,39 @@ async function withTimeout<T>(work: Promise<T>, label: string): Promise<T> {
   }
 }
 
+let sql: ReturnType<typeof postgres> | undefined;
+function healthConnection(): ReturnType<typeof postgres> {
+  // max 1 and a short idle timeout: the connection is dropped between quiet
+  // periods rather than held open for the life of the instance.
+  sql ??= postgres(env.DATABASE_URL, { max: 1, idle_timeout: 20, connect_timeout: 3, prepare: false });
+  return sql;
+}
+
 async function checkDb(): Promise<boolean> {
-  const sql = postgres(env.DATABASE_URL, { max: 1, idle_timeout: 1, connect_timeout: 3 });
   try {
-    await withTimeout(sql`select 1`, "db");
+    await withTimeout(healthConnection()`select 1`, "db");
     return true;
   } catch {
     return false;
-  } finally {
-    await sql.end({ timeout: 1 }).catch(() => undefined);
   }
 }
 
 async function checkR2(): Promise<boolean> {
-  const client = new S3Client({
-    region: "auto",
-    endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId: env.R2_ACCESS_KEY_ID,
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY,
-    },
-  });
   try {
-    await withTimeout(client.send(new HeadBucketCommand({ Bucket: env.R2_BUCKET })), "r2");
+    await withTimeout(r2Client().send(new HeadBucketCommand({ Bucket: env.R2_BUCKET })), "r2");
     return true;
   } catch {
     return false;
-  } finally {
-    client.destroy();
   }
 }
 
-export async function GET() {
+const probe = cachedProbe(async () => {
   const [db, r2] = await Promise.all([checkDb(), checkR2()]);
+  return { db, r2 };
+}, CHECK_TTL_MS);
+
+export async function GET() {
+  const { db, r2 } = await probe();
   const body = {
     db,
     r2,

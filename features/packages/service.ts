@@ -1,3 +1,5 @@
+import { Decimal } from "decimal.js";
+
 /**
  * Pure. No next/* imports — testable against a plain connection or no
  * connection at all (HLD §4.3, code-standards §1).
@@ -131,4 +133,29 @@ export function costToClientFactor(
   if (phase && phase.internalAmount > 0) return phase.allocatedAmount / phase.internalAmount;
   if (pkg && pkg.internalAmount > 0) return pkg.allocatedAmount / pkg.internalAmount;
   return 1.0;
+}
+
+/** A phase on a bill — Billed, or Paid once that bill is paid. */
+export function isPhaseBilled(billingStatus: string): boolean {
+  return billingStatus === "billed" || billingStatus === "paid";
+}
+
+export const PHASE_BILLED_COPY =
+  "This phase is already on a bill, so its allocated amount can no longer change. Correct it with a credit note or an adjustment on the next bill.";
+
+/**
+ * APX-10: once a phase is on a bill, the amount it was billed at is fixed —
+ * Billable Now and the bill line both value a phase at its allocated amount.
+ * Name and internal budget may still change. Compared as decimals, so
+ * "125000" and "125000.00" are the same amount and not a change.
+ * trg_phases_allocated_locked (migration 20261124300001) is the boundary.
+ */
+export function phaseAllocatedChangeRefusal(
+  current: { billingStatus: string; allocatedAmount: string | number },
+  nextAllocated: string | undefined
+): string | null {
+  if (nextAllocated === undefined || !isPhaseBilled(current.billingStatus)) return null;
+  return new Decimal(nextAllocated.trim()).equals(new Decimal(current.allocatedAmount))
+    ? null
+    : PHASE_BILLED_COPY;
 }

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
 import { capResults, ilikeAnyFilter, type SearchResultDTO } from "./service";
 import { packagePath, projectPath } from "@/lib/routing/paths";
+import { isUuid } from "@/lib/routing/slug";
 
 /**
  * build/07-stock-inventory-notifications.md §2.7. Each entity goes through
@@ -12,6 +13,12 @@ import { packagePath, projectPath } from "@/lib/routing/paths";
  * role, not merely filtered after the fact. Uses the EFFECTIVE role
  * (impersonating ?? real), matching every other read in this codebase
  * (Build 05: impersonation only ever shapes reads).
+ *
+ * APX-65 (D72, 2026-11-24): while an admin previews a role, every category is
+ * also scoped to the PREVIEWED project. The preview runs on the admin's own
+ * login, so RLS alone would return every project's rows — not what that
+ * client or supervisor would find. Central-store inventory (no project) stays
+ * in, because the previewed role would find it too.
  */
 
 /** Escapes `ilike`'s own wildcard characters (`%`, `_`, and the escape
@@ -31,14 +38,17 @@ export async function searchAll(session: Session, query: string): Promise<Search
   const isSite = effectiveRole === "site";
   const supabase = await createClient();
   const q = pattern(query);
+  const scope = session.impersonating?.projectId ?? null;
 
   const [projects, packages, stockRequests, approvals, bills, inventory, users] = await Promise.all([
-    searchProjects(supabase, q),
-    searchPackages(supabase, q, isAdmin, isClient),
-    isClient ? Promise.resolve([]) : searchStockRequests(supabase, query, isAdmin),
-    searchApprovals(supabase, query),
-    isSite ? Promise.resolve([]) : searchBills(supabase, q, isAdmin),
-    isClient ? Promise.resolve([]) : searchInventory(supabase, q, isAdmin),
+    searchProjects(supabase, q, scope),
+    searchPackages(supabase, q, isAdmin, isClient, scope),
+    isClient ? Promise.resolve([]) : searchStockRequests(supabase, query, isAdmin, scope),
+    searchApprovals(supabase, query, scope),
+    isSite ? Promise.resolve([]) : searchBills(supabase, q, isAdmin, scope),
+    isClient ? Promise.resolve([]) : searchInventory(supabase, q, isAdmin, scope),
+    // Never while previewing: a preview is never of an admin (D66), so
+    // `isAdmin` is false whenever `scope` is set.
     isAdmin ? searchUsers(supabase, q) : Promise.resolve([]),
   ]);
 
@@ -55,12 +65,25 @@ export async function searchAll(session: Session, query: string): Promise<Search
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 
-async function searchProjects(supabase: Supa, q: string): Promise<SearchResultDTO[]> {
-  const { data, error } = await supabase
-    .from("projects")
-    .select("id, name, location, code")
-    .ilike("name", q)
-    .limit(5);
+/** The previewed project, or null outside a preview (APX-65). */
+type Scope = string | null;
+
+/** Narrows a query to the previewed project when there is one. Generic over
+ *  the builder so each call keeps its own row type. */
+function inScope<T extends { eq: (column: string, value: string) => T }>(
+  query: T,
+  scope: Scope,
+  column = "project_id"
+): T {
+  return scope ? query.eq(column, scope) : query;
+}
+
+async function searchProjects(supabase: Supa, q: string, scope: Scope): Promise<SearchResultDTO[]> {
+  const { data, error } = await inScope(
+    supabase.from("projects").select("id, name, location, code").ilike("name", q),
+    scope,
+    "id"
+  ).limit(5);
   if (error) throw new Error(error.message);
   return data.map((p) => ({
     id: p.id,
@@ -123,35 +146,33 @@ async function searchPackages(
   supabase: Supa,
   q: string,
   isAdmin: boolean,
-  isClient: boolean
+  isClient: boolean,
+  scope: Scope
 ): Promise<SearchResultDTO[]> {
   type Row = { id: string; name: string; project_id: string; seq_no: number };
   let rows: Row[];
   if (isAdmin) {
-    const { data, error } = await supabase
-      .from("packages")
-      .select("id, name, project_id, seq_no")
-      .ilike("name", q)
-      .limit(5);
+    const { data, error } = await inScope(
+      supabase.from("packages").select("id, name, project_id, seq_no").ilike("name", q),
+      scope
+    ).limit(5);
     if (error) throw new Error(error.message);
     rows = data;
   } else if (isClient) {
-    const { data, error } = await supabase
-      .from("v_package_client")
-      .select("id, name, project_id, seq_no")
-      .ilike("name", q)
-      .limit(5);
+    const { data, error } = await inScope(
+      supabase.from("v_package_client").select("id, name, project_id, seq_no").ilike("name", q),
+      scope
+    ).limit(5);
     if (error) throw new Error(error.message);
     // The view's own column types come back nullable even though every one
     // of these is populated on every real row (same cast Build 05's
     // schedule queries make for v_package_site/v_phase_site).
     rows = data as Row[];
   } else {
-    const { data, error } = await supabase
-      .from("v_package_site")
-      .select("id, name, project_id, seq_no")
-      .ilike("name", q)
-      .limit(5);
+    const { data, error } = await inScope(
+      supabase.from("v_package_site").select("id, name, project_id, seq_no").ilike("name", q),
+      scope
+    ).limit(5);
     if (error) throw new Error(error.message);
     rows = data as Row[];
   }
@@ -177,22 +198,24 @@ async function searchPackages(
 async function searchStockRequests(
   supabase: Supa,
   query: string,
-  isAdmin: boolean
+  isAdmin: boolean,
+  scope: Scope
 ): Promise<SearchResultDTO[]> {
   type Row = { id: string; ref_no: string; material_name: string; project_id: string };
   const filter = ilikeAnyFilter(["material_name", "ref_no"], query);
   const { data, error } = isAdmin
-    ? await supabase
-        .from("stock_requests")
-        .select("id, ref_no, material_name, project_id")
-        .or(filter)
-        .is("deleted_at", null)
-        .limit(5)
-    : await supabase
-        .from("v_stock_request_site")
-        .select("id, ref_no, material_name, project_id")
-        .or(filter)
-        .limit(5);
+    ? await inScope(
+        supabase
+          .from("stock_requests")
+          .select("id, ref_no, material_name, project_id")
+          .or(filter)
+          .is("deleted_at", null),
+        scope
+      ).limit(5)
+    : await inScope(
+        supabase.from("v_stock_request_site").select("id, ref_no, material_name, project_id").or(filter),
+        scope
+      ).limit(5);
   if (error) throw new Error(error.message);
   const rows = data as Row[];
   const refs = await projectRefs(
@@ -210,13 +233,15 @@ async function searchStockRequests(
 }
 
 /** APX-64: matched on the item OR the ref number ("AP-BHEL-NCH-007"). */
-async function searchApprovals(supabase: Supa, query: string): Promise<SearchResultDTO[]> {
-  const { data, error } = await supabase
-    .from("approvals")
-    .select("id, ref_no, item, project_id")
-    .or(ilikeAnyFilter(["item", "ref_no"], query))
-    .is("deleted_at", null)
-    .limit(5);
+async function searchApprovals(supabase: Supa, query: string, scope: Scope): Promise<SearchResultDTO[]> {
+  const { data, error } = await inScope(
+    supabase
+      .from("approvals")
+      .select("id, ref_no, item, project_id")
+      .or(ilikeAnyFilter(["item", "ref_no"], query))
+      .is("deleted_at", null),
+    scope
+  ).limit(5);
   if (error) throw new Error(error.message);
   const refs = await projectRefs(
     supabase,
@@ -232,19 +257,29 @@ async function searchApprovals(supabase: Supa, query: string): Promise<SearchRes
   }));
 }
 
-async function searchBills(supabase: Supa, q: string, isAdmin: boolean): Promise<SearchResultDTO[]> {
+async function searchBills(
+  supabase: Supa,
+  q: string,
+  isAdmin: boolean,
+  scope: Scope
+): Promise<SearchResultDTO[]> {
   type Row = { id: string; bill_no: string; project_id: string };
   const { data, error } = isAdmin
-    ? await supabase.from("bills").select("id, bill_no, project_id").ilike("bill_no", q).limit(5)
+    ? await inScope(
+        supabase.from("bills").select("id, bill_no, project_id").ilike("bill_no", q),
+        scope
+      ).limit(5)
     : // A client never sees a draft: the same filter as their Bills list
       // (getBillsPageForClient) and bill detail, so search finds only bills
       // the client can open.
-      await supabase
-        .from("v_bill_client")
-        .select("id, bill_no, project_id")
-        .ilike("bill_no", q)
-        .neq("status", "draft")
-        .limit(5);
+      await inScope(
+        supabase
+          .from("v_bill_client")
+          .select("id, bill_no, project_id")
+          .ilike("bill_no", q)
+          .neq("status", "draft"),
+        scope
+      ).limit(5);
   if (error) throw new Error(error.message);
   const rows = data as Row[];
   const refs = await projectRefs(
@@ -261,11 +296,26 @@ async function searchBills(supabase: Supa, q: string, isAdmin: boolean): Promise
   }));
 }
 
-async function searchInventory(supabase: Supa, q: string, isAdmin: boolean): Promise<SearchResultDTO[]> {
+async function searchInventory(
+  supabase: Supa,
+  q: string,
+  isAdmin: boolean,
+  scope: Scope
+): Promise<SearchResultDTO[]> {
   type Row = { id: string; name: string; project_id: string | null };
-  const { data, error } = isAdmin
-    ? await supabase.from("v_inventory_status").select("id, name, project_id").ilike("name", q).limit(5)
-    : await supabase.from("v_inventory_site").select("id, name, project_id").ilike("name", q).limit(5);
+  const base = isAdmin
+    ? supabase.from("v_inventory_status").select("id, name, project_id").ilike("name", q)
+    : supabase.from("v_inventory_site").select("id, name, project_id").ilike("name", q);
+  // The previewed project's items plus the central store's (project_id null),
+  // which that role would also find. Only a UUID is ever interpolated into
+  // the `or` string; anything else falls back to a plain `eq`, which matches
+  // nothing rather than reshaping the filter.
+  const scoped = !scope
+    ? base
+    : isUuid(scope)
+      ? base.or(`project_id.eq.${scope},project_id.is.null`)
+      : base.eq("project_id", scope);
+  const { data, error } = await scoped.limit(5);
   if (error) throw new Error(error.message);
   const rows = data as Row[];
   const refs = await projectRefs(
