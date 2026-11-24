@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { UNIT_CODES, createStockRequestSchema } from "../schema";
+import { UNIT_CODES, createStockRequestSchema, isUnitCode } from "../schema";
 
 /**
  * APX-40: the New Stock Request unit is an enum mirroring `public.units`.
@@ -26,6 +26,11 @@ function unitCodesFromMigrations(): string[] {
 describe("UNIT_CODES", () => {
   it("matches the units the migrations seed", () => {
     expect([...UNIT_CODES].sort()).toEqual(unitCodesFromMigrations());
+  });
+
+  it("isUnitCode narrows a database unit to the enum", () => {
+    expect(isUnitCode("sft")).toBe(true);
+    expect(isUnitCode("kg")).toBe(false);
   });
 });
 

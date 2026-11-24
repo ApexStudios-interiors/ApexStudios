@@ -10,6 +10,11 @@ import { stripMoneyFormatting } from "@/lib/money/input";
  */
 export const UNIT_CODES = ["bag", "sft", "kit", "len", "can", "sqm", "rft", "nos", "set"] as const;
 export type UnitCode = (typeof UNIT_CODES)[number];
+/** Narrows a unit read from the database (an inventory item's) to the enum,
+ *  so it can be put into the New Stock Request form. */
+export function isUnitCode(value: string): value is UnitCode {
+  return (UNIT_CODES as readonly string[]).includes(value);
+}
 
 /** APX-40: free-text bounds — a field message, not a database error. */
 export const MATERIAL_NAME_MAX = 120;
