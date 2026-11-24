@@ -241,10 +241,15 @@ select
   sr.cancelled_reason,
   sr.split_from_id
 from public.stock_requests sr
-where sr.deleted_at is null and public.is_member_of(sr.project_id);
+where sr.deleted_at is null
+  and public.is_member_of(sr.project_id)
+  -- Keep the role predicate 20261124100005 added (APX-09): this migration
+  -- runs after it and redefines the view, so leaving it out would let a
+  -- client read stock requests again.
+  and (public.is_admin() or public.auth_role() = 'site');
 
 comment on view public.v_stock_request_site is
-  'Site-facing. OMITS rate and billed_on_bill_id. rate is the internal cost per unit; billed_on_bill_id would reveal which materials have been billed and therefore that they carry a margin.';
+  'Site-facing (admin or site only — APX-09). OMITS rate and billed_on_bill_id. rate is the internal cost per unit; billed_on_bill_id would reveal which materials have been billed and therefore that they carry a margin.';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- D. APX-44 — a retried create is "already submitted", not a second request

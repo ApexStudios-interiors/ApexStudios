@@ -123,14 +123,21 @@ export const updateProject = adminAction
     const { id, ...patch } = parsedInput;
     const supabase = await createClient();
 
-    const { data: current, error: readErr } = await supabase
-      .from("projects")
-      .select("status, start_date, mobilisation_recovered")
-      .eq("id", id)
-      .is("deleted_at", null)
-      .maybeSingle();
+    // The money columns come from v_project_finance: authenticated has no
+    // SELECT on them in `projects` (APX-09, migration 20261124100005).
+    const [{ data: row, error: readErr }, { data: finance, error: financeErr }] = await Promise.all([
+      supabase
+        .from("projects")
+        .select("status, start_date")
+        .eq("id", id)
+        .is("deleted_at", null)
+        .maybeSingle(),
+      supabase.from("v_project_finance").select("mobilisation_recovered").eq("id", id).maybeSingle(),
+    ]);
     if (readErr) throw new Error(readErr.message);
-    if (!current) throw new Error("NOT_FOUND: project");
+    if (financeErr) throw new Error(financeErr.message);
+    if (!row || !finance) throw new Error("NOT_FOUND: project");
+    const current = { ...row, mobilisation_recovered: finance.mobilisation_recovered ?? 0 };
 
     const refusal = projectEditRefusal(
       {
@@ -221,16 +228,34 @@ export async function getProjectForEdit(projectId: string): Promise<ProjectForEd
   "use server";
   await requireRole(["admin"]);
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("projects")
-    .select(
-      "id, name, location, start_date, target_end_date, contract_value, gst_rate_pct, retention_pct, mas_billable_pct, tds_pct, mobilisation_advance, mobilisation_recovered, mobilisation_recovery_pct, status"
-    )
-    .eq("id", projectId)
-    .is("deleted_at", null)
-    .maybeSingle();
+  // contract_value and the mobilisation figures are not selectable on
+  // `projects` (APX-09, migration 20261124100005); v_project_finance serves
+  // them to admin and to a client on their own project.
+  const [{ data: row, error }, { data: finance, error: financeErr }] = await Promise.all([
+    supabase
+      .from("projects")
+      .select(
+        "id, name, location, start_date, target_end_date, gst_rate_pct, retention_pct, mas_billable_pct, tds_pct, mobilisation_recovery_pct, status"
+      )
+      .eq("id", projectId)
+      .is("deleted_at", null)
+      .maybeSingle(),
+    supabase
+      .from("v_project_finance")
+      .select("contract_value, mobilisation_advance, mobilisation_recovered")
+      .eq("id", projectId)
+      .maybeSingle(),
+  ]);
   if (error) throw new Error(error.message);
-  if (!data) return null;
+  if (financeErr) throw new Error(financeErr.message);
+  if (!row || !finance) return null;
+  // View columns are typed nullable; the table columns behind them are NOT NULL default 0.
+  const data = {
+    ...row,
+    contract_value: finance.contract_value ?? 0,
+    mobilisation_advance: finance.mobilisation_advance ?? 0,
+    mobilisation_recovered: finance.mobilisation_recovered ?? 0,
+  };
   return {
     id: data.id,
     name: data.name,
