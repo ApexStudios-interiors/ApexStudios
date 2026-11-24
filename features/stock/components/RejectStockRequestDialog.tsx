@@ -29,7 +29,7 @@ export function RejectStockRequestDialog({ requestId }: { requestId: string }) {
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm({ resolver: zodResolver(rejectSchema), defaultValues: { note: "" } });
 
   const reject = useAction(transitionStockRequest, {
@@ -38,6 +38,9 @@ export function RejectStockRequestDialog({ requestId }: { requestId: string }) {
       toast("Request rejected");
       router.refresh();
     },
+    // APX-39: the request may have moved on under us; show where it is now.
+    // The message itself stays in the dialog below.
+    onError: () => router.refresh(),
   });
 
   const onSubmit = handleSubmit((values) =>
@@ -49,6 +52,7 @@ export function RejectStockRequestDialog({ requestId }: { requestId: string }) {
       title="Reject Stock Request"
       okLabel={reject.isPending ? "Rejecting…" : "Reject"}
       okPending={reject.isPending}
+      dirty={isDirty}
       onClose={closeDialog}
       onOk={onSubmit}
     >

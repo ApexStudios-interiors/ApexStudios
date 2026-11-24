@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
-import { updatePackageSchema } from "@/features/packages/schema";
+import { PACKAGE_FIELD_NAME_MAX, updatePackageSchema } from "@/features/packages/schema";
+import { MoneyEcho } from "@/components/shared/MoneyEcho";
+import { InternalOverAllocatedNote } from "./InternalOverAllocatedNote";
 import {
   updatePackage,
   getPackageForEdit,
@@ -48,12 +50,12 @@ export function EditModuleDialog({ moduleId }: { projectId: string; moduleId: st
     getPackageForEdit(moduleId)
       .then(setCurrent)
       .catch(() => {
-        toast("Could not load this package.");
+        toast("Could not load this package.", "error");
         setCurrent(null);
       });
     getStaffOptions()
       .then(setStaff)
-      .catch(() => toast("Could not load staff."));
+      .catch(() => toast("Could not load staff.", "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [moduleId]);
 
@@ -73,7 +75,7 @@ export function EditModuleDialog({ moduleId }: { projectId: string; moduleId: st
     control,
     handleSubmit,
     reset,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm({
     // No explicit generic — see AddModuleDialog's own useForm for why.
     resolver: zodResolver(updatePackageSchema),
@@ -104,11 +106,12 @@ export function EditModuleDialog({ moduleId }: { projectId: string; moduleId: st
     onError: ({ error }) => {
       // The stale-write conflict (architecture.md §8.3) surfaces through the
       // same serverError channel every other domain error uses.
-      if (error.serverError) toast(error.serverError);
+      if (error.serverError) toast(error.serverError, "error");
     },
   });
 
   const onSubmit = handleSubmit((values) => update.execute(values));
+  const [allocated, internal] = useWatch({ control, name: ["allocatedAmount", "internalAmount"] });
 
   if (current === undefined) {
     return (
@@ -124,33 +127,52 @@ export function EditModuleDialog({ moduleId }: { projectId: string; moduleId: st
       title="Edit Package"
       okLabel={update.isPending ? "Saving…" : "Save"}
       okPending={update.isPending}
+      dirty={isDirty}
       onClose={closeDialog}
       onOk={onSubmit}
     >
-      <form onSubmit={onSubmit} className="grid grid-cols-2 gap-3.5">
+      <form onSubmit={onSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         <input type="hidden" {...register("updatedAt")} />
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <Field label="Package Name" htmlFor="em-name">
-            <input id="em-name" className={inputClass} {...register("name")} />
+            <input
+              id="em-name"
+              className={inputClass}
+              maxLength={PACKAGE_FIELD_NAME_MAX}
+              {...register("name")}
+            />
           </Field>
           {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
         </div>
         <div>
-          <Field label="Allocated Budget" htmlFor="em-alloc">
-            <input id="em-alloc" className={inputClass} {...register("allocatedAmount")} />
+          <Field label="Allocated Budget" htmlFor="em-alloc" error={errors.allocatedAmount?.message}>
+            <input
+              id="em-alloc"
+              className={inputClass}
+              inputMode="decimal"
+              autoComplete="off"
+              aria-invalid={!!errors.allocatedAmount}
+              aria-describedby="em-alloc-echo"
+              {...register("allocatedAmount")}
+            />
           </Field>
-          {errors.allocatedAmount && (
-            <p className="text-xs text-destructive mt-1">{errors.allocatedAmount.message}</p>
-          )}
+          <MoneyEcho id="em-alloc-echo" value={allocated} />
         </div>
         <div>
-          <Field label="Internal Budget" htmlFor="em-internal">
-            <input id="em-internal" className={inputClass} {...register("internalAmount")} />
+          <Field label="Internal Budget" htmlFor="em-internal" error={errors.internalAmount?.message}>
+            <input
+              id="em-internal"
+              className={inputClass}
+              inputMode="decimal"
+              autoComplete="off"
+              aria-invalid={!!errors.internalAmount}
+              aria-describedby="em-internal-echo"
+              {...register("internalAmount")}
+            />
           </Field>
-          {errors.internalAmount && (
-            <p className="text-xs text-destructive mt-1">{errors.internalAmount.message}</p>
-          )}
+          <MoneyEcho id="em-internal-echo" value={internal} />
         </div>
+        <InternalOverAllocatedNote allocated={allocated} internal={internal} className="sm:col-span-2" />
         <div>
           <Field label="Lead" htmlFor="em-lead">
             <Controller
@@ -223,7 +245,7 @@ export function EditModuleDialog({ moduleId }: { projectId: string; moduleId: st
           </Field>
         </div>
         {update.result.serverError && (
-          <p className="col-span-2 text-[12.5px] text-destructive">{update.result.serverError}</p>
+          <p className="sm:col-span-2 text-[12.5px] text-destructive">{update.result.serverError}</p>
         )}
       </form>
     </DialogShell>

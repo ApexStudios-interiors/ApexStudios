@@ -1,7 +1,8 @@
 # Database Schema
 
 Generated from `supabase/migrations/*.sql` (the schema source of truth) as of
-2026-09-17, with all later `ALTER TABLE` migrations applied. The relationship
+2026-09-17, with all later `ALTER TABLE` migrations applied; `notification_reads`
+(migration `20260928090001`) added 2026-11-24. The relationship
 diagram is in [er-diagram.md](er-diagram.md).
 
 All tables live in the `public` schema. If this file and the migrations
@@ -453,6 +454,25 @@ No foreign keys, so entries survive deletions.
 | lease_until | timestamptz | expiry means the worker died |
 | last_error | text | |
 | started_at, finished_at, created_at | timestamptz | |
+
+---
+
+## Notifications
+
+There is still no notifications table: `v_notifications` is computed live, so
+a notification exists exactly as long as the work behind it (ADR-014). This
+table records only that a user has *seen* one (D60).
+
+### `notification_reads`
+
+Own rows only, for every verb (`nr_*_own` policies on `profile_id = auth.uid()`).
+
+| Column | Type | Notes |
+|---|---|---|
+| profile_id | uuid | PK, FK → profiles (cascade) |
+| kind | text | PK. The view's discriminator; deliberately not an enum |
+| entity_id | uuid | PK. Polymorphic, no FK (the view is a union over four tables) |
+| read_at | timestamptz | default now(). Unread = no row, or `read_at` < the notification's `created_at`, so re-raised work shows as unread again |
 
 ---
 

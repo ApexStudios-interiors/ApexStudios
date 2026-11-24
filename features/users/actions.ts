@@ -1,7 +1,7 @@
 "use server";
 
 import "server-only";
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminAction, authedAction } from "@/lib/safe-action";
 import {
@@ -133,11 +133,15 @@ export const createClientLogin = adminAction
         role: "client",
       }),
       afterProfile: async (userId) => {
-        await insertProjectMember(supabase, {
+        const added = await insertProjectMember(supabase, {
           projectId: parsedInput.projectId,
           profileId: userId,
           addedBy: ctx.session.userId,
+          expectedRole: "client",
         });
+        // The profile was just created as a client, so a refusal here means
+        // the role did not stick — fail, and provisionAccount rolls back.
+        if (typeof added === "object") throw new Error(`FORBIDDEN: ${added.reason}`);
       },
     };
 
@@ -146,7 +150,6 @@ export const createClientLogin = adminAction
       return { status: "username_taken" as const, username: parsedInput.username };
     }
 
-    updateTag(`project:${parsedInput.projectId}`);
     revalidatePath("/users");
     revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
     return {

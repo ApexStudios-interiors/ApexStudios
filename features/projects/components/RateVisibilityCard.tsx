@@ -44,7 +44,7 @@ export function RateVisibilityCard({ projectId, value }: { projectId: string; va
     },
     onError: () => {
       setMode(value);
-      toast("Could not update rate visibility.");
+      toast("Could not update rate visibility.", "error");
     },
   });
 

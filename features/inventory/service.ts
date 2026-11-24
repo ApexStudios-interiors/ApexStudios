@@ -14,6 +14,15 @@ export function inventoryStatus(qtyOnHand: number, reorderLevel: number): Invent
   return "ok";
 }
 
+/** The Inventory pages' `?status=` filter (APX-51): the Low Stock and
+ *  Critical tiles link to it. Only the two statuses worth drilling into are
+ *  filters; anything else (absent, "ok", a typo) is the unfiltered list. */
+export type InventoryStatusFilter = Exclude<InventoryStatus, "ok">;
+
+export function parseInventoryStatusFilter(raw: string | undefined): InventoryStatusFilter | undefined {
+  return raw === "low" || raw === "critical" ? raw : undefined;
+}
+
 /**
  * The Inventory toolbar's `q` search param. Normalising and building the
  * filter live here, not in `queries.ts`, so both are unit-testable without a

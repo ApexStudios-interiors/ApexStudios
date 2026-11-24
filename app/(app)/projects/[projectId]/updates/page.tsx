@@ -3,20 +3,22 @@ import { requireSession } from "@/lib/auth/session";
 import { getProjectHeader } from "@/features/projects/queries";
 import { getUpdatesForProject } from "@/features/updates/queries";
 import { getPackageOptions } from "@/features/updates/actions";
-import { UpdateList } from "@/features/updates/components/UpdateList";
+import { UpdateFeed } from "@/features/updates/components/UpdateFeed";
 import { PackageFilterSelect } from "@/features/packages/components/PackageFilterSelect";
 import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
-import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
-import Link from "next/link";
 import { projectBase } from "@/lib/routing/current";
+import { projectWriteRefusal } from "@/features/projects/service";
 
 /**
  * build/06-files-jobs-daily-updates.md §4.2: the timeline, the package
  * filter dropdown, and "+ Post Update" hidden for the client role. A plain
  * Server Component reading `searchParams` for both the filter and
- * pagination — `PackageFilterSelect` is the one client boundary, a
- * select that navigates on change; "Load more" is a plain link.
+ * pagination — `PackageFilterSelect` is a select that navigates on change.
+ *
+ * "Load more" appends the next page in place (`UpdateFeed`, APX-51) instead
+ * of linking to `?cursor=`, which replaced the list. A `cursor` in the URL
+ * (an old bookmarked link) still opens the list from that point.
  */
 export default async function UpdatesPage({
   params,
@@ -39,6 +41,8 @@ export default async function UpdatesPage({
 
   const effectiveRole = session.impersonating?.role ?? session.role;
   const isClient = effectiveRole === "client";
+  // APX-41: no new daily update on a completed or archived project.
+  const readOnly = projectWriteRefusal(header.statusKey, "daily_update");
   const basePath = `${await projectBase(projectId)}/updates`;
 
   return (
@@ -52,7 +56,12 @@ export default async function UpdatesPage({
         </div>
         <div className="ml-auto flex gap-2">
           {!isClient && (
-            <OpenDialogButton dialog={{ kind: "postUpdate", projectId }} variant="primary">
+            <OpenDialogButton
+              dialog={{ kind: "postUpdate", projectId }}
+              variant="primary"
+              disabled={!!readOnly}
+              title={readOnly ?? undefined}
+            >
               <Icon name="plus" className="w-[15px] h-[15px]" />
               Post Update
             </OpenDialogButton>
@@ -64,20 +73,12 @@ export default async function UpdatesPage({
         <PackageFilterSelect basePath={basePath} packages={packages} value={packageId ?? ""} />
       </div>
 
-      <Card>
-        <UpdateList updates={page.items} />
-      </Card>
-
-      {page.nextCursor && (
-        <div className="mt-3 text-center">
-          <Link
-            href={`${basePath}?${packageId ? `package=${packageId}&` : ""}cursor=${page.nextCursor}`}
-            className="text-[13px] text-muted-foreground underline"
-          >
-            Load more
-          </Link>
-        </div>
-      )}
+      <UpdateFeed
+        key={`${packageId ?? ""}:${cursor ?? ""}`}
+        projectId={projectId}
+        packageId={packageId}
+        initial={page}
+      />
     </div>
   );
 }

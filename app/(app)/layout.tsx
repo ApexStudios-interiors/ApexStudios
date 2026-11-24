@@ -7,13 +7,8 @@ import { Toast } from "@/components/ui/Toast";
 import { DialogHost } from "@/components/shared/DialogHost";
 import { PreviewBanner } from "@/components/auth/PreviewBanner";
 import { getSession } from "@/lib/auth/session";
-import { getNotifications } from "@/features/notifications/queries";
-import { getPortfolio } from "@/features/projects/queries";
-import { getPackageNavLists } from "@/features/packages/queries";
-import { countPendingRequestsByProject } from "@/features/stock/queries";
-import { countPendingApprovalsByProject } from "@/features/approvals/queries";
-import { countSubmittedBillsByProject } from "@/features/billing/queries";
-import type { NavProject } from "@/components/layout/nav-project";
+import { BackupAlertBanner } from "@/components/layout/BackupAlertBanner";
+import { loadShellData } from "./shell-data";
 
 /**
  * The authenticated app shell: Sidebar, Header, the AppProvider that still
@@ -33,65 +28,26 @@ export default async function AppShellLayout({ children }: { children: React.Rea
 
   const effectiveRole = session.impersonating?.role ?? session.role;
 
-  // IN PARALLEL, not one after the other. Both need only `session`, and
-  // neither reads the other's result — awaiting them in sequence made every
-  // page in the app wait for a round trip it had no reason to wait for. This
-  // layout runs on EVERY page, so the saving is on every navigation, not one
-  // screen.
-  //
-  // The sidebar's project menu used to map over AppContext's `lib/data.ts`
-  // fixture — two hard-coded prototype projects — so a project created through
-  // the app was saved correctly and then never appeared in the sidebar. It
-  // reads the same portfolio the All Projects page does, through the same
-  // role-scoped query, so the two can no longer disagree.
-  const [notifications, portfolio] = await Promise.all([getNotifications(session), getPortfolio(session)]);
-  const projectIds = portfolio.projects.map((p) => p.id);
-
-  // The package sub-list and the three badge counts came off the same fixture,
-  // so a real project listed no packages and every badge read 0. They are real
-  // reads now, every one of them through the user's own Supabase client, so
-  // RLS scopes them exactly as it scopes the pages they link to.
-  //
-  // All of it is fetched for the WHOLE portfolio rather than for the project
-  // that happens to be open, because this is a layout: Next.js does not
-  // re-render a layout on navigation (see its own `layout` reference — the
-  // same reason a layout cannot read search params), so a figure scoped to
-  // "the open project" would freeze at whichever project the tab was first
-  // opened on. Portfolio-wide is also the cheaper shape: two or three queries
-  // per shell render instead of two or three per navigation, each projecting
-  // one column over the pending rows only.
-  //
-  // Only the badges a role actually shows are fetched. Preserved exactly from
-  // the prototype: stock pending for everyone but a client, approvals pending
-  // and bills submitted for a client only.
-  const isClient = effectiveRole === "client";
-  const none: Record<string, number> = {};
-  const [packagesByProject, pendingRequests, pendingApprovals, submittedBills] = await Promise.all([
-    getPackageNavLists(session, projectIds),
-    isClient ? none : countPendingRequestsByProject(session, projectIds),
-    isClient ? countPendingApprovalsByProject(projectIds) : none,
-    isClient ? countSubmittedBillsByProject(projectIds) : none,
-  ]);
-
-  const projects: NavProject[] = portfolio.projects.map((p) => ({
-    id: p.id,
-    code: p.code,
-    name: p.name,
-    packages: packagesByProject[p.id] ?? [],
-    pendingRequests: pendingRequests[p.id] ?? 0,
-    pendingApprovals: pendingApprovals[p.id] ?? 0,
-    submittedBills: submittedBills[p.id] ?? 0,
-  }));
+  // The bell, the sidebar's projects, their badge counts and the admin backup
+  // banner — all read in parallel, all non-essential: a failure in any of them
+  // renders the shell without that piece rather than failing every route
+  // (APX-52). See ./shell-data.ts.
+  const { notifications, unreadCount, projects, backupAlert } = await loadShellData(session);
 
   return (
     <SessionProvider session={session}>
       <AppProvider initialRole={effectiveRole}>
         {session.impersonating && <PreviewBanner role={session.impersonating.role} />}
-        <div className="grid grid-cols-[250px_1fr] min-h-screen">
+        {backupAlert && <BackupAlertBanner alert={backupAlert} />}
+        {/* APX-16: one column below md — Sidebar hides itself and the Header's
+            menu button opens the same nav in a drawer. `min-w-0` on the content
+            column is what lets a wide table scroll inside its own container
+            instead of widening the page. */}
+        <div className="md:grid md:grid-cols-[250px_1fr] min-h-screen">
           <Sidebar projects={projects} />
           <div className="min-w-0">
-            <Header notifications={notifications} projects={projects} />
-            <div className="p-7 max-w-[1280px]">{children}</div>
+            <Header notifications={notifications} unreadCount={unreadCount} projects={projects} />
+            <main className="p-4 md:p-7 max-w-[1280px] min-w-0">{children}</main>
           </div>
         </div>
         <DialogHost />

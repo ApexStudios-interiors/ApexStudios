@@ -1,6 +1,6 @@
 import { requireRoleForPage } from "@/lib/auth/session";
 import { getFailedJobs } from "@/features/ops/queries";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import { parsePageRequest } from "@/lib/pagination";
 import { TablePagination } from "@/components/shared/TablePagination";
 import { Card } from "@/components/ui/Card";

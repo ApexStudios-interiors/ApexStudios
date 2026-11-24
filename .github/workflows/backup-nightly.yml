@@ -67,6 +67,25 @@ jobs:
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
           /usr/lib/postgresql/17/bin/pg_dump "$SUPABASE_DB_URL" --no-owner --no-privileges | gzip > backup.sql.gz
 
+      # APX-19: prove the file is a complete, readable dump BEFORE it becomes
+      # tonight's only recovery point. `gunzip -t` checks every gzip block and
+      # the trailing CRC; pg_dump writes its "dump complete" footer only when
+      # it reaches the end, so a dump cut short (lost connection, timeout)
+      # fails here instead of being uploaded. backup.verify re-checks the
+      # uploaded object's size on Vercel half an hour later.
+      - name: Check dump integrity
+        run: |
+          set -euo pipefail
+          gunzip -t backup.sql.gz
+          BYTES=$(stat -c %s backup.sql.gz)
+          echo "compressed size: $BYTES bytes"
+          [ "$BYTES" -gt 10240 ] || { echo "::error::backup.sql.gz is only $BYTES bytes"; exit 1; }
+          # Captured first, then searched: `grep -q` exiting early could
+          # otherwise SIGPIPE the pipeline and fail it under pipefail.
+          FOOTER=$(gunzip -c backup.sql.gz | tail -n 5)
+          grep -q "PostgreSQL database dump complete" <<<"$FOOTER" \
+            || { echo "::error::the dump has no 'dump complete' footer, so pg_dump stopped early"; exit 1; }
+
       # A token scoped ONLY to apex-backups (build §0.1) — distinct from the
       # app's own R2 credentials, which must never be able to reach this
       # bucket at all. It must be an Object Read & WRITE token: the Object

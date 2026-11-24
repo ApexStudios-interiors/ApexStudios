@@ -13,7 +13,7 @@ import {
   composeAdjustReason,
   type AdjustReasonPreset,
 } from "@/features/inventory/service";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import { todayIst } from "@/lib/dates";
 import { formatQty } from "@/lib/quantity";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
@@ -96,6 +96,7 @@ export function AdjustInventoryDialog({ item }: { item: Item }) {
         description={item.name}
         okLabel={adjust.isPending ? "Saving…" : "Confirm Adjustment"}
         okPending={adjust.isPending}
+        dirty
         onClose={closeDialog}
         onOk={save}
       >
@@ -137,11 +138,12 @@ export function AdjustInventoryDialog({ item }: { item: Item }) {
       title="Adjust Inventory"
       description={`${item.name} · on hand ${qty(item.qtyOnHand)}`}
       okLabel="Review"
+      dirty={newQty.trim() !== String(item.qtyOnHand) || note.trim() !== ""}
       onClose={closeDialog}
       onOk={review}
     >
       <form
-        className="grid grid-cols-2 gap-4"
+        className="grid grid-cols-1 sm:grid-cols-2 gap-4"
         onSubmit={(e) => {
           e.preventDefault();
           review();
@@ -192,7 +194,7 @@ export function AdjustInventoryDialog({ item }: { item: Item }) {
             </SelectContent>
           </Select>
         </Field>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <Field label={preset === OTHER_REASON ? "Details" : "Note"} htmlFor="adj-note">
             <input
               id="adj-note"
@@ -206,7 +208,7 @@ export function AdjustInventoryDialog({ item }: { item: Item }) {
             />
           </Field>
         </div>
-        {error && <p className="col-span-2 text-xs text-destructive -mt-2">{error}</p>}
+        {error && <p className="sm:col-span-2 text-xs text-destructive -mt-2">{error}</p>}
         {/* Enter submits; the visible button is DialogShell's own. */}
         <button type="submit" hidden />
       </form>

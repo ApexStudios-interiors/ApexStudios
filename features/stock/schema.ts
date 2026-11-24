@@ -1,5 +1,23 @@
 import { z } from "zod";
 import { todayIst } from "@/lib/dates";
+import { stripMoneyFormatting } from "@/lib/money/input";
+
+/**
+ * The unit codes `public.units` is seeded with
+ * (supabase/migrations/20260909170006_inventory_and_movements.sql). Adding a
+ * unit is a migration inserting a row AND an entry here —
+ * features/stock/__tests__/units.test.ts fails until the two agree.
+ */
+export const UNIT_CODES = ["bag", "sft", "kit", "len", "can", "sqm", "rft", "nos", "set"] as const;
+export type UnitCode = (typeof UNIT_CODES)[number];
+/** Narrows a unit read from the database (an inventory item's) to the enum. */
+export function isUnitCode(value: string): value is UnitCode {
+  return (UNIT_CODES as readonly string[]).includes(value);
+}
+
+/** APX-40: free-text bounds — a field message, not a database error. */
+export const MATERIAL_NAME_MAX = 120;
+export const NOTE_MAX = 1000;
 
 /** The needed-by field cannot be in the past — today itself is allowed. The
  *  boundary is `todayIst()`, the one "today" this business keeps (lib/dates),
@@ -15,6 +33,10 @@ const NOT_IN_THE_PAST = "Needed-by date cannot be in the past";
  *  before it ever reaches the RPC (the RPC also refuses to store it for a
  *  non-admin caller, as a second, harder boundary). */
 export const createStockRequestSchema = z.object({
+  // APX-44: generated once by the form (and optionally by the mobile app), so
+  // a retry after a lost response is recognised as the same request and
+  // answered "already submitted" instead of raising a second one.
+  id: z.uuid().optional(),
   projectId: z.uuid(),
   packageId: z.uuid(),
   // The "" -> undefined pattern (features/packages/schema.ts's own fix,
@@ -28,24 +50,38 @@ export const createStockRequestSchema = z.object({
     .union([z.uuid(), z.literal("")])
     .optional()
     .transform((v) => (v ? v : undefined)),
-  materialName: z.string().trim().min(1, "Material name is required"),
-  qty: z.coerce.number().positive("Quantity must be positive"),
-  unit: z.string().trim().min(1, "Unit is required"),
+  materialName: z
+    .string()
+    .trim()
+    .min(1, "Material name is required")
+    .max(MATERIAL_NAME_MAX, `Keep the material name to ${MATERIAL_NAME_MAX} characters or fewer`),
+  qty: z.coerce
+    .number({ error: "Enter a quantity, like 25 or 12.5" })
+    .positive("Quantity must be positive")
+    .max(99_999_999_999, "That quantity is too large"),
+  // APX-40: the fixed list `public.units` is seeded with. A bad unit used to
+  // reach the foreign key and come back as "Something went wrong".
+  unit: z.enum(UNIT_CODES, { error: "Choose a unit" }),
   // `z.coerce.number()` alone coerces "" to 0 before `.optional()` ever sees
   // it — found live via review: a blank Rate field silently submitted a
   // real rate of ₹0 instead of "not specified." Preprocessing "" to
   // undefined first is the same "" -> undefined shape as phaseId/neededBy
   // above, just ahead of the coercion instead of after it.
+  // Grouping commas ("1,250") are stripped first, the same as every other
+  // money field (lib/money/input, APX-40).
   rate: z.preprocess(
-    (v) => (v === "" ? undefined : v),
-    z.coerce.number().nonnegative("Rate cannot be negative").optional()
+    (v) => (v === "" ? undefined : typeof v === "string" ? stripMoneyFormatting(v) : v),
+    z.coerce
+      .number({ error: "Enter a rate, like 1,250 or 1250.50" })
+      .nonnegative("Rate cannot be negative")
+      .optional()
   ),
   neededBy: z
     .union([z.iso.date(), z.literal("")])
     .optional()
     .transform((v) => (v ? v : undefined))
     .refine((v) => v === undefined || v >= todayIst(), NOT_IN_THE_PAST),
-  note: z.string().trim().optional(),
+  note: z.string().trim().max(NOTE_MAX, `Keep the note to ${NOTE_MAX} characters or fewer`).optional(),
 });
 export type CreateStockRequestInput = z.infer<typeof createStockRequestSchema>;
 
@@ -64,9 +100,42 @@ export const duplicateRequestCheckSchema = z.object({
 });
 export type DuplicateRequestCheckInput = z.infer<typeof duplicateRequestCheckSchema>;
 
+/** "" -> undefined ahead of the number coercion — the same reason as `rate`
+ *  above: z.coerce.number() alone turns a blank field into a real 0. */
+const optionalNumber = <T extends z.ZodType>(n: T) =>
+  z.preprocess((v) => (v === "" || v === null ? undefined : v), n.optional());
+
 export const transitionStockRequestSchema = z.object({
   requestId: z.uuid(),
-  toStatus: z.enum(["approved", "rejected", "ordered", "delivered"]),
-  note: z.string().trim().optional(),
+  toStatus: z.enum(["approved", "rejected", "ordered", "delivered", "cancelled"]),
+  note: z.string().trim().max(NOTE_MAX, `Keep the note to ${NOTE_MAX} characters or fewer`).optional(),
+  // APX-14: admin only, on approval. The RPC refuses it from anyone else and
+  // on any other move, and refuses to approve a rate-less request without it.
+  rate: optionalNumber(z.coerce.number().nonnegative("Rate cannot be negative")),
+  // APX-69: a part delivery. Omitted = the whole request.
+  deliveredQty: optionalNumber(z.coerce.number().positive("Delivered quantity must be more than 0")),
 });
 export type TransitionStockRequestInput = z.infer<typeof transitionStockRequestSchema>;
+
+/** APX-42: rpc_edit_stock_request — the three fields a pending request may
+ *  change. All three are sent every time: a blank needed-by or note clears it. */
+export const editStockRequestSchema = z.object({
+  requestId: z.uuid(),
+  qty: z.coerce.number().positive("Quantity must be positive"),
+  neededBy: z
+    .union([z.iso.date(), z.literal("")])
+    .optional()
+    .transform((v) => (v ? v : undefined)),
+  note: z.string().trim().optional(),
+});
+export type EditStockRequestInput = z.infer<typeof editStockRequestSchema>;
+
+/** APX-14: rpc_set_stock_request_rate — admin, until delivery. */
+export const setStockRequestRateSchema = z.object({
+  requestId: z.uuid(),
+  rate: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.coerce.number({ error: "Enter a rate" }).nonnegative("Rate cannot be negative")
+  ),
+});
+export type SetStockRequestRateInput = z.infer<typeof setStockRequestRateSchema>;

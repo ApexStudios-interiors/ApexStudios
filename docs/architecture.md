@@ -270,7 +270,7 @@ Where each scheduled job runs, and why:
 
 | Job | Schedule | Runs on | Why there |
 |---|---|---|---|
-| `jobs.drain` | every 5 min | **GitHub Actions** | Must be near-real-time; far more frequent than Hobby permits |
+| `jobs.drain` | every 5 min, **plus a kick after every enqueue** (APX-20) | **GitHub Actions** (fallback) + the app itself | Must be near-real-time; far more frequent than Hobby permits |
 | `jobs.reap` | hourly | **GitHub Actions** | Hourly is more frequent than Hobby permits |
 | `inventory.reconcile` | daily 02:00 IST | Vercel Cron | Daily — legal on Hobby, and in-region |
 | `backup.verify` | daily 02:30 IST | Vercel Cron | Daily — legal on Hobby, and in-region |
@@ -289,6 +289,11 @@ scheduler — it lives in the `jobs` table (§8.3).
 
 Two consequences worth stating plainly:
 
+- **Drain on enqueue (APX-20, 2026-11-24).** GitHub's schedule was observed running the drain
+  only every 5–8 hours. `enqueue()` (`lib/jobs/kick.ts`) therefore also calls
+  `/api/cron/jobs.drain` itself, with the same Bearer secret, inside `after()` once the
+  response has gone: bounded by a timeout, every error swallowed and logged, production only.
+  The scheduled workflow is now the fallback for anything a kick misses, not the primary path.
 - **GitHub's scheduler is weaker than Vercel's.** `schedule:` has a 5-minute floor, is
   best-effort, and drops delayed runs rather than backfilling them. §8.1 records what that
   costs the bill-PDF latency target.
@@ -423,7 +428,7 @@ transition to infrequent-access. This is driven by two constraints:
 |---|---|
 | Method | **D17 (docs/decisions.md): a scheduled GitHub Actions workflow** (`.github/workflows/backup-nightly.yml`), not a Vercel function — there is no `pg_dump` binary in that runtime and its timeout is far shorter than a growing logical dump. `ubuntu-latest` runs real `pg_dump`, pipes to `gzip`, uploads to R2 `apex-backups/` with the AWS CLI using a token scoped to that bucket only, then calls `POST /api/backup/report` (Bearer `CRON_SECRET`) to record the outcome as a `backup.nightly` job row — same table, same Admin ops page as every other job. |
 | Schedule | 19:30 UTC = 01:00 IST (the workflow's own cron, GitHub Actions schedules are UTC same as Vercel's) |
-| Verification | **`/api/cron/backup.verify`, a real Vercel cron job, 21:00 UTC = 02:30 IST daily** — `HeadObject`s that day's expected key in `apex-backups` and lets a missing object THROW; its failure (landing in `jobs` as `failed`) is the alert. D17's own requirement: "assert an object was actually written, not merely that the handler did not throw." |
+| Verification | **`/api/cron/backup.verify`, a real Vercel cron job, 21:00 UTC = 02:30 IST daily** — `HeadObject`s that day's expected key in `apex-backups` and THROWS when it is missing, 10 KB or less, or under 50% of the previous day's object (APX-19); its failure (landing in `jobs` as `failed`, retried for ~30 minutes first) is the alert, and the admin shell shows a red banner while the latest run is failed. The workflow itself runs `gunzip -t` and checks pg_dump's "dump complete" footer before uploading. D17's own requirement: "assert an object was actually written, not merely that the handler did not throw." Runbooks: `docs/runbooks/backup-failed.md`, `docs/runbooks/restore-database.md`. |
 | Retention | 30 daily · 12 monthly (first-of-month promoted) — an R2 lifecycle rule on `apex-backups`, not application code |
 | Encryption | R2 server-side; bucket private, separate credentials from the app bucket |
 | RPO | 24 hours (free tier) → **15 minutes once on Supabase Pro with PITR** |
@@ -485,7 +490,7 @@ partial indexes for the hot Billable Now query, and streaming with per-segment `
 | P95 mutation (Server Action) | < 500 ms | Rolling 7 days |
 | P99 mutation | < 2 s | Rolling 7 days |
 | Successful background job rate | > 99% | Rolling 7 days |
-| Bill PDF available within | 5 min of submission (typical) | Per event |
+| Bill PDF available within | Seconds after submission (drain kicked on enqueue, APX-20); next scheduled drain if the kick fails | Per event |
 
 **Why the PDF target is 5 minutes and no longer 60 seconds.** It was 60 s when `jobs.drain`
 was a per-minute Vercel cron. Production runs on Vercel **Hobby**, which caps cron frequency
@@ -496,11 +501,9 @@ polling on this tier at any price short of Vercel Pro. This is a *latency* chang
 submitted work sits `pending` in the `jobs` table and the next tick drains it, so nothing is
 lost and the >99% job success SLO above is unaffected.
 
-Restoring 60 s does not require Pro. Draining inline when the job is enqueued — a
-`bill.pdf` drain kicked off from `features/billing/actions.ts` after the response, with the
-GitHub Actions poll left in place as the retry safety net — would put the PDF seconds behind
-submission. That is a change to the billing submit path and is deliberately **not** bundled
-into the scheduling fix; it is recorded here as the known way back.
+**Restored without Pro (APX-20, 2026-11-24).** Enqueueing now kicks a drain after the response
+(`lib/jobs/kick.ts`), so the PDF is normally seconds behind submission. The GitHub Actions poll
+is the retry safety net, and its observed 5–8-hour gaps are the worst case, not the typical one.
 
 **Error budget policy:** if the availability SLO is breached in a rolling 30 days, the next
 sprint prioritises reliability work over features. Stated up front so it isn't argued about
@@ -535,14 +538,18 @@ uses Vercel's own channels, not application email.
 | Two Admins create bills on one project simultaneously | Row lock on `projects` serialises `next_bill_seq` — gapless, unique |
 | Same phase billed twice | Unique index `bill_lines(source_type, source_id)` — database-enforced |
 | Duplicate action submission (double-click, retry) | Client-generated idempotency key on `createBill` and `recordPayment`, stored and checked |
-| Two Admins editing one package | Optimistic concurrency: `updated_at` sent with the form, mismatch → "changed by someone else, reload" |
+| Two Admins editing one package | Optimistic concurrency: `updated_at` sent with the form, mismatch → `CONFLICT` ("someone else changed this, reload"). A progress-only write (a task slider) no longer moves `packages.updated_at` (APX-45) |
+| Two Admins adding a package/phase at once | `seq_no` allocated by a BEFORE INSERT trigger under a lock on the parent row, over deleted rows too (APX-45/66) |
 | Inventory cache drifts from ledger | Nightly reconcile job recomputes from `stock_movements` and alerts on any delta |
 
 Every job is idempotent by construction — keyed on the entity id via
 `jobs(name, idempotency_key)`, safe to re-run. Retries back off exponentially
 (1m, 2m, 4m, 8m, 16m); after `max_attempts` a job goes terminal as `failed` and appears on the
 Admin ops page with a Retry button. `FOR UPDATE SKIP LOCKED` prevents two overlapping cron
-invocations from double-running work, and an hourly reaper requeues jobs whose lease expired
+invocations from double-running work, and an hourly reaper (`rpc_reap_jobs`, APX-23) treats an
+expired lease as a failed attempt — backed off, and `failed` once `max_attempts` is used — so a
+job that always times out reaches the ops page instead of looping; `rpc_finish_job` applies only
+while the row is still `running` under the claiming attempt. It reaps jobs whose lease expired
 because a function timed out mid-run.
 
 ### 8.4 Graceful degradation
@@ -585,7 +592,7 @@ open. Putting these on the Admin dashboard means they get looked at.
 | Alert | Condition | Channel | Severity |
 |---|---|---|---|
 | Site down | `/api/health` failing 3× consecutively | Email + phone | P1 |
-| Nightly backup failed | The GitHub Actions workflow fails, or `backup.verify` finds no object written by 02:30 IST | Email | **P1** |
+| Nightly backup failed | The GitHub Actions workflow fails (incl. its `gunzip -t` integrity step), or `backup.verify` finds no object by 02:30 IST, or one that is ≤ 10 KB or under half of yesterday's | Email + red admin-shell banner (APX-19) | **P1** |
 | Inventory drift detected | Reconcile job finds cache ≠ ledger | Email | P2 |
 | Job failed permanently | Any `jobs` row reaches `status='failed'` | Admin ops page | P2 |
 | DB usage > 80% of tier | Supabase metric | Email | P3 |

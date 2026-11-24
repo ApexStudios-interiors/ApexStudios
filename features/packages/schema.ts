@@ -1,12 +1,22 @@
 import { z } from "zod";
+import { moneyString } from "@/lib/money/input";
+
+/** Re-exported: features/projects/schema.ts takes it from here. */
+export { moneyString };
 
 /** 02-lld.md §7. `numeric(14,2)` amounts travel as strings end to end — the
  *  form, the action, and lib/money's Decimal arithmetic never round-trip
- *  through a JS number (docs/code-standards.md §6). */
-const moneyString = z
+ *  through a JS number (docs/code-standards.md §6). `moneyString` is the
+ *  shared money schema: it accepts Indian grouping ("1,80,00,000") and strips
+ *  it before validating (APX-40). */
+
+/** APX-40: a free-text bound — a field message rather than a database error. */
+export const PACKAGE_FIELD_NAME_MAX = 120;
+const nameField = z
   .string()
   .trim()
-  .regex(/^\d+(\.\d{1,2})?$/, "Enter an amount like 125000 or 125000.50");
+  .min(1, "Name is required")
+  .max(PACKAGE_FIELD_NAME_MAX, `Keep the name to ${PACKAGE_FIELD_NAME_MAX} characters or fewer`);
 
 /**
  * The Lead select's "unassigned" choice reaches the form as `""`, never
@@ -28,7 +38,7 @@ const optionalLeadProfileId = z
 
 export const createPackageSchema = z.object({
   projectId: z.uuid(),
-  name: z.string().trim().min(1, "Name is required"),
+  name: nameField,
   allocatedAmount: moneyString,
   internalAmount: moneyString,
   leadProfileId: optionalLeadProfileId,
@@ -37,7 +47,7 @@ export type CreatePackageInput = z.infer<typeof createPackageSchema>;
 
 export const updatePackageSchema = z.object({
   id: z.uuid(),
-  name: z.string().trim().min(1).optional(),
+  name: nameField.optional(),
   allocatedAmount: moneyString.optional(),
   internalAmount: moneyString.optional(),
   leadProfileId: optionalLeadProfileId,
@@ -53,7 +63,7 @@ export type UpdatePackageInput = z.infer<typeof updatePackageSchema>;
 
 export const createPhaseSchema = z.object({
   packageId: z.uuid(),
-  name: z.string().trim().min(1, "Name is required"),
+  name: nameField,
   allocatedAmount: moneyString,
   internalAmount: moneyString,
 });
@@ -61,8 +71,11 @@ export type CreatePhaseInput = z.infer<typeof createPhaseSchema>;
 
 export const updatePhaseSchema = z.object({
   id: z.uuid(),
-  name: z.string().trim().min(1).optional(),
+  name: nameField.optional(),
   allocatedAmount: moneyString.optional(),
   internalAmount: moneyString.optional(),
+  /** Optimistic concurrency, exactly as updatePackageSchema: the update is
+   *  scoped to this `updated_at`, and zero rows back is a CONFLICT. */
+  updatedAt: z.string().min(1),
 });
 export type UpdatePhaseInput = z.infer<typeof updatePhaseSchema>;

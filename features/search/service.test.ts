@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { capResults, type SearchResultDTO } from "./service";
+import { capResults, ilikeAnyFilter, type SearchResultDTO } from "./service";
 
 function row(category: SearchResultDTO["category"], n: number): SearchResultDTO {
   return { id: `${category}-${n}`, category, text: `${category} ${n}`, sub: "", href: "#", projectId: null };
@@ -39,5 +39,25 @@ describe("capResults", () => {
     const out = capResults({ Projects: [row("Projects", 1)], Bills: [row("Bills", 1)] });
     expect(out.length).toBe(2);
     expect(out.map((r) => r.category)).toEqual(["Projects", "Bills"]);
+  });
+});
+
+describe("ilikeAnyFilter (APX-64)", () => {
+  it("ORs a substring match across every column", () => {
+    expect(ilikeAnyFilter(["material_name", "ref_no"], "SR-BHEL")).toBe(
+      'material_name.ilike."%SR-BHEL%",ref_no.ilike."%SR-BHEL%"'
+    );
+  });
+
+  it("escapes LIKE wildcards so M_20 matches only M_20", () => {
+    expect(ilikeAnyFilter(["item"], "M_20 100%")).toBe('item.ilike."%M\\\\_20 100\\\\%%"');
+  });
+
+  it("drops PostgREST's * wildcard and quotes or= separators", () => {
+    expect(ilikeAnyFilter(["item"], "a*b,c.(d)")).toBe('item.ilike."%ab,c.(d)%"');
+  });
+
+  it("backslash-escapes a double quote inside the quoted value", () => {
+    expect(ilikeAnyFilter(["item"], 'say "hi"')).toBe('item.ilike."%say \\"hi\\"%"');
   });
 });

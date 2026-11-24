@@ -1,11 +1,16 @@
 "use server";
 
 import "server-only";
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { siteAction, clientAction } from "@/lib/safe-action";
 import { requireSession } from "@/lib/auth/session";
-import { addSamplePhotosSchema, decideApprovalSchema, requestApprovalSchema } from "./schema";
+import {
+  addSamplePhotosSchema,
+  decideApprovalSchema,
+  requestApprovalSchema,
+  withdrawApprovalSchema,
+} from "./schema";
 import { requestApprovalFor } from "./create";
 import { approvalForPhotos } from "./photos";
 
@@ -23,7 +28,6 @@ export const requestApproval = siteAction
     // the mobile API so both write paths behave identically.
     const created = await requestApprovalFor(ctx.session, parsedInput);
 
-    updateTag(`project:${parsedInput.projectId}`);
     revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
     return { id: created.id, refNo: created.refNo };
   });
@@ -57,7 +61,6 @@ export const addSamplePhotos = siteAction
       throw new Error("NOT_FOUND: one or more photos did not upload correctly — please retry them");
     }
 
-    updateTag(`project:${approval.projectId}`);
     revalidatePath(`/projects/${approval.projectId}`, "layout");
     return { id: approval.id };
   });
@@ -81,9 +84,26 @@ export const decideApproval = clientAction
     if (error) throw new Error(error.message);
     const row = data as { id: string; project_id: string; status: string };
 
-    updateTag(`project:${row.project_id}`);
     revalidatePath(`/projects/${row.project_id}`, "layout");
     return { id: row.id, status: row.status };
+  });
+
+/**
+ * APX-42: the person who requested an approval withdraws it while it is still
+ * pending. rpc_withdraw_approval decides everything (requester only, pending
+ * only, under the row lock a client decision also takes) and soft-deletes it.
+ */
+export const withdrawApproval = siteAction
+  .inputSchema(withdrawApprovalSchema)
+  .action(async ({ parsedInput }) => {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("rpc_withdraw_approval", {
+      p_approval_id: parsedInput.approvalId,
+    });
+    if (error) throw new Error(error.message);
+    const row = data as { id: string; project_id: string };
+    revalidatePath(`/projects/${row.project_id}`, "layout");
+    return { id: row.id };
   });
 
 /** `NewApprovalDialog`'s Package field — `v_package_site`, same reason

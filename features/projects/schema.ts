@@ -1,10 +1,13 @@
 import { z } from "zod";
+import { moneyString } from "@/features/packages/schema";
 import {
   LOCATION_MAX_LENGTH,
   PACKAGE_NAME_MAX_LENGTH,
+  PROJECT_STATUSES,
   RATE_VISIBILITY_MODES,
   isValidLocation,
   isValidPackageName,
+  isValidPercent,
 } from "./service";
 
 /**
@@ -13,6 +16,10 @@ import {
  * letter somewhere and is not longer than the column's practical limit. A bare
  * phone number is rejected; "Ghanpur, Hyderabad" is not.
  */
+/** APX-40: an upper bound on free text, so an over-long paste is a field
+ *  message, not a database error. */
+export const PROJECT_NAME_MAX = 120;
+
 export const LOCATION_MESSAGE = "Enter a location that includes a place name, or leave it empty.";
 
 const locationField = z
@@ -23,7 +30,11 @@ const locationField = z
 
 /** A project name, on every path that sets one. Defined once so create and
  *  update cannot drift apart. */
-const nameField = z.string().trim().min(1, "Name is required");
+const nameField = z
+  .string()
+  .trim()
+  .min(1, "Name is required")
+  .max(PROJECT_NAME_MAX, `Keep the name to ${PROJECT_NAME_MAX} characters or fewer`);
 
 /** Named for the offending entry, so the person can see which one to fix. */
 export function packageNameMessage(name: string): string {
@@ -59,7 +70,7 @@ export const createProjectSchema = z.object({
   name: nameField,
   clientId: z.uuid("Select or create a client"),
   location: locationField.optional(),
-  startDate: z.iso.date(),
+  startDate: z.iso.date({ error: "Choose a start date" }),
   /** Named packages to create alongside the project, one transaction (§4.1). */
   packages: packagesField,
 });
@@ -84,18 +95,43 @@ export type CreateClientInput = z.infer<typeof createClientSchema>;
  * package names: packages are created by `createProject` and maintained by the
  * packages feature, never by this action.
  */
+/** A percentage as projects stores it — numeric(6,3), 0 to 100. Strings end to
+ *  end, like money (code-standards §6), so 18.000 is never 17.999999. */
+const percentField = z
+  .string()
+  .trim()
+  .refine(isValidPercent, "Enter a percentage from 0 to 100, up to 3 decimals (e.g. 18 or 2.5)");
+
+/**
+ * Every field optional, so a caller sends only what it changes; the Edit
+ * Project dialog sends them all. Money uses the same `moneyString` as
+ * packages and phases — digits with up to two decimals, so neither NaN nor a
+ * negative can reach `Number()` in the action (APX-11: `contractValue` used
+ * to be any string at all). An empty Target end date clears it.
+ */
 export const updateProjectSchema = z.object({
   id: z.uuid(),
   name: nameField.optional(),
   location: locationField.optional(),
-  targetEndDate: z.iso.date().optional(),
-  contractValue: z.string().optional(),
+  targetEndDate: z.union([z.iso.date(), z.literal("")]).optional(),
+  contractValue: moneyString.optional(),
+  gstRatePct: percentField.optional(),
+  retentionPct: percentField.optional(),
+  masBillablePct: percentField.optional(),
+  tdsPct: percentField.optional(),
+  mobilisationAdvance: moneyString.optional(),
+  mobilisationRecoveryPct: percentField.optional(),
 });
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 
+/**
+ * APX-11: rpc_set_project_status decides whether the move is legal and
+ * whether a reason was needed (a reopen); this is only the shape.
+ */
 export const setProjectStatusSchema = z.object({
   id: z.uuid(),
-  status: z.enum(["planning", "active", "on_hold", "completed", "archived"]),
+  status: z.enum(PROJECT_STATUSES),
+  reason: z.string().trim().max(500, "Keep the reason under 500 characters").optional(),
 });
 export type SetProjectStatusInput = z.infer<typeof setProjectStatusSchema>;
 
@@ -107,15 +143,22 @@ export const setProjectRateVisibilitySchema = z.object({
 });
 export type SetProjectRateVisibilityInput = z.infer<typeof setProjectRateVisibilitySchema>;
 
+/** `expectedRole`: the card the request came from (Site team or Client
+ *  access) manages one role, and a profile with the other is refused. */
+const memberRoleField = z.enum(["client", "site"]).optional();
+
 export const addProjectMemberSchema = z.object({
   projectId: z.uuid(),
   profileId: z.uuid(),
+  expectedRole: memberRoleField,
 });
 export type AddProjectMemberInput = z.infer<typeof addProjectMemberSchema>;
 
-/** Take a client login off one project; their other projects are untouched. */
+/** Take a client or site supervisor off one project; their other projects are
+ *  untouched. */
 export const removeProjectMemberSchema = z.object({
   projectId: z.uuid(),
   profileId: z.uuid(),
+  expectedRole: memberRoleField,
 });
 export type RemoveProjectMemberInput = z.infer<typeof removeProjectMemberSchema>;

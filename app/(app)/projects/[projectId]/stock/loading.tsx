@@ -15,7 +15,7 @@ export default function StockLoading() {
         <Skeleton className="ml-auto h-9 w-32" />
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <Skeleton className="mb-4 h-9 w-[360px]" />
+        <Skeleton className="mb-4 h-9 w-full max-w-[360px]" />
         <Skeleton className="h-9 w-40" />
       </div>
       <Card>

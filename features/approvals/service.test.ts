@@ -4,6 +4,7 @@ import {
   canAddPhotos,
   canDecide,
   canSupersede,
+  canWithdraw,
   isAgedPending,
   type ApprovalStatus,
 } from "./service";
@@ -77,5 +78,14 @@ describe("isAgedPending", () => {
   it("true when pending and over 7 days old", () => {
     const old = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000).toISOString();
     expect(isAgedPending("pending", old, now)).toBe(true);
+  });
+});
+
+describe("canWithdraw (APX-42)", () => {
+  it("only the requester, only while pending", () => {
+    expect(canWithdraw("pending", true)).toBe(true);
+    expect(canWithdraw("pending", false)).toBe(false);
+    expect(canWithdraw("approved", true)).toBe(false);
+    expect(canWithdraw("rejected", true)).toBe(false);
   });
 });

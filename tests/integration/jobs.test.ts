@@ -87,8 +87,8 @@ describe("jobs", () => {
 
   it("rpc_finish_job backs off exponentially and goes terminal at max_attempts", async () => {
     const job = one(
-      await sql`insert into public.jobs (name, payload, attempts, max_attempts)
-                values ('test.backoff', '{}'::jsonb, 2, 5) returning id`,
+      await sql`insert into public.jobs (name, payload, status, attempts, max_attempts)
+                values ('test.backoff', '{}'::jsonb, 'running', 2, 5) returning id`,
       "inserted job"
     );
     await sql`select public.rpc_finish_job(${job.id}, false, 'boom')`;
@@ -102,8 +102,8 @@ describe("jobs", () => {
     expect(after.last_error).toBe("boom");
 
     const terminal = one(
-      await sql`insert into public.jobs (name, payload, attempts, max_attempts)
-                values ('test.terminal', '{}'::jsonb, 5, 5) returning id`,
+      await sql`insert into public.jobs (name, payload, status, attempts, max_attempts)
+                values ('test.terminal', '{}'::jsonb, 'running', 5, 5) returning id`,
       "inserted job at max attempts"
     );
     await sql`select public.rpc_finish_job(${terminal.id}, false, 'gave up')`;

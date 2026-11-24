@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Decimal } from "decimal.js";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/context/AppContext";
 import { recordPayment, getBillPaymentsSummaryForDialog } from "@/features/billing/actions";
 import { formatINR } from "@/lib/money";
-import { dmy } from "@/lib/logic";
+import { parseMoneyInput } from "@/lib/money/input";
+import { MoneyEcho } from "@/components/shared/MoneyEcho";
+import { dmy } from "@/lib/format";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
 import {
   Select,
@@ -61,14 +64,16 @@ export function RecordPaymentDialog({
   const [paidOn, setPaidOn] = useState(todayIst());
   const [mode, setMode] = useState<PaymentMode>("neft");
   const [referenceNo, setReferenceNo] = useState("");
-  // Regenerated after every attempt, success or failure — the same fix
-  // BillingAdmin's own create-bill flow already carries. This dialog stays
-  // mounted after a failed submit (the error renders inside it), so a fixed
-  // key meant the retry reused the key of an attempt that may already have
-  // committed a payment row: `rpc_record_payment`'s own idempotency check
-  // would return the bill unchanged and the dialog would report success
-  // while the corrected amount was never recorded.
+  // APX-33: one key per distinct payment the admin means to record. It is
+  // KEPT when an attempt's answer was lost (the connection dropped after the
+  // payment may already have committed): the retry then finds that payment
+  // through rpc_record_payment's idempotency check instead of recording it a
+  // second time. It is REPLACED after any definite answer from the server
+  // (a refusal such as OVERPAYMENT), and whenever a field changes — a
+  // corrected amount is a different payment and must never be swallowed by
+  // the key of an earlier attempt.
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const renewKey = () => setIdempotencyKey(crypto.randomUUID());
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,31 +83,49 @@ export function RecordPaymentDialog({
         setPaidSoFar(summary.paidSoFar);
         setPayments(summary.payments);
       })
-      .catch(() => toast("Could not load this bill's payment history."));
+      .catch(() => toast("Could not load this bill's payment history.", "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billId]);
 
   const remaining = paidSoFar === null ? null : Math.max(netPayable - paidSoFar, 0);
 
   async function onSubmit() {
-    const parsed = Number(amount);
-    if (!amount || !(parsed > 0)) {
-      setError("Enter a positive amount");
+    // APX-40: "1,25,000" is how the amount is written on the cheque — strip
+    // the grouping before validating, through the shared money parser.
+    const normalised = parseMoneyInput(amount);
+    const parsed = normalised === null ? NaN : Number(normalised);
+    if (!(parsed > 0)) {
+      setError("Enter a positive amount, like 1,25,000 or 125000.50");
+      return;
+    }
+    if (new Decimal(amount).decimalPlaces() > 2) {
+      setError("Use at most two decimals (paise)");
       return;
     }
     setPending(true);
     setError(null);
-    const result = await recordPayment({
-      billId,
-      amount: parsed,
-      paidOn,
-      mode,
-      referenceNo: referenceNo || undefined,
-      idempotencyKey,
-    });
+    let result: Awaited<ReturnType<typeof recordPayment>>;
+    try {
+      result = await recordPayment({
+        billId,
+        amount: parsed,
+        paidOn,
+        mode,
+        referenceNo: referenceNo || undefined,
+        idempotencyKey,
+      });
+    } catch {
+      // No answer: the payment may or may not have been recorded. Keep the
+      // key, so pressing Record Payment again cannot record it twice.
+      setPending(false);
+      setError(
+        "The connection dropped before an answer came back. Press Record Payment again — it will not be recorded twice."
+      );
+      return;
+    }
     setPending(false);
-    setIdempotencyKey(crypto.randomUUID());
     if (!result?.data) {
+      renewKey();
       setError(result?.serverError ?? "Could not record this payment");
       return;
     }
@@ -117,6 +140,7 @@ export function RecordPaymentDialog({
       description={`${refNo} · ${remaining !== null ? formatINR(remaining) : "…"} outstanding`}
       okLabel={pending ? "Recording…" : "Record Payment"}
       okPending={pending}
+      dirty={amount.trim() !== "" || referenceNo.trim() !== ""}
       onClose={closeDialog}
       onOk={onSubmit}
     >
@@ -131,29 +155,47 @@ export function RecordPaymentDialog({
           ))}
         </div>
       )}
-      <div className="grid grid-cols-2 gap-3.5">
-        <div className="col-span-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        <div className="sm:col-span-2">
           <Field label="Amount" htmlFor="rp-amount">
             <input
               id="rp-amount"
-              type="number"
-              step="0.01"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="₹ e.g. 1,25,000"
               className={inputClass}
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              aria-invalid={!!error}
+              aria-describedby="rp-amount-echo"
+              onChange={(e) => {
+                setAmount(e.target.value);
+                renewKey();
+              }}
             />
           </Field>
+          <MoneyEcho id="rp-amount-echo" value={amount} />
           {error && <p className="text-xs text-destructive mt-1">{error}</p>}
         </div>
         <Field label="Paid On" htmlFor="rp-date">
-          <DatePicker id="rp-date" value={paidOn} onChange={setPaidOn} required />
+          <DatePicker
+            id="rp-date"
+            value={paidOn}
+            onChange={(v) => {
+              setPaidOn(v);
+              renewKey();
+            }}
+            required
+          />
         </Field>
         <Field label="Mode" htmlFor="rp-mode">
           <Select
             items={PAYMENT_MODES}
             value={mode}
             onValueChange={(v) => {
-              if (v) setMode(v);
+              if (v) {
+                setMode(v);
+                renewKey();
+              }
             }}
           >
             <SelectTrigger id="rp-mode" className="w-full text-[13.5px] data-[size=default]:h-9">
@@ -170,14 +212,17 @@ export function RecordPaymentDialog({
             </SelectContent>
           </Select>
         </Field>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <Field label="Reference No." htmlFor="rp-ref">
             <input
               id="rp-ref"
               className={inputClass}
               placeholder="Optional"
               value={referenceNo}
-              onChange={(e) => setReferenceNo(e.target.value)}
+              onChange={(e) => {
+                setReferenceNo(e.target.value);
+                renewKey();
+              }}
             />
           </Field>
         </div>

@@ -36,12 +36,21 @@ export type StockRequestDTO = {
   neededBy: string | null;
   note: string | null;
   status: StockRequestStatus;
+  requestedById: string;
   requestedByName: string;
+  /** Whether the signed-in user raised it — the only person who may cancel
+   *  or (with an admin) edit it while pending. The REAL user, never the
+   *  previewed one: impersonation shapes reads, not identity. */
+  mine: boolean;
   createdAt: string;
   approvedAt: string | null;
   orderedAt: string | null;
   deliveredAt: string | null;
   rejectedReason: string | null;
+  cancelledAt: string | null;
+  cancelledReason: string | null;
+  /** Set on the remainder of a part delivery: the request it was split from. */
+  splitFromId: string | null;
 };
 
 type PackageInfo = { name: string; seqNo: number };
@@ -222,6 +231,9 @@ async function loadStockRequests(
     ordered_at: string | null;
     delivered_at: string | null;
     rejected_reason: string | null;
+    cancelled_at: string | null;
+    cancelled_reason: string | null;
+    split_from_id: string | null;
   };
 
   // Every matching row, or — with `req` — one page of them.
@@ -247,7 +259,7 @@ async function loadStockRequests(
       let q = supabase
         .from("stock_requests")
         .select(
-          "id, ref_no, project_id, package_id, material_name, qty, unit, rate, needed_by, note, status, requested_by, created_at, approved_at, ordered_at, delivered_at, rejected_reason",
+          "id, ref_no, project_id, package_id, material_name, qty, unit, rate, needed_by, note, status, requested_by, created_at, approved_at, ordered_at, delivered_at, rejected_reason, cancelled_at, cancelled_reason, split_from_id",
           { count: req ? "exact" : undefined }
         )
         .eq("project_id", projectId)
@@ -265,7 +277,7 @@ async function loadStockRequests(
       let q = supabase
         .from("v_stock_request_site")
         .select(
-          "id, ref_no, project_id, package_id, material_name, qty, unit, needed_by, note, status, requested_by, created_at, approved_at, ordered_at, delivered_at, rejected_reason",
+          "id, ref_no, project_id, package_id, material_name, qty, unit, needed_by, note, status, requested_by, created_at, approved_at, ordered_at, delivered_at, rejected_reason, cancelled_at, cancelled_reason, split_from_id",
           { count: req ? "exact" : undefined }
         )
         .eq("project_id", projectId)
@@ -304,13 +316,74 @@ async function loadStockRequests(
       neededBy: r.needed_by,
       note: r.note,
       status: r.status,
+      requestedById: r.requested_by,
       requestedByName: requesterNames.get(r.requested_by) ?? "—",
+      mine: r.requested_by === session.userId,
       createdAt: r.created_at,
       approvedAt: r.approved_at,
       orderedAt: r.ordered_at,
       deliveredAt: r.delivered_at,
       rejectedReason: r.rejected_reason,
+      cancelledAt: r.cancelled_at,
+      cancelledReason: r.cancelled_reason,
+      splitFromId: r.split_from_id,
     };
   });
   return { ...result, rows: dtos };
+}
+
+/** One delivery as the site dashboard's Today card lists it. No money. */
+export type DeliveryDueDTO = {
+  id: string;
+  refNo: string;
+  materialName: string;
+  qty: number;
+  unit: string;
+  neededBy: string | null;
+};
+
+/** How far ahead "due" looks: today plus the next few days. */
+const DELIVERY_HORIZON_DAYS = 3;
+
+/**
+ * APX-48: ordered requests expected on site soon — `needed_by` on or before
+ * today + 3 days (overdue ones included), plus ordered requests with no date.
+ * Reads `v_stock_request_site` for EVERY role: it is the money-free view, and
+ * this card shows no money, so there is no reason to touch the admin table.
+ * A client never calls this (no stock visibility); it returns [] if one does.
+ */
+export async function getDeliveriesDue(
+  session: Session,
+  projectId: string,
+  today: string
+): Promise<DeliveryDueDTO[]> {
+  const effectiveRole = session.impersonating?.role ?? session.role;
+  if (effectiveRole === "client") return [];
+  const [y, m, d] = today.split("-").map(Number);
+  const h = new Date(Date.UTC(y ?? 0, (m ?? 1) - 1, (d ?? 1) + DELIVERY_HORIZON_DAYS));
+  const horizon = `${h.getUTCFullYear()}-${String(h.getUTCMonth() + 1).padStart(2, "0")}-${String(h.getUTCDate()).padStart(2, "0")}`;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("v_stock_request_site")
+    .select("id, ref_no, material_name, qty, unit, needed_by")
+    .eq("project_id", projectId)
+    .eq("status", "ordered")
+    .or(`needed_by.lte.${horizon},needed_by.is.null`)
+    .order("needed_by", { ascending: true, nullsFirst: false })
+    .limit(8);
+  if (error) throw new Error(error.message);
+  return data
+    .filter(
+      (r): r is typeof r & { id: string; ref_no: string; material_name: string; unit: string } =>
+        r.id != null && r.ref_no != null && r.material_name != null && r.unit != null
+    )
+    .map((r) => ({
+      id: r.id,
+      refNo: r.ref_no,
+      materialName: r.material_name,
+      qty: Number(r.qty ?? 0),
+      unit: r.unit,
+      neededBy: r.needed_by,
+    }));
 }

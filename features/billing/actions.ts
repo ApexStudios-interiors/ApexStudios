@@ -2,7 +2,7 @@
 
 import "server-only";
 import { z } from "zod";
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminAction, clientAction, siteAction } from "@/lib/safe-action";
 import { requireSession, requireRole, type Session } from "@/lib/auth/session";
@@ -20,9 +20,12 @@ import {
   getBillDetail,
   getBillPaymentsSummary,
   getCurrentBillPdfKey,
+  getUnlistedMaterials,
   type BillableNowLine,
   type BillDetail,
+  type UnlistedMaterials,
 } from "./queries";
+import { todayIst } from "@/lib/dates";
 import { transitionBillFor, type BillTransitionStatus } from "./transition";
 
 /**
@@ -54,14 +57,18 @@ export const createBill = adminAction.inputSchema(createBillSchema).action(async
   const { data, error } = await supabase.rpc("rpc_create_bill", {
     p_project_id: parsedInput.projectId,
     p_lines: parsedInput.lines.map((l) => ({ source_type: l.sourceType, source_id: l.sourceId })),
-    p_bill_date: parsedInput.billDate,
+    // Always today in Asia/Kolkata (APX-22) — never the database's UTC
+    // current_date, and never a date from the browser. Submission re-stamps
+    // it to the day the bill is actually issued.
+    p_bill_date: todayIst(),
     p_notes: parsedInput.notes,
     p_idempotency_key: parsedInput.idempotencyKey,
+    p_period_from: parsedInput.periodFrom,
+    p_period_to: parsedInput.periodTo,
   });
   if (error) throw new Error(error.message);
   const row = data as { id: string; bill_no: string; project_id: string };
 
-  updateTag(`project:${row.project_id}`);
   revalidatePath(`/projects/${row.project_id}`, "layout");
   return { id: row.id, refNo: row.bill_no };
 });
@@ -101,7 +108,6 @@ async function transitionBillImpl(
   // shared with the mobile API so both write paths behave identically.
   const moved = await transitionBillFor(session, input);
 
-  updateTag(`project:${moved.projectId}`);
   revalidatePath(`/projects/${moved.projectId}`, "layout");
   return { id: moved.id, status: moved.status };
 }
@@ -120,7 +126,6 @@ export const recordPayment = adminAction.inputSchema(recordPaymentSchema).action
   if (error) throw new Error(error.message);
   const row = data as BillRow;
 
-  updateTag(`project:${row.project_id}`);
   revalidatePath(`/projects/${row.project_id}`, "layout");
   return { id: row.id, status: row.status };
 });
@@ -158,7 +163,6 @@ export const uploadBillCopy = siteAction
       throw new Error("NOT_FOUND: one or more files did not upload correctly — please retry them");
     }
 
-    updateTag(`project:${bill.project_id}`);
     revalidatePath(`/projects/${bill.project_id}`, "layout");
     return { id: bill.id };
   });
@@ -189,9 +193,14 @@ export async function getBillPdfUrl(billId: string): Promise<string | null> {
  *  and a component may never import it directly (code-standards §1); this
  *  file's `"use server"` directive is what makes it reachable from a
  *  client component. */
-export async function getBillableNowForAdmin(projectId: string): Promise<BillableNowLine[]> {
+export async function getBillableNowForAdmin(
+  projectId: string
+): Promise<{ lines: BillableNowLine[]; unlisted: UnlistedMaterials }> {
   assertBillingEnabled();
-  return getBillableNow(projectId);
+  // Admin only, like everything Billable Now shows: it carries internal cost.
+  await requireRole(["admin"]);
+  const [lines, unlisted] = await Promise.all([getBillableNow(projectId), getUnlistedMaterials(projectId)]);
+  return { lines, unlisted };
 }
 
 /** `BillViewDialog`'s own data fetch — a client component calling a `"use
@@ -283,7 +292,6 @@ export const markPackagePhasesComplete = adminAction
 
     const projectId = phases[0]?.project_id;
     if (projectId) {
-      updateTag(`project:${projectId}`);
       revalidatePath(`/projects/${projectId}`, "layout");
     }
     return { marked, failed, eligible: eligible.length };
@@ -304,7 +312,6 @@ export const markPhaseComplete = adminAction
       .single();
     if (phaseErr) throw new Error(phaseErr.message);
 
-    updateTag(`project:${phase.project_id}`);
     revalidatePath(`/projects/${phase.project_id}`, "layout");
     return { id: parsedInput.phaseId };
   });

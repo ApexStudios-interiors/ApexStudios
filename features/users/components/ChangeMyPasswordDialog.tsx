@@ -83,6 +83,7 @@ export function ChangeMyPasswordDialog({ onClose }: { onClose: () => void }) {
       description="Confirm your current password, then choose a new one."
       okLabel={change.isPending ? "Changing…" : "Change password"}
       okPending={change.isPending}
+      dirty={currentPassword !== "" || newPassword !== "" || confirmPassword !== ""}
       onClose={onClose}
       onOk={submit}
     >

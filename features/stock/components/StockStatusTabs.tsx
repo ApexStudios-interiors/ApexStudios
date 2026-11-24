@@ -12,6 +12,7 @@ const STATUSES = [
   { key: "ordered", label: "Ordered" },
   { key: "delivered", label: "Delivered" },
   { key: "rejected", label: "Rejected" },
+  { key: "cancelled", label: "Cancelled" },
 ];
 
 /**
@@ -21,6 +22,10 @@ const STATUSES = [
  * key is `status`; `packageId` (if present) is preserved across a status
  * change and vice versa. `page` is dropped, so a new status starts on page 1;
  * the chosen `pageSize` is kept.
+ *
+ * "All" always sends an EXPLICIT `?status=` (`ApprovalStatusTabs`' own rule):
+ * an admin's page defaults to Pending when the param is absent (APX-63), so a
+ * bare `basePath` could not mean "All".
  */
 export function StockStatusTabs({
   basePath,
@@ -36,7 +41,7 @@ export function StockStatusTabs({
   const [isPending, startTransition] = useTransition();
   const navigate = (nextStatus: string) => {
     const params = new URLSearchParams();
-    if (nextStatus) params.set("status", nextStatus);
+    params.set("status", nextStatus);
     if (packageId) params.set("package", packageId);
     if (pageSize) params.set("pageSize", pageSize);
     const qs = params.toString();

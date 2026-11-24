@@ -4,10 +4,16 @@ import {
   getClientBillingStats,
   getProjectClientAccess,
   getProjectHeader,
+  getProjectSetupFacts,
+  getProjectSiteTeam,
   getSiteStockStats,
 } from "@/features/projects/queries";
 import { ClientAccessCard } from "@/features/projects/components/ClientAccessCard";
 import { RateVisibilityCard } from "@/features/projects/components/RateVisibilityCard";
+import { SetupChecklistCard } from "@/features/projects/components/SetupChecklistCard";
+import { SiteTeamCard } from "@/features/projects/components/SiteTeamCard";
+import { projectWriteRefusal, showSetupChecklist } from "@/features/projects/service";
+import { Badge } from "@/components/ui/Badge";
 import { getPackagesForProject, type PackagesForProject } from "@/features/packages/queries";
 import { getUpdatesForProject } from "@/features/updates/queries";
 import { getStockRequestsForProject } from "@/features/stock/queries";
@@ -19,7 +25,8 @@ import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 import { LegacyDashboardCards } from "./LegacyDashboardCards";
-import { dmy } from "@/lib/logic";
+import { DashboardAttention } from "./DashboardAttention";
+import { dmy } from "@/lib/format";
 import { formatINRCompact } from "@/lib/money";
 import { projectBase } from "@/lib/routing/current";
 
@@ -59,32 +66,72 @@ export default async function ProjectDashboardPage({ params }: { params: Promise
   // Keyed on the effective role, so an admin previewing as client or site
   // sees the page as that role would.
   const clientAccess = isMoney ? await getProjectClientAccess(projectId) : null;
+  // APX-12 / APX-70: the Site team card and the setup checklist, admins only
+  // (the checklist's facts read admin-only tables).
+  const siteTeam = isMoney ? await getProjectSiteTeam(projectId) : null;
+  const setupFacts = isMoney ? await getProjectSetupFacts(projectId) : null;
+  // APX-41: what a finished project still allows. The database refuses the
+  // rest regardless; this only keeps the buttons honest.
+  const editRefusal = projectWriteRefusal(header.statusKey, "edit");
+  const stockRefusal = projectWriteRefusal(header.statusKey, "stock_request");
 
   return (
     <div>
       <div className="flex items-start gap-4 flex-wrap mb-[22px]">
         <div>
-          <h1 className="text-[26px] font-bold tracking-tight">{header.name}</h1>
+          <h1 className="text-[26px] font-bold tracking-tight flex items-center gap-2.5 flex-wrap">
+            {header.name}
+            <Badge variant={header.statusKey === "active" ? "default" : "secondary"}>{header.status}</Badge>
+          </h1>
           <p className="mt-1 text-muted-foreground text-[13.5px]">
             {header.client} · {header.location}
             {header.start ? ` · Started ${dmy(header.start)}` : ""}
           </p>
         </div>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex gap-2 flex-wrap">
+          {/* APX-11: Edit Project and the status control, admins only. */}
           {isMoney && (
-            <OpenDialogButton dialog={{ kind: "addModule", projectId }}>
+            <OpenDialogButton dialog={{ kind: "editProject", projectId }}>Edit Project</OpenDialogButton>
+          )}
+          {isMoney && (
+            <OpenDialogButton
+              dialog={{
+                kind: "projectStatus",
+                projectId,
+                projectName: header.name,
+                status: header.statusKey,
+              }}
+            >
+              Change Status
+            </OpenDialogButton>
+          )}
+          {isMoney && (
+            <OpenDialogButton
+              dialog={{ kind: "addModule", projectId }}
+              disabled={!!editRefusal}
+              title={editRefusal ?? undefined}
+            >
               <Icon name="plus" className="w-[15px] h-[15px]" />
               Add Package
             </OpenDialogButton>
           )}
           {!isClient && (
-            <OpenDialogButton dialog={{ kind: "newRequest", projectId }} variant="primary">
+            <OpenDialogButton
+              dialog={{ kind: "newRequest", projectId }}
+              variant="primary"
+              disabled={!!stockRefusal}
+              title={stockRefusal ?? undefined}
+            >
               <Icon name="plus" className="w-[15px] h-[15px]" />
               Stock Request
             </OpenDialogButton>
           )}
         </div>
       </div>
+
+      {setupFacts && showSetupChecklist(setupFacts) && (
+        <SetupChecklistCard projectId={projectId} projectName={header.name} facts={setupFacts} />
+      )}
 
       {packages.role === "money" ? (
         <BudgetStatBar
@@ -104,6 +151,8 @@ export default async function ProjectDashboardPage({ params }: { params: Promise
         <SiteDashboardStats projectId={projectId} packages={packages} />
       )}
 
+      <DashboardAttention session={session} projectId={projectId} base={base} />
+
       <Card>
         <CardHeader>
           <h3>Packages</h3>
@@ -122,6 +171,8 @@ export default async function ProjectDashboardPage({ params }: { params: Promise
         pendingRequests={pendingRequests}
         updates={latestUpdates.slice(0, 3)}
       />
+
+      {siteTeam && <SiteTeamCard projectId={projectId} projectName={header.name} team={siteTeam} />}
 
       {clientAccess && (
         <ClientAccessCard projectId={projectId} projectName={header.name} access={clientAccess} />

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { NotificationDTO } from "@/features/notifications/queries";
 import { markNotificationRead } from "@/features/notifications/actions";
 import { Icon } from "@/components/ui/Icon";
@@ -15,20 +15,49 @@ import { useClickOutside } from "@/hooks/useClickOutside";
  * features/notifications/queries.ts). The badge counts UNREAD items; the list
  * shows everything, read or not, because a read notification is not finished
  * work — that is the part of D56 worth keeping.
+ *
+ * D72 (2026-11-24): the footer links to "Needs my action" (/inbox), the aged
+ * list of what is waiting on you. The menu is a disclosure: the button
+ * reports `aria-expanded`, and Escape closes it and returns focus to the
+ * button.
  */
-export function NotificationsMenu({ items }: { items: NotificationDTO[] }) {
+export function NotificationsMenu({
+  items,
+  unreadCount: serverUnreadCount,
+}: {
+  /** The newest few (BELL_LIMIT) — not necessarily every notification. */
+  items: NotificationDTO[];
+  /** Unread across ALL notifications, counted in SQL (APX-52). */
+  unreadCount: number;
+}) {
   const [open, setOpen] = useState(false);
   /** Ids marked read in this tab, so the badge drops on click rather than
    *  waiting for the server round trip and the router refresh. Merged with
    *  the server's own `unread` below; the refresh then makes it durable. */
   const [justRead, setJustRead] = useState<Set<string>>(new Set());
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
   const router = useRouter();
   useClickOutside(ref, () => setOpen(false), open);
 
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      buttonRef.current?.focus();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
   const keyOf = (n: NotificationDTO) => `${n.kind}-${n.entityId}`;
   const isUnread = (n: NotificationDTO) => n.unread && !justRead.has(keyOf(n));
-  const unreadCount = items.filter(isUnread).length;
+  // The server's count over every notification, less the listed ones opened
+  // in this tab since it was computed.
+  const openedHere = items.filter((n) => n.unread && justRead.has(keyOf(n))).length;
+  const unreadCount = Math.max(0, serverUnreadCount - openedHere);
 
   async function openNotification(n: NotificationDTO, e: React.MouseEvent) {
     // Let the browser handle a modified click (new tab, new window) exactly as
@@ -56,7 +85,11 @@ export function NotificationsMenu({ items }: { items: NotificationDTO[] }) {
   return (
     <div className="relative" ref={ref}>
       <button
+        ref={buttonRef}
+        type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
         aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications, none unread"}
         className="relative h-8 w-8 grid place-items-center rounded-lg border border-input hover:bg-accent text-muted-foreground outline-none focus-visible:bg-accent"
       >
@@ -68,7 +101,10 @@ export function NotificationsMenu({ items }: { items: NotificationDTO[] }) {
         )}
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-20 mt-1 w-80 bg-card border border-border rounded-lg shadow-lg py-1 max-h-96 overflow-auto overscroll-contain">
+        <div
+          id={panelId}
+          className="absolute right-0 top-full z-20 mt-1 w-80 bg-card border border-border rounded-lg shadow-lg py-1 max-h-96 overflow-auto overscroll-contain"
+        >
           <div className="px-3 pt-1.5 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
             Notifications
           </div>
@@ -111,6 +147,16 @@ export function NotificationsMenu({ items }: { items: NotificationDTO[] }) {
               You&apos;re all caught up.
             </div>
           )}
+          <div className="border-t border-border mt-1 pt-1">
+            <Link
+              href="/inbox"
+              onClick={() => setOpen(false)}
+              className="flex items-center justify-between px-3 py-2 text-[13px] font-medium text-foreground hover:bg-accent outline-none focus-visible:bg-accent"
+            >
+              Needs my action
+              <Icon name="chevronRight" className="w-3.5 h-3.5 text-muted-foreground" />
+            </Link>
+          </div>
         </div>
       )}
     </div>

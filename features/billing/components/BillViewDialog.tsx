@@ -9,7 +9,7 @@ import { BillFiles } from "@/features/billing/components/BillFiles";
 import { getBillDetailForDialog, getBillPdfUrl } from "@/features/billing/actions";
 import type { BillDetail } from "@/features/billing/queries";
 import { formatINR } from "@/lib/money";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 
 function Row({
@@ -54,7 +54,7 @@ export function BillViewDialog({ billId }: { billId: string }) {
   useEffect(() => {
     getBillDetailForDialog(billId)
       .then(setDetail)
-      .catch(() => toast("Could not load this bill."));
+      .catch(() => toast("Could not load this bill.", "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once for this dialog instance
   }, [billId]);
 

@@ -1,6 +1,15 @@
 import { z } from "zod";
 import { MAX_PHOTOS_PER_ENTITY } from "@/lib/r2/constraints";
 
+/** Daily Updates' "Load more" (APX-51): the next page after `cursor`, appended
+ *  in place. The cursor is the opaque keyset token the page itself handed out;
+ *  a malformed one simply reads from the top (`decodeCursor` returns null). */
+export const loadMoreUpdatesSchema = z.object({
+  projectId: z.uuid(),
+  packageId: z.uuid().optional(),
+  cursor: z.string().min(1).max(512),
+});
+
 /**
  * `id` is client-generated (`crypto.randomUUID()`, `PostUpdateDialog`), not
  * server-assigned: `FileUploader`'s photos upload and confirm BEFORE the
@@ -13,13 +22,21 @@ export const postDailyUpdateSchema = z.object({
   projectId: z.uuid(),
   packageId: z.uuid(),
   updateDate: z.iso.date(),
-  body: z.string().trim().min(1, "Please describe what happened today"),
+  body: z
+    .string()
+    .trim()
+    .min(1, "Please describe what happened today")
+    .max(4000, "Keep the update to 4,000 characters or fewer"),
   attachmentIds: z.array(z.uuid()).max(MAX_PHOTOS_PER_ENTITY).default([]),
 });
 export type PostDailyUpdateInput = z.infer<typeof postDailyUpdateSchema>;
 
 export const editDailyUpdateSchema = z.object({
   id: z.uuid(),
-  body: z.string().trim().min(1),
+  body: z
+    .string()
+    .trim()
+    .min(1, "Please describe what happened today")
+    .max(4000, "Keep the update to 4,000 characters or fewer"),
 });
 export type EditDailyUpdateInput = z.infer<typeof editDailyUpdateSchema>;

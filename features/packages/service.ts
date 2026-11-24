@@ -3,6 +3,9 @@
  * connection at all (HLD §4.3, code-standards §1).
  */
 
+import { Decimal } from "decimal.js";
+import { parseMoneyInput } from "@/lib/money/input";
+
 /** package_status -> the prototype's display strings. The enum is the source
  *  of truth; this is a presentation concern, not a schema one. */
 const PACKAGE_STATUS_LABEL: Record<string, string> = {
@@ -131,4 +134,43 @@ export function costToClientFactor(
   if (phase && phase.internalAmount > 0) return phase.allocatedAmount / phase.internalAmount;
   if (pkg && pkg.internalAmount > 0) return pkg.allocatedAmount / pkg.internalAmount;
   return 1.0;
+}
+
+/**
+ * APX-40: whether the internal (cost) budget typed into a package form is
+ * larger than its allocated (client) budget. Inputs are the raw text of the
+ * two fields; anything that is not yet a valid amount answers false, so the
+ * warning only appears once both are real amounts. Compared as decimals, never
+ * through a JavaScript number.
+ */
+export function isInternalOverAllocated(allocatedRaw: string, internalRaw: string): boolean {
+  const allocated = parseMoneyInput(allocatedRaw);
+  const internal = parseMoneyInput(internalRaw);
+  if (allocated === null || internal === null) return false;
+  return new Decimal(internal).greaterThan(allocated);
+}
+
+/** A phase on a bill — Billed, or Paid once that bill is paid. */
+export function isPhaseBilled(billingStatus: string): boolean {
+  return billingStatus === "billed" || billingStatus === "paid";
+}
+
+export const PHASE_BILLED_COPY =
+  "This phase is already on a bill, so its allocated amount can no longer change. Correct it with a credit note or an adjustment on the next bill.";
+
+/**
+ * APX-10: once a phase is on a bill, the amount it was billed at is fixed —
+ * Billable Now and the bill line both value a phase at its allocated amount.
+ * Name and internal budget may still change. Compared as decimals, so
+ * "125000" and "125000.00" are the same amount and not a change.
+ * trg_phases_allocated_locked (migration 20261124300001) is the boundary.
+ */
+export function phaseAllocatedChangeRefusal(
+  current: { billingStatus: string; allocatedAmount: string | number },
+  nextAllocated: string | undefined
+): string | null {
+  if (nextAllocated === undefined || !isPhaseBilled(current.billingStatus)) return null;
+  return new Decimal(nextAllocated.trim()).equals(new Decimal(current.allocatedAmount))
+    ? null
+    : PHASE_BILLED_COPY;
 }

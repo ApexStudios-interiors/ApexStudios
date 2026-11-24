@@ -6,9 +6,10 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAction } from "next-safe-action/hooks";
 import { useApp } from "@/context/AppContext";
-import { createTaskSchema } from "@/features/schedule/schema";
+import { TASK_NAME_MAX, createTaskSchema } from "@/features/schedule/schema";
 import { createTask, getOwnerOptions, getPhaseOptions } from "@/features/schedule/actions";
 import { DatePicker } from "@/components/shared/DatePicker";
+import { Button } from "@/components/ui/button";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
 import {
   Select,
@@ -28,8 +29,8 @@ import {
  * name is not representable now, the same class of gap Build 04 found for
  * package leads).
  */
-export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: string }) {
-  const { closeDialog, toast } = useApp();
+export function AddTaskDialog({ projectId, moduleId }: { projectId: string; moduleId: string }) {
+  const { closeDialog, openDialog, toast, role } = useApp();
   const router = useRouter();
   const [phases, setPhases] = useState<{ id: string; name: string }[] | null>(null);
   const [owners, setOwners] = useState<{ id: string; name: string }[] | null>(null);
@@ -37,10 +38,10 @@ export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: strin
   useEffect(() => {
     getPhaseOptions(moduleId)
       .then(setPhases)
-      .catch(() => toast("Could not load phases."));
+      .catch(() => toast("Could not load phases.", "error"));
     getOwnerOptions()
       .then(setOwners)
-      .catch(() => toast("Could not load staff."));
+      .catch(() => toast("Could not load staff.", "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [moduleId]);
 
@@ -73,7 +74,7 @@ export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: strin
     register,
     control,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm({
     // No explicit generic — ownerProfileId's "" -> undefined transform gives
     // the schema's input and output types different shapes for that field,
@@ -100,22 +101,24 @@ export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: strin
       // Nothing to choose and Phase is required: the form cannot succeed, so
       // don't let it be filled in and submitted only to fail.
       okDisabled={noPhases}
+      dirty={isDirty}
       onClose={closeDialog}
       onOk={onSubmit}
     >
-      <form onSubmit={onSubmit} className="grid grid-cols-2 gap-3.5">
-        <div className="col-span-2">
+      <form onSubmit={onSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        <div className="sm:col-span-2">
           <Field label="Task" htmlFor="at-name">
             <input
               id="at-name"
               className={inputClass}
               placeholder="Coping stone fixing"
+              maxLength={TASK_NAME_MAX}
               {...register("name")}
             />
           </Field>
           {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
         </div>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <Field label="Phase" htmlFor="at-phase">
             {/* The form keeps `""` as the empty value — createTaskSchema's
                 z.uuid() still rejects it with the same message — and Base UI
@@ -156,15 +159,29 @@ export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: strin
             />
           </Field>
           {noPhases ? (
-            <p className="text-xs text-muted-foreground mt-1">
-              This package has no phases yet. Add a phase to it before adding a task — a task must belong to
-              one.
-            </p>
+            // APX-10: an admin can create the missing phase right here and is
+            // brought back to this dialog; anyone else is told who can.
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <p className="text-xs text-muted-foreground">
+                This package has no phases yet, and a task must belong to one.
+                {role === "admin" ? "" : " Ask an admin to add a phase on the package's Phases tab."}
+              </p>
+              {role === "admin" && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  onClick={() => openDialog({ kind: "addPhase", projectId, moduleId, thenAddTask: true })}
+                >
+                  Create phase
+                </Button>
+              )}
+            </div>
           ) : (
             errors.phaseId && <p className="text-xs text-destructive mt-1">{errors.phaseId.message}</p>
           )}
         </div>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <Field label="Owner" htmlFor="at-owner">
             {/* null item -> "" -> createTaskSchema's own "" -> undefined transform. */}
             <Controller
@@ -197,7 +214,7 @@ export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: strin
             />
           </Field>
         </div>
-        <Field label="Start Date" htmlFor="at-start">
+        <Field label="Start Date" htmlFor="at-start" error={errors.startDate?.message}>
           <Controller
             control={control}
             name="startDate"
@@ -213,22 +230,21 @@ export function AddTaskDialog({ moduleId }: { projectId: string; moduleId: strin
             )}
           />
         </Field>
-        {errors.startDate && <p className="text-xs text-destructive mt-1">{errors.startDate.message}</p>}
-        <Field label="Duration (weeks)" htmlFor="at-duration">
+        <Field label="Duration (weeks)" htmlFor="at-duration" error={errors.durationWeeks?.message}>
           <input
             id="at-duration"
             type="number"
+            inputMode="numeric"
             min={1}
             max={104}
             className={inputClass}
+            aria-invalid={!!errors.durationWeeks}
+            aria-describedby={errors.durationWeeks ? "at-duration-error" : undefined}
             {...register("durationWeeks")}
           />
         </Field>
-        {errors.durationWeeks && (
-          <p className="text-xs text-destructive mt-1">{errors.durationWeeks.message}</p>
-        )}
         {create.result.serverError && (
-          <p className="col-span-2 text-[12.5px] text-destructive">{create.result.serverError}</p>
+          <p className="sm:col-span-2 text-[12.5px] text-destructive">{create.result.serverError}</p>
         )}
       </form>
     </DialogShell>

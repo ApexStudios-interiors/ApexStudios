@@ -1,5 +1,13 @@
 import { requireSession } from "@/lib/auth/session";
-import { getPortfolio } from "@/features/projects/queries";
+import { getPortfolio, getPortfolioAttention } from "@/features/projects/queries";
+import { ProjectListFilters } from "@/features/projects/components/ProjectListFilters";
+import {
+  filterProjects,
+  normaliseProjectSearch,
+  parseProjectStatusFilter,
+  sortByAttention,
+} from "@/features/projects/portfolio";
+import { plural } from "@/lib/plural";
 import { StatBar } from "@/components/ui/StatBar";
 import { ProjectCard } from "@/features/projects/components/ProjectCard";
 import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
@@ -12,17 +20,39 @@ import { formatINRCompact } from "@/lib/money";
  * virtue of requireSession()'s cookies() read (§4.6: no full-route caching —
  * this page is role-scoped, and a cached response would serve one role's
  * numbers to another).
+ *
+ * APX-48/51: cards are sorted by what needs attention (late tasks, waiting
+ * approvals, outstanding money for admin, low stock, a quiet site) and carry
+ * badges saying so; a status filter (archived hidden by default) and a search
+ * narrow them. The stat row still describes the whole portfolio.
  */
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; q?: string }>;
+}) {
+  const { status: rawStatus, q: rawQ } = await searchParams;
+  const status = parseProjectStatusFilter(rawStatus);
+  const q = normaliseProjectSearch(rawQ);
   const session = await requireSession();
   const portfolio = await getPortfolio(session);
+  const attention = await getPortfolioAttention(
+    session,
+    portfolio.projects.map((p) => p.id)
+  );
+  const shown = sortByAttention(filterProjects(portfolio.projects, { status, q }), attention);
+  const total = portfolio.projects.length;
 
   return (
     <div>
       <div className="flex items-start gap-4 flex-wrap mb-[22px]">
         <div>
           <h1 className="text-[26px] font-bold tracking-tight">All Projects</h1>
-          <p className="mt-1 text-muted-foreground text-[13.5px]">{portfolio.projects.length} projects</p>
+          <p className="mt-1 text-muted-foreground text-[13.5px]">
+            {shown.length === total
+              ? plural(total, "project")
+              : `${shown.length} of ${plural(total, "project")}`}
+          </p>
         </div>
         <div className="ml-auto flex gap-2">
           {portfolio.role === "money" && (
@@ -40,7 +70,7 @@ export default async function HomePage() {
             {
               label: "Total Allocated",
               value: formatINRCompact(portfolio.stats.totalAllocated),
-              sub: `Across ${portfolio.projects.length} projects`,
+              sub: `Across ${plural(total, "project")}`,
             },
             {
               label: "Total Internal",
@@ -61,7 +91,7 @@ export default async function HomePage() {
             {
               label: "Total Contract Value",
               value: formatINRCompact(portfolio.stats.totalContractValue),
-              sub: `Across ${portfolio.projects.length} projects`,
+              sub: `Across ${plural(total, "project")}`,
             },
             {
               label: "Active Projects",
@@ -93,21 +123,27 @@ export default async function HomePage() {
         />
       )}
 
-      {portfolio.projects.length === 0 ? (
-        // A client can be left with no project (removed from their last one);
-        // a new site supervisor starts with none. Say so rather than show a blank grid.
-        <p className="rounded-xl border border-border px-5 py-8 text-center text-[13.5px] text-muted-foreground">
-          {portfolio.role === "client"
-            ? "You don't have access to any project yet. Contact Apex Studios to be given access."
-            : portfolio.role === "site"
-              ? "You haven't been added to any project yet. Ask an admin to add you."
-              : "No projects yet."}
-        </p>
-      ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
-          {portfolio.projects.map((p) => (
-            <ProjectCard key={p.id} project={p} />
+      <ProjectListFilters status={status} q={q} />
+
+      {shown.length > 0 ? (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))] gap-4">
+          {shown.map((p) => (
+            <ProjectCard key={p.id} project={p} attention={attention[p.id]} />
           ))}
+        </div>
+      ) : (
+        <div className="rounded-[10px] border border-dashed border-border px-5 py-10 text-center text-muted-foreground text-[13.5px]">
+          {total === 0
+            ? // A client can be left with no project (removed from their last
+              // one); a new site supervisor starts with none (#90).
+              portfolio.role === "client"
+              ? "You don't have access to any project yet. Contact Apex Studios to be given access."
+              : portfolio.role === "site"
+                ? "You haven't been added to any project yet. Ask an admin to add you."
+                : "No projects yet."
+            : q
+              ? `No projects match “${q}”.`
+              : "No projects with this status."}
         </div>
       )}
     </div>

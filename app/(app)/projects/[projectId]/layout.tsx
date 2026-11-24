@@ -1,4 +1,6 @@
 import { requireSession, requireProjectAccess } from "@/lib/auth/session";
+import { getProjectStatus } from "@/features/projects/queries";
+import { ProjectReadOnlyBanner } from "@/features/projects/components/ProjectReadOnlyBanner";
 import { ProjectShell } from "./ProjectShell";
 
 /**
@@ -27,5 +29,12 @@ export default async function ProjectLayout({
   const { projectId } = await params;
   const session = await requireSession();
   await requireProjectAccess(session, projectId);
-  return <ProjectShell>{children}</ProjectShell>;
+  // APX-41: a completed or archived project says so above every page.
+  const status = await getProjectStatus(projectId);
+  return (
+    <ProjectShell>
+      <ProjectReadOnlyBanner status={status} />
+      {children}
+    </ProjectShell>
+  );
 }

@@ -2,7 +2,12 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
 import { fetchPage, type Page, type PageRequest } from "@/lib/pagination";
-import { inventorySearchFilter, inventoryStatus, type InventoryStatus } from "./service";
+import {
+  inventorySearchFilter,
+  inventoryStatus,
+  type InventoryStatus,
+  type InventoryStatusFilter,
+} from "./service";
 
 /**
  * build/07-stock-inventory-notifications.md §2.3. `unit_cost` is admin-only
@@ -67,7 +72,7 @@ type StatusRow = {
  */
 async function fetchRows(
   isAdmin: boolean,
-  filter: { projectId?: string; search?: string },
+  filter: { projectId?: string; search?: string; status?: InventoryStatusFilter },
   req: PageRequest
 ): Promise<Page<StatusRow>> {
   const supabase = await createClient();
@@ -83,6 +88,7 @@ async function fetchRows(
         .order("id");
       if (filter.projectId) query = query.eq("project_id", filter.projectId);
       if (filter.search) query = query.or(inventorySearchFilter(filter.search));
+      if (filter.status) query = query.eq("stock_status", filter.status);
       return query.range(from, to);
     }, req);
     return { ...page, rows: page.rows as StatusRow[] };
@@ -97,6 +103,7 @@ async function fetchRows(
       .order("id");
     if (filter.projectId) query = query.eq("project_id", filter.projectId);
     if (filter.search) query = query.or(inventorySearchFilter(filter.search));
+    if (filter.status) query = query.eq("stock_status", filter.status);
     return query.range(from, to);
   }, req);
   // The view's own column types come back nullable even though every one of
@@ -160,13 +167,14 @@ function emptyPage(req: PageRequest): Page<InventoryItemDTO> {
 export async function getProjectInventory(
   session: Session,
   projectId: string,
-  req: PageRequest
+  req: PageRequest,
+  status?: InventoryStatusFilter
 ): Promise<{ items: Page<InventoryItemDTO>; stats: InventoryStats }> {
   const effectiveRole = session.impersonating?.role ?? session.role;
   const isAdmin = effectiveRole === "admin";
   if (effectiveRole === "client") return { items: emptyPage(req), stats: EMPTY_STATS };
 
-  const page = await fetchRows(isAdmin, { projectId }, req);
+  const page = await fetchRows(isAdmin, { projectId, status }, req);
   const items = { ...page, rows: page.rows.map((r) => toDTO(r, isAdmin, new Map())) };
   const stats = await fetchStats(isAdmin, projectId);
   return { items, stats };
@@ -182,7 +190,7 @@ export async function getProjectInventory(
  */
 export async function getBusinessInventory(
   session: Session,
-  opts: { projectId?: string; search?: string },
+  opts: { projectId?: string; search?: string; status?: InventoryStatusFilter },
   req: PageRequest
 ): Promise<{ items: Page<InventoryItemDTO>; stats: InventoryStats }> {
   const effectiveRole = session.impersonating?.role ?? session.role;

@@ -1,11 +1,12 @@
 "use server";
 
 import "server-only";
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { siteAction } from "@/lib/safe-action";
+import { authedAction, siteAction } from "@/lib/safe-action";
 import { requireSession } from "@/lib/auth/session";
-import { editDailyUpdateSchema, postDailyUpdateSchema } from "./schema";
+import { editDailyUpdateSchema, loadMoreUpdatesSchema, postDailyUpdateSchema } from "./schema";
+import { getUpdatesForProject } from "./queries";
 import { editDailyUpdateFor, postDailyUpdateFor } from "./write";
 
 /**
@@ -20,7 +21,6 @@ export const postDailyUpdate = siteAction
   .action(async ({ parsedInput, ctx }) => {
     const posted = await postDailyUpdateFor(ctx.session, parsedInput);
 
-    updateTag(`project:${parsedInput.projectId}`);
     revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
     return { id: posted.id };
   });
@@ -30,10 +30,24 @@ export const editDailyUpdate = siteAction
   .action(async ({ parsedInput, ctx }) => {
     const edited = await editDailyUpdateFor(ctx.session, parsedInput);
 
-    updateTag(`project:${edited.projectId}`);
     revalidatePath(`/projects/${edited.projectId}`, "layout");
     return { id: edited.id };
   });
+
+/**
+ * Daily Updates' "Load more" (APX-51): the next page, for the list to APPEND
+ * rather than replace itself. A read, so every role that can open the page may
+ * call it (`authedAction`); `getUpdatesForProject` reads through the caller's
+ * own RLS-bound client, so a project the caller cannot see returns nothing.
+ */
+export const loadMoreUpdates = authedAction
+  .inputSchema(loadMoreUpdatesSchema)
+  .action(async ({ parsedInput, ctx }) =>
+    getUpdatesForProject(ctx.session, parsedInput.projectId, {
+      packageId: parsedInput.packageId,
+      cursor: parsedInput.cursor,
+    })
+  );
 
 /** `PostUpdateDialog`'s Package dropdown — `v_package_site` for non-admin,
  *  same reason as every other admin-only-table lookup this build's own

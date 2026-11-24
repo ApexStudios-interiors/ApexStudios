@@ -15,8 +15,12 @@ import { transitionStockRequestFor } from "@/features/stock/transition";
  * schema, same shared helper (features/stock/transition.ts), so web and
  * mobile behave identically.
  *
- *   body: { "toStatus": "approved" | "rejected" | "ordered" | "delivered",
- *           "note"?: string }        — a rejection's reason is its note
+ *   body: { "toStatus": "approved" | "rejected" | "ordered" | "delivered" | "cancelled",
+ *           "note"?: string,         — a rejection's / cancellation's reason
+ *           "rate"?: number,         — admin, on approval (APX-14): required
+ *                                     when the request has no rate yet
+ *           "deliveredQty"?: number } — a part delivery (APX-69); the rest
+ *                                     stays Ordered as a new linked request
  *
  * Bearer only. createClient()/getSession() would also accept a browser's
  * session cookie, so this mutation refuses any request without an
@@ -43,6 +47,7 @@ const STATUS_BY_CODE: Record<string, number> = {
   NOT_FOUND: 404,
   ILLEGAL_TRANSITION: 409,
   REASON_REQUIRED: 422,
+  RATE_REQUIRED: 422,
 };
 
 function errorResponse(status: number, error: string, message: string) {
@@ -75,8 +80,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ req
     // transitionStockRequestSchema — the web action's own schema — stays the
     // single source of truth: toStatus one of the four targets, note
     // optional and trimmed.
-    const { toStatus, note } = body as { toStatus?: unknown; note?: unknown };
-    const parsed = transitionStockRequestSchema.safeParse({ requestId, toStatus, note });
+    const { toStatus, note, rate, deliveredQty } = body as {
+      toStatus?: unknown;
+      note?: unknown;
+      rate?: unknown;
+      deliveredQty?: unknown;
+    };
+    const parsed = transitionStockRequestSchema.safeParse({ requestId, toStatus, note, rate, deliveredQty });
     if (!parsed.success) {
       return errorResponse(400, "VALIDATION", parsed.error.issues[0]?.message ?? "Invalid request.");
     }

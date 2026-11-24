@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { UpdateDTO } from "@/features/updates/queries";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import { Badge } from "@/components/ui/Badge";
 import { DialogShell } from "@/components/ui/DialogShell";
 import { useApp } from "@/context/AppContext";
@@ -25,7 +25,7 @@ export function UpdateList({ updates }: { updates: UpdateDTO[] }) {
   }
 
   return (
-    <div className="flex flex-col px-5 pt-1 pb-2">
+    <div className="flex flex-col px-4 md:px-5 pt-1 pb-2">
       {updates.map((u) => (
         <div
           key={u.id}
@@ -50,16 +50,19 @@ export function UpdateList({ updates }: { updates: UpdateDTO[] }) {
               </button>
             )}
           </div>
-          <div className="text-[13.5px] max-w-[70ch] whitespace-pre-line">{u.body}</div>
+          <div className="text-[13.5px] max-w-[70ch] whitespace-pre-line break-words">{u.body}</div>
           {u.attachments.length > 0 && (
             <div className="flex gap-2 mt-2.5 flex-wrap">
-              {u.attachments.map((a) =>
+              {u.attachments.map((a, i) =>
                 a.isImage && a.thumbUrl ? (
                   <button
                     key={a.id}
                     type="button"
-                    onClick={() => setLightbox({ url: a.downloadUrl, alt: "Update photo" })}
-                    className="w-24 h-[72px] rounded-md overflow-hidden border border-border shrink-0"
+                    onClick={() =>
+                      setLightbox({ url: a.downloadUrl, alt: `Photo from the ${dmy(u.updateDate)} update` })
+                    }
+                    aria-label={`View photo ${i + 1} of ${u.attachments.length} from the ${dmy(u.updateDate)} update`}
+                    className="w-24 h-[72px] rounded-md overflow-hidden border border-border shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element -- a presigned R2 URL, not an optimisable next/image source (build §2.4) */}
                     <img src={a.thumbUrl} alt="" className="w-full h-full object-cover" />

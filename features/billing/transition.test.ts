@@ -15,12 +15,11 @@ import type { Session } from "@/lib/auth/session";
 const h = vi.hoisted(() => ({
   rpc: vi.fn(),
   enqueue: vi.fn(),
-  updateTag: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("next/cache", () => ({ updateTag: h.updateTag, revalidatePath: h.revalidatePath }));
+vi.mock("next/cache", () => ({ revalidatePath: h.revalidatePath }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ rpc: h.rpc }) }));
 vi.mock("@/lib/jobs/enqueue", () => ({ enqueue: h.enqueue }));
 
@@ -56,7 +55,6 @@ beforeEach(() => {
   h.rpc.mockReset();
   h.enqueue.mockReset();
   h.enqueue.mockResolvedValue("job-id");
-  h.updateTag.mockReset();
   h.revalidatePath.mockReset();
 });
 
@@ -122,7 +120,6 @@ describe("transitionBillFor", () => {
 
     await transitionBillFor(SESSION, { billId: BILL_ID, toStatus: "certified" });
 
-    expect(h.updateTag).not.toHaveBeenCalled();
     expect(h.revalidatePath).not.toHaveBeenCalled();
   });
 });
