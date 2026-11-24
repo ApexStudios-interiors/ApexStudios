@@ -15,6 +15,7 @@ import { Card } from "@/components/ui/Card";
 import { Empty } from "@/components/ui/Empty";
 import { Icon } from "@/components/ui/Icon";
 import { projectBase } from "@/lib/routing/current";
+import { plural } from "@/lib/plural";
 import { projectWriteRefusal } from "@/features/projects/service";
 
 /** build/04-projects-packages-phases.md §4.4 step 3: the same table as the
@@ -56,7 +57,7 @@ export default async function PackagesPage({
           <p className="mt-1 text-muted-foreground text-[13.5px]">
             {filtered
               ? `${shown.packages.length} of ${packages.packages.length} packages`
-              : `${packages.packages.length} packages`}
+              : plural(packages.packages.length, "package")}
           </p>
         </div>
         <div className="ml-auto flex gap-2">

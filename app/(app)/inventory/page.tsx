@@ -5,7 +5,9 @@ import { getPortfolio } from "@/features/projects/queries";
 import { InventoryTable } from "@/features/inventory/components/InventoryTable";
 import { InventoryProjectFilterSelect } from "@/features/inventory/components/InventoryProjectFilterSelect";
 import { InventorySearchInput } from "@/features/inventory/components/InventorySearchInput";
-import { normalizeInventorySearch } from "@/features/inventory/service";
+import { normalizeInventorySearch, parseInventoryStatusFilter } from "@/features/inventory/service";
+import { InventoryStatusTabs } from "@/features/inventory/components/InventoryStatusTabs";
+import { StatusTileLink } from "@/features/inventory/components/StatusTileLink";
 import { formatINRCompact } from "@/lib/money";
 import { parsePageRequest } from "@/lib/pagination";
 import { StatBar } from "@/components/ui/StatBar";
@@ -28,9 +30,10 @@ import { TablePagination } from "@/components/shared/TablePagination";
 export default async function BusinessInventoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ project?: string; q?: string; page?: string; pageSize?: string }>;
+  searchParams: Promise<{ project?: string; q?: string; status?: string; page?: string; pageSize?: string }>;
 }) {
-  const { project: projectId, q, ...paging } = await searchParams;
+  const { project: projectId, q, status: rawStatus, ...paging } = await searchParams;
+  const status = parseInventoryStatusFilter(rawStatus);
   const session = await requireSession();
 
   const search = normalizeInventorySearch(q);
@@ -43,9 +46,18 @@ export default async function BusinessInventoryPage({
   const isAdmin = effectiveRole === "admin";
 
   const [{ items, stats }, portfolio] = await Promise.all([
-    getBusinessInventory(session, { projectId, search }, parsePageRequest(paging)),
+    getBusinessInventory(session, { projectId, search, status }, parsePageRequest(paging)),
     getPortfolio(session),
   ]);
+
+  /** A tile link keeps the project filter and search, and swaps the status. */
+  const statusHref = (next: string) => {
+    const params = new URLSearchParams();
+    if (projectId) params.set("project", projectId);
+    if (search) params.set("q", search);
+    params.set("status", next);
+    return `/inventory?${params.toString()}`;
+  };
 
   return (
     <div>
@@ -60,10 +72,26 @@ export default async function BusinessInventoryPage({
           ...(isAdmin
             ? [{ label: "Total Value", value: formatINRCompact(stats.totalValue ?? 0), sub: "at unit cost" }]
             : []),
-          { label: "Low Stock", value: stats.lowCount, sub: "below minimum stock" },
-          { label: "Critical", value: stats.criticalCount, sub: "out of stock" },
+          {
+            label: "Low Stock",
+            value: <StatusTileLink href={statusHref("low")} count={stats.lowCount} label="low-stock items" />,
+            sub: "below minimum stock",
+          },
+          {
+            label: "Critical",
+            value: (
+              <StatusTileLink
+                href={statusHref("critical")}
+                count={stats.criticalCount}
+                label="out-of-stock items"
+              />
+            ),
+            sub: "out of stock",
+          },
         ]}
       />
+
+      <InventoryStatusTabs status={status ?? ""} />
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <InventoryProjectFilterSelect projects={portfolio.projects} value={projectId ?? ""} />
@@ -76,7 +104,13 @@ export default async function BusinessInventoryPage({
           isAdmin={isAdmin}
           showProject
           role={effectiveRole}
-          empty={search ? `No items match “${search}”.` : undefined}
+          empty={
+            search
+              ? `No items match “${search}”.`
+              : status
+                ? `No ${status === "low" ? "low-stock" : "out-of-stock"} items.`
+                : undefined
+          }
         />
         <TablePagination page={items.page} pageSize={items.pageSize} total={items.total} />
       </Card>

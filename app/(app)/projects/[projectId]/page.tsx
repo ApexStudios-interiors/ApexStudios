@@ -25,6 +25,7 @@ import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 import { LegacyDashboardCards } from "./LegacyDashboardCards";
+import { DashboardAttention } from "./DashboardAttention";
 import { dmy } from "@/lib/logic";
 import { formatINRCompact } from "@/lib/money";
 import { projectBase } from "@/lib/routing/current";
@@ -149,6 +150,8 @@ export default async function ProjectDashboardPage({ params }: { params: Promise
       ) : (
         <SiteDashboardStats projectId={projectId} packages={packages} />
       )}
+
+      <DashboardAttention session={session} projectId={projectId} base={base} />
 
       <Card>
         <CardHeader>

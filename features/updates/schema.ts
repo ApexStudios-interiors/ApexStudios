@@ -1,6 +1,15 @@
 import { z } from "zod";
 import { MAX_PHOTOS_PER_ENTITY } from "@/lib/r2/constraints";
 
+/** Daily Updates' "Load more" (APX-51): the next page after `cursor`, appended
+ *  in place. The cursor is the opaque keyset token the page itself handed out;
+ *  a malformed one simply reads from the top (`decodeCursor` returns null). */
+export const loadMoreUpdatesSchema = z.object({
+  projectId: z.uuid(),
+  packageId: z.uuid().optional(),
+  cursor: z.string().min(1).max(512),
+});
+
 /**
  * `id` is client-generated (`crypto.randomUUID()`, `PostUpdateDialog`), not
  * server-assigned: `FileUploader`'s photos upload and confirm BEFORE the

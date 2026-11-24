@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   reads: [] as string[],
   rows: {} as Record<string, unknown[]>,
   patterns: [] as string[],
+  orFilters: [] as [string, string][],
   filters: [] as unknown[][],
 }));
 
@@ -27,6 +28,7 @@ vi.mock("@/lib/supabase/server", () => ({
           h.patterns.push(pattern);
           return chain;
         },
+        is: () => chain,
         in: () => chain,
         neq: (col: string, value: unknown) => {
           h.filters.push([table, "neq", col, value]);
@@ -36,8 +38,13 @@ vi.mock("@/lib/supabase/server", () => ({
           h.filters.push([table, "eq", col, value]);
           return chain;
         },
+        // An ilike OR-filter is a search read (APX-64, ref numbers); any
+        // other `or` is #101's preview scope on inventory.
         or: (expr: string) => {
-          h.filters.push([table, "or", expr]);
+          if (expr.includes(".ilike.")) {
+            h.reads.push(table);
+            h.orFilters.push([table, expr]);
+          } else h.filters.push([table, "or", expr]);
           return chain;
         },
         limit: () => chain,
@@ -66,6 +73,7 @@ const PROJECT_ID = "00000000-0000-4000-8000-0000000000c1";
 beforeEach(() => {
   h.reads.length = 0;
   h.patterns.length = 0;
+  h.orFilters.length = 0;
   h.filters.length = 0;
   h.rows = {};
 });
@@ -164,6 +172,55 @@ describe("searchAll — Bills visibility", () => {
 
     expect(h.reads).not.toContain("bills");
     expect(h.reads).not.toContain("v_bill_client");
+  });
+});
+
+describe("searchAll — ref numbers (APX-64)", () => {
+  it("matches a stock request by material OR ref number, for admin and site", async () => {
+    await searchAll(sessionAs("admin"), "SR-BHEL");
+    expect(h.orFilters).toContainEqual([
+      "stock_requests",
+      'material_name.ilike."%SR-BHEL%",ref_no.ilike."%SR-BHEL%"',
+    ]);
+
+    h.orFilters.length = 0;
+    await searchAll(sessionAs("site"), "SR-BHEL");
+    expect(h.orFilters).toContainEqual([
+      "v_stock_request_site",
+      'material_name.ilike."%SR-BHEL%",ref_no.ilike."%SR-BHEL%"',
+    ]);
+  });
+
+  it("matches an approval by item OR ref number, for every role", async () => {
+    for (const role of ["admin", "site", "client"] as const) {
+      h.orFilters.length = 0;
+      await searchAll(sessionAs(role), "AP-BHEL-NCH-007");
+      expect(h.orFilters).toContainEqual([
+        "approvals",
+        'item.ilike."%AP-BHEL-NCH-007%",ref_no.ilike."%AP-BHEL-NCH-007%"',
+      ]);
+    }
+  });
+
+  it("still never reads stock requests for a client", async () => {
+    await searchAll(sessionAs("client"), "SR-BHEL");
+    expect(h.orFilters.map(([t]) => t)).not.toContain("stock_requests");
+    expect(h.orFilters.map(([t]) => t)).not.toContain("v_stock_request_site");
+  });
+
+  it("shows the approval's ref number in its result line", async () => {
+    h.rows = {
+      approvals: [
+        {
+          id: "00000000-0000-4000-8000-0000000000a9",
+          ref_no: "AP-BHEL-NCH-007",
+          item: "Tile sample",
+          project_id: PROJECT_ID,
+        },
+      ],
+    };
+    const [result] = await searchAll(sessionAs("client"), "AP-BHEL");
+    expect(result?.sub.startsWith("AP-BHEL-NCH-007")).toBe(true);
   });
 });
 

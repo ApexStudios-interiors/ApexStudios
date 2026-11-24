@@ -4,6 +4,10 @@ import Decimal from "decimal.js";
 import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
 import { getPackageNavLists } from "@/features/packages/queries";
+import { env } from "@/lib/env";
+import { todayIst } from "@/lib/dates";
+import { outstandingByProject } from "@/features/billing/queries";
+import { NO_ATTENTION, daysBetween, type ProjectAttention } from "./portfolio";
 import {
   parseProjectStatus,
   parseRateVisibility,
@@ -284,6 +288,119 @@ async function getPortfolioForSite(session: Session): Promise<PortfolioSite> {
 }
 
 export type Portfolio = PortfolioAdmin | PortfolioClient | PortfolioSite;
+
+/** How far back "last site update" looks. Older than this reads as "no recent
+ *  update" — it bounds the read instead of scanning every update ever posted. */
+const UPDATE_LOOKBACK_DAYS = 60;
+
+/**
+ * The All Projects cards' attention badges (APX-48), for the whole portfolio
+ * in a handful of queries rather than a handful per card. Every read goes
+ * through the user's own RLS-bound client and is shaped by the EFFECTIVE role:
+ *
+ *   late tasks, pending approvals, last update  every role (no money)
+ *   low stock                                   admin (v_inventory_status) and
+ *                                               site (v_inventory_site); never
+ *                                               a client (no stock visibility)
+ *   outstanding ₹                               admin only, and only while
+ *                                               BILLING_ENABLED
+ *
+ * Kept separate from `getPortfolio` because the app shell calls that on every
+ * navigation; only the All Projects page needs these.
+ */
+export async function getPortfolioAttention(
+  session: Session,
+  projectIds: string[]
+): Promise<Record<string, ProjectAttention>> {
+  if (projectIds.length === 0) return {};
+  const effectiveRole = session.impersonating?.role ?? session.role;
+  const isAdmin = effectiveRole === "admin";
+  const isClient = effectiveRole === "client";
+  const supabase = await createClient();
+  const today = todayIst();
+  const lookback = isoDaysBefore(today, UPDATE_LOOKBACK_DAYS);
+
+  const [late, approvals, updates, lowStock, outstanding] = await Promise.all([
+    supabase
+      .from("tasks")
+      .select("project_id")
+      .in("project_id", projectIds)
+      .is("deleted_at", null)
+      .lt("end_date", today)
+      .lt("progress_pct", 100),
+    supabase
+      .from("approvals")
+      .select("project_id, created_at")
+      .in("project_id", projectIds)
+      .eq("status", "pending")
+      .is("deleted_at", null),
+    supabase
+      .from("daily_updates")
+      .select("project_id, update_date")
+      .in("project_id", projectIds)
+      .is("deleted_at", null)
+      .gte("update_date", lookback),
+    isClient
+      ? Promise.resolve(null)
+      : isAdmin
+        ? supabase
+            .from("v_inventory_status")
+            .select("project_id")
+            .in("project_id", projectIds)
+            .in("stock_status", ["low", "critical"])
+        : supabase
+            .from("v_inventory_site")
+            .select("project_id")
+            .in("project_id", projectIds)
+            .in("stock_status", ["low", "critical"]),
+    isAdmin && env.BILLING_ENABLED ? outstandingByProject(projectIds) : Promise.resolve(null),
+  ]);
+  if (late.error) throw new Error(late.error.message);
+  if (approvals.error) throw new Error(approvals.error.message);
+  if (updates.error) throw new Error(updates.error.message);
+  if (lowStock?.error) throw new Error(lowStock.error.message);
+
+  const result: Record<string, ProjectAttention> = {};
+  for (const id of projectIds) {
+    result[id] = {
+      ...NO_ATTENTION,
+      lowStock: lowStock ? 0 : null,
+      outstanding: outstanding ? (outstanding[id] ?? 0) : null,
+    };
+  }
+  const at = (id: string | null) => (id ? result[id] : undefined);
+
+  for (const t of late.data) {
+    const a = at(t.project_id);
+    if (a) a.lateTasks += 1;
+  }
+  for (const ap of approvals.data) {
+    const a = at(ap.project_id);
+    if (!a) continue;
+    a.pendingApprovals += 1;
+    const age = daysBetween(todayIst(new Date(ap.created_at)), today);
+    a.oldestApprovalDays = Math.max(a.oldestApprovalDays ?? 0, age);
+  }
+  for (const u of updates.data) {
+    const a = at(u.project_id);
+    if (!a) continue;
+    const age = daysBetween(u.update_date, today);
+    a.lastUpdateDays = a.lastUpdateDays == null ? age : Math.min(a.lastUpdateDays, age);
+  }
+  for (const row of lowStock?.data ?? []) {
+    const a = at(row.project_id);
+    if (a && a.lowStock != null) a.lowStock += 1;
+  }
+  return result;
+}
+
+/** `yyyy-MM-dd`, `days` before `iso`, on the calendar Y/M/D (no timezone). */
+function isoDaysBefore(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const t = new Date(Date.UTC(y ?? 0, (m ?? 1) - 1, (d ?? 1) - days));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}`;
+}
 
 /**
  * Dispatches on the EFFECTIVE role (session.impersonating?.role ?? session.role),

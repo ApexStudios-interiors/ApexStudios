@@ -13,6 +13,7 @@ import { BillStatusBadge } from "@/components/shared/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { td, tdNum, th, thNum, sub } from "@/components/ui/table";
 import { Empty } from "@/components/ui/Empty";
+import { plural } from "@/lib/plural";
 
 type Stats = {
   billsRaised: number;
@@ -43,22 +44,22 @@ export function BillingClient({ bills, stats }: { bills: Page<BillDTO>; stats: S
           {
             label: "Bills Raised",
             value: formatINRCompact(stats.billsRaised),
-            sub: `${stats.counts.raised} bills`,
+            sub: plural(stats.counts.raised, "bill"),
           },
           {
             label: "Awaiting Approval",
             value: formatINRCompact(stats.awaitingApproval),
-            sub: `${stats.counts.awaitingApproval} bills`,
+            sub: plural(stats.counts.awaitingApproval, "bill"),
           },
           {
             label: "Payment Pending",
             value: formatINRCompact(stats.approvedUnpaid),
-            sub: `${stats.counts.approvedUnpaid} bills`,
+            sub: plural(stats.counts.approvedUnpaid, "bill"),
           },
           {
             label: "Paid",
             value: formatINRCompact(stats.paid),
-            sub: `${stats.counts.paid} bills`,
+            sub: plural(stats.counts.paid, "bill"),
           },
         ]}
       />

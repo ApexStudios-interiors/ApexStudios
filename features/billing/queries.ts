@@ -971,3 +971,71 @@ export async function getMaterialAtSite(packageId: string): Promise<MaterialAtSi
     };
   });
 }
+
+// ── Attention (APX-48) ───────────────────────────────────────────────────────
+// Read-only summaries for the All Projects cards and the admin project
+// dashboard. No billing arithmetic beyond `getAdminBillingStats`' own
+// Outstanding formula (02-lld.md §3.8), applied per project. Admin only:
+// `bills` and `payments` are admin-only on select, and every caller gates on
+// the effective role as well — a non-admin is never handed this shape.
+
+/** Outstanding per project: Σ net_payable of certified/paid bills − Σ their
+ *  payments, floored at zero — `getAdminBillingStats`' formula, per project. */
+export async function outstandingByProject(projectIds: string[]): Promise<Record<string, number>> {
+  if (projectIds.length === 0) return {};
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("bills")
+    .select("id, project_id, net_payable")
+    .in("project_id", projectIds)
+    .in("status", ["certified", "paid"])
+    .is("deleted_at", null);
+  if (error) throw new Error(error.message);
+  const paid = await paidByBill(data.map((b) => b.id));
+  const sums = new Map<string, Decimal>();
+  for (const b of data) {
+    const remaining = new Decimal(b.net_payable).minus(paid.get(b.id) ?? 0);
+    sums.set(b.project_id, (sums.get(b.project_id) ?? new Decimal(0)).plus(remaining));
+  }
+  const out: Record<string, number> = {};
+  for (const [id, value] of sums) out[id] = Decimal.max(value, 0).toNumber();
+  return out;
+}
+
+export type BillingAttention = {
+  billableNowValue: number;
+  billableNowCount: number;
+  /** Certified, not yet fully paid — the same figure as Billing's Outstanding. */
+  outstanding: number;
+  certifiedUnpaidCount: number;
+  /** When the oldest still-unpaid certified bill was certified (ISO timestamp). */
+  oldestCertifiedAt: string | null;
+  /** Submitted to the client, not yet certified. */
+  awaitingCertificationValue: number;
+  awaitingCertificationCount: number;
+};
+
+/** The admin project dashboard's billing tiles — the same sources the Billing
+ *  page reads (bills, Billable Now, payments), summarised. */
+export async function getBillingAttention(projectId: string): Promise<BillingAttention> {
+  const [bills, billable] = await Promise.all([getBillsForAdmin(projectId), getBillableNow(projectId)]);
+  const certified = bills.filter((b) => b.status === "certified" || b.status === "paid");
+  const paid = await paidByBill(certified.map((b) => b.id));
+  const unpaid = certified
+    .map((b) => ({ bill: b, remaining: new Decimal(b.netPayable).minus(paid.get(b.id) ?? 0).toNumber() }))
+    .filter((x) => x.remaining > 0);
+  const submitted = bills.filter((b) => b.status === "submitted");
+  const certifiedTimes = unpaid
+    .map((x) => x.bill.certifiedAt)
+    .filter((t): t is string => t != null)
+    .sort();
+  return {
+    billableNowValue: billable.reduce((a, l) => a + l.amount, 0),
+    billableNowCount: billable.length,
+    outstanding: unpaid.reduce((a, x) => a + x.remaining, 0),
+    certifiedUnpaidCount: unpaid.length,
+    oldestCertifiedAt: certifiedTimes[0] ?? null,
+    awaitingCertificationValue: submitted.reduce((a, b) => a + b.netPayable, 0),
+    awaitingCertificationCount: submitted.length,
+  };
+}

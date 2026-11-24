@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/auth/session";
-import { capResults, type SearchResultDTO } from "./service";
+import { capResults, ilikeAnyFilter, type SearchResultDTO } from "./service";
 import { packagePath, projectPath } from "@/lib/routing/paths";
 import { isUuid } from "@/lib/routing/slug";
 
@@ -43,8 +43,8 @@ export async function searchAll(session: Session, query: string): Promise<Search
   const [projects, packages, stockRequests, approvals, bills, inventory, users] = await Promise.all([
     searchProjects(supabase, q, scope),
     searchPackages(supabase, q, isAdmin, isClient, scope),
-    isClient ? Promise.resolve([]) : searchStockRequests(supabase, q, isAdmin, scope),
-    searchApprovals(supabase, q, scope),
+    isClient ? Promise.resolve([]) : searchStockRequests(supabase, query, isAdmin, scope),
+    searchApprovals(supabase, query, scope),
     isSite ? Promise.resolve([]) : searchBills(supabase, q, isAdmin, scope),
     isClient ? Promise.resolve([]) : searchInventory(supabase, q, isAdmin, scope),
     // Never while previewing: a preview is never of an admin (D66), so
@@ -190,26 +190,30 @@ async function searchPackages(
   }));
 }
 
+/**
+ * APX-64: matched on the material name OR the ref number ("SR-BHEL-NCH-014"),
+ * since staff quote the ref on calls. Takes the RAW query: `ilikeAnyFilter`
+ * does its own escaping for the `or=` syntax, which differs from `pattern`'s.
+ */
 async function searchStockRequests(
   supabase: Supa,
-  q: string,
+  query: string,
   isAdmin: boolean,
   scope: Scope
 ): Promise<SearchResultDTO[]> {
   type Row = { id: string; ref_no: string; material_name: string; project_id: string };
+  const filter = ilikeAnyFilter(["material_name", "ref_no"], query);
   const { data, error } = isAdmin
     ? await inScope(
         supabase
           .from("stock_requests")
           .select("id, ref_no, material_name, project_id")
-          .ilike("material_name", q),
+          .or(filter)
+          .is("deleted_at", null),
         scope
       ).limit(5)
     : await inScope(
-        supabase
-          .from("v_stock_request_site")
-          .select("id, ref_no, material_name, project_id")
-          .ilike("material_name", q),
+        supabase.from("v_stock_request_site").select("id, ref_no, material_name, project_id").or(filter),
         scope
       ).limit(5);
   if (error) throw new Error(error.message);
@@ -228,9 +232,14 @@ async function searchStockRequests(
   }));
 }
 
-async function searchApprovals(supabase: Supa, q: string, scope: Scope): Promise<SearchResultDTO[]> {
+/** APX-64: matched on the item OR the ref number ("AP-BHEL-NCH-007"). */
+async function searchApprovals(supabase: Supa, query: string, scope: Scope): Promise<SearchResultDTO[]> {
   const { data, error } = await inScope(
-    supabase.from("approvals").select("id, item, project_id").ilike("item", q),
+    supabase
+      .from("approvals")
+      .select("id, ref_no, item, project_id")
+      .or(ilikeAnyFilter(["item", "ref_no"], query))
+      .is("deleted_at", null),
     scope
   ).limit(5);
   if (error) throw new Error(error.message);
@@ -242,7 +251,7 @@ async function searchApprovals(supabase: Supa, q: string, scope: Scope): Promise
     id: a.id,
     category: "Approvals" as const,
     text: a.item,
-    sub: refs.get(a.project_id)?.name ?? "",
+    sub: `${a.ref_no} · ${refs.get(a.project_id)?.name ?? ""}`,
     href: sectionHref(refs.get(a.project_id), a.project_id, "/approvals"),
     projectId: a.project_id,
   }));

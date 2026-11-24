@@ -551,14 +551,14 @@ export const JOB_SCHEDULE: { job: string; when: string; what: string }[] = [
 // ── Where to find things ────────────────────────────────────────────────────
 
 export const WHERE: { item: string; roles: string; what: string }[] = [
-  { item: "All Projects", roles: "Everyone", what: "The portfolio: one card per project you can see. The button at the top of the sidebar opens a list to jump between projects." },
-  { item: "Inventory (ALL)", roles: "Admin, Site", what: "Every project's stock in one table, with a project filter." },
-  { item: "Dashboard", roles: "Everyone", what: "A project's status, stats, its packages, and cards for pending approvals, pending requests and the latest updates. Admins also find Edit Project, Change Status, the Set up this project checklist (while anything is missing), and the Site team, Client access and Rate visibility cards here." },
+  { item: "All Projects", roles: "Everyone", what: "The portfolio: one card per project you can see, sorted so the ones needing attention (late tasks, waiting approvals, low stock, a quiet site) come first, with a status filter (archived projects are hidden until you pick Archived or All) and a search. The button at the top of the sidebar opens a list to jump between projects." },
+  { item: "Inventory (ALL)", roles: "Admin, Site", what: "Every project's stock in one table, with a project filter. Click the Low Stock or Critical number to list just those items." },
+  { item: "Dashboard", roles: "Everyone", what: "A project's status, stats, its packages, and cards for pending approvals, pending requests and the latest updates. Admins see Billable Now, Outstanding and Awaiting Certification tiles and any late tasks; site supervisors see a Today card with open tasks and deliveries due. Admins also find Edit Project, Change Status, the Set up this project checklist (while anything is missing), and the Site team, Client access and Rate visibility cards here." },
   { item: "Packages", roles: "Everyone", what: "The project's packages; expand in the sidebar to jump to one. A package page has its budget and phases, schedule, updates, stock requests and (admins) billing." },
   { item: "Schedule", roles: "Everyone", what: "The Gantt chart per package; click a task bar to edit progress and dates (clients see a read-only summary)." },
-  { item: "Daily Updates", roles: "Everyone", what: "The site timeline with photos; + Post Update for staff." },
-  { item: "Inventory", roles: "Admin, Site", what: "This project's stock on hand, minimum stock levels and Low/Critical status." },
-  { item: "Stock Requests", roles: "Admin, Site", what: "Raise and progress material requests. The sidebar badge counts pending ones." },
+  { item: "Daily Updates", roles: "Everyone", what: "The site timeline with photos; + Post Update for staff. Load more adds older updates below the ones on screen." },
+  { item: "Inventory", roles: "Admin, Site", what: "This project's stock on hand, minimum stock levels and Low/Critical status. Click the Low Stock or Critical number to list just those items." },
+  { item: "Stock Requests", roles: "Admin, Site", what: "Raise and progress material requests. The sidebar badge counts pending ones; admins land on the Pending tab. Search finds a request by its ref number too." },
   { item: "Approvals", roles: "Everyone", what: "Client sign-offs on samples and drawings. The sidebar badge (clients only) counts those awaiting a decision." },
   { item: "Billing / Bills", roles: "Admin, Client", what: "Billable Now and the RA bills (admins); the bills to approve and pay (client, where the badge counts submitted bills)." },
   { item: "Users", roles: "Admin", what: "Add staff, change roles, reset passwords, deactivate and reactivate. Projects on a client's or Site Supervisor's row lists, adds and removes the projects they can see." },

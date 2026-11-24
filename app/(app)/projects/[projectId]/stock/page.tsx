@@ -54,9 +54,20 @@ export default async function StockPage({
   const header = await getProjectHeader(session, projectId);
   if (!header) notFound();
 
-  const status = VALID_STATUSES.includes(rawStatus as StockRequestStatus)
-    ? (rawStatus as StockRequestStatus)
-    : undefined;
+  const isAdmin = effectiveRole === "admin";
+  // APX-63: an admin's Stock page opens on Pending, as Approvals does — the
+  // requests waiting on them. "" (All, sent explicitly by StockStatusTabs) is
+  // a deliberate non-filter; an absent or unrecognised param is the role's
+  // default. A site supervisor keeps All as the default: they raised the
+  // requests and follow them through every status.
+  const status: StockRequestStatus | undefined =
+    rawStatus === ""
+      ? undefined
+      : VALID_STATUSES.includes(rawStatus as StockRequestStatus)
+        ? (rawStatus as StockRequestStatus)
+        : isAdmin
+          ? "pending"
+          : undefined;
 
   const [requests, pendingCount, packages] = await Promise.all([
     getStockRequestsPage(session, projectId, { status, packageId }, parsePageRequest(paging)),
@@ -64,7 +75,6 @@ export default async function StockPage({
     getPackageOptions(projectId),
   ]);
 
-  const isAdmin = effectiveRole === "admin";
   // APX-41: no new stock request on a completed or archived project.
   const readOnly = projectWriteRefusal(header.statusKey, "stock_request");
   const basePath = `${await projectBase(projectId)}/stock`;
