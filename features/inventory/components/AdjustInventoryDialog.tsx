@@ -13,7 +13,7 @@ import {
   composeAdjustReason,
   type AdjustReasonPreset,
 } from "@/features/inventory/service";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import { todayIst } from "@/lib/dates";
 import { formatQty } from "@/lib/quantity";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";

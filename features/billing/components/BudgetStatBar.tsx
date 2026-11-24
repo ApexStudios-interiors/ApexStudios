@@ -1,5 +1,5 @@
 import { type Stat, StatBar } from "@/components/ui/StatBar";
-import { pct } from "@/lib/logic";
+import { pct } from "@/lib/format";
 import { formatINRCompact } from "@/lib/money";
 
 /**

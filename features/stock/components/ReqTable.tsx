@@ -4,7 +4,7 @@ import type { Role } from "@/lib/rbac/roles";
 import type { StockRequestDTO } from "@/features/stock/queries";
 import { isDeadlineAtRisk } from "@/features/stock/service";
 import { todayIst } from "@/lib/dates";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import { formatINR } from "@/lib/money";
 import { StockRequestStatusBadge } from "@/components/shared/StatusBadges";
 import { TableWrap } from "@/components/ui/TableWrap";

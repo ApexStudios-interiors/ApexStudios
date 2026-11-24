@@ -3,7 +3,7 @@ import type { ProjectCardDTO } from "@/features/projects/queries";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { formatINRCompact } from "@/lib/money";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import { plural } from "@/lib/plural";
 import { projectPath } from "@/lib/routing/paths";
 import {

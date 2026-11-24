@@ -25,13 +25,12 @@ const h = vi.hoisted(() => {
     ForbiddenError,
     session: null as unknown as Session,
     rpc: vi.fn(),
-    updateTag: vi.fn(),
     revalidatePath: vi.fn(),
   };
 });
 
 vi.mock("server-only", () => ({}));
-vi.mock("next/cache", () => ({ revalidatePath: h.revalidatePath, updateTag: h.updateTag }));
+vi.mock("next/cache", () => ({ revalidatePath: h.revalidatePath }));
 vi.mock("@/lib/auth/session", () => ({
   UnauthenticatedError: h.UnauthenticatedError,
   ForbiddenError: h.ForbiddenError,
@@ -78,7 +77,6 @@ function row(over: Record<string, unknown> = {}) {
 beforeEach(() => {
   sessionAs("site");
   h.rpc.mockReset();
-  h.updateTag.mockClear();
   h.revalidatePath.mockClear();
 });
 
@@ -94,7 +92,7 @@ describe("transitionStockRequest", () => {
       p_to_status: "delivered",
       p_note: undefined,
     });
-    expect(h.updateTag).toHaveBeenCalledWith(`project:${PROJECT_ID}`);
+    expect(h.revalidatePath).toHaveBeenCalledWith(`/projects/${PROJECT_ID}`, "layout");
   });
 
   it("never passes rate or any other row column on to its caller, even for an admin", async () => {

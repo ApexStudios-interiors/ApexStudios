@@ -23,13 +23,12 @@ const h = vi.hoisted(() => {
     session: null as unknown as Session,
     createTaskFor: vi.fn(),
     updateTaskFor: vi.fn(),
-    updateTag: vi.fn(),
     revalidatePath: vi.fn(),
   };
 });
 
 vi.mock("server-only", () => ({}));
-vi.mock("next/cache", () => ({ revalidatePath: h.revalidatePath, updateTag: h.updateTag }));
+vi.mock("next/cache", () => ({ revalidatePath: h.revalidatePath }));
 vi.mock("@/lib/auth/session", () => ({
   UnauthenticatedError: h.UnauthenticatedError,
   ForbiddenError: h.ForbiddenError,
@@ -66,7 +65,6 @@ beforeEach(() => {
   h.createTaskFor.mockResolvedValue({ id: TASK_ID, projectId: PROJECT_ID, packageId: PACKAGE_ID });
   h.updateTaskFor.mockReset();
   h.updateTaskFor.mockResolvedValue({ id: TASK_ID, projectId: PROJECT_ID });
-  h.updateTag.mockReset();
   h.revalidatePath.mockReset();
 });
 
@@ -92,7 +90,6 @@ describe("createTask (web action)", () => {
         startDate: "2026-10-12",
         durationWeeks: 3,
       });
-      expect(h.updateTag).toHaveBeenCalledWith(`project:${PROJECT_ID}`);
       expect(h.revalidatePath).toHaveBeenCalledWith(`/projects/${PROJECT_ID}`, "layout");
     }
   );

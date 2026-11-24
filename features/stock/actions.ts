@@ -1,7 +1,7 @@
 "use server";
 
 import "server-only";
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminAction, siteAction } from "@/lib/safe-action";
 import { requireSession } from "@/lib/auth/session";
@@ -42,7 +42,6 @@ export const createStockRequest = siteAction
       }
     }
 
-    updateTag(`project:${parsedInput.projectId}`);
     revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
     return created;
   });
@@ -54,7 +53,6 @@ export const transitionStockRequest = siteAction
     // both write paths behave identically.
     const moved = await transitionStockRequestFor(ctx.session, parsedInput);
 
-    updateTag(`project:${moved.projectId}`);
     revalidatePath(`/projects/${moved.projectId}`, "layout");
     revalidatePath("/inventory");
     return { id: moved.id, status: moved.status };
@@ -172,7 +170,6 @@ export const editStockRequest = siteAction
     });
     if (error) throw new Error(error.message);
     const row = data as { id: string; project_id: string };
-    updateTag(`project:${row.project_id}`);
     revalidatePath(`/projects/${row.project_id}`, "layout");
     return { id: row.id };
   });
@@ -189,7 +186,6 @@ export const setStockRequestRate = adminAction
     });
     if (error) throw new Error(error.message);
     const row = data as { id: string; project_id: string };
-    updateTag(`project:${row.project_id}`);
     revalidatePath(`/projects/${row.project_id}`, "layout");
     return { id: row.id };
   });

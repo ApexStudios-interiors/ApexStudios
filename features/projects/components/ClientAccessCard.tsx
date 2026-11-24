@@ -1,7 +1,7 @@
 import type { ProjectClientAccess } from "@/features/projects/queries";
 import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { initials } from "@/lib/logic";
+import { initials } from "@/lib/format";
 import { RemoveProjectMemberButton } from "./RemoveProjectMemberButton";
 
 /**

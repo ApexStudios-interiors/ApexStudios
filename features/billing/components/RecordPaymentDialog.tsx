@@ -8,7 +8,7 @@ import { recordPayment, getBillPaymentsSummaryForDialog } from "@/features/billi
 import { formatINR } from "@/lib/money";
 import { parseMoneyInput } from "@/lib/money/input";
 import { MoneyEcho } from "@/components/shared/MoneyEcho";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
 import {
   Select,

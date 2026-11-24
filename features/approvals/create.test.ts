@@ -17,12 +17,11 @@ const h = vi.hoisted(() => ({
   rpc: vi.fn(),
   attachments: { data: [] as { id: string }[] | null, error: null as { message: string } | null },
   attachmentCalls: [] as unknown[][],
-  updateTag: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("next/cache", () => ({ updateTag: h.updateTag, revalidatePath: h.revalidatePath }));
+vi.mock("next/cache", () => ({ revalidatePath: h.revalidatePath }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     rpc: h.rpc,
@@ -87,7 +86,6 @@ beforeEach(() => {
   h.rpc.mockResolvedValue({ data: ROW, error: null });
   h.attachments = { data: [], error: null };
   h.attachmentCalls.length = 0;
-  h.updateTag.mockClear();
   h.revalidatePath.mockClear();
 });
 
@@ -207,7 +205,6 @@ describe("requestApprovalFor", () => {
   it("does not refresh the web cache — that is the web action's job", async () => {
     await requestApprovalFor(sessionAs("admin"), INPUT);
 
-    expect(h.updateTag).not.toHaveBeenCalled();
     expect(h.revalidatePath).not.toHaveBeenCalled();
   });
 });

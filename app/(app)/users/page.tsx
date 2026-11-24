@@ -7,7 +7,7 @@ import { DeactivateUserButton } from "@/features/users/components/DeactivateUser
 import { ResetPasswordButton } from "@/features/users/components/ResetPasswordButton";
 import { ChangeMyPasswordButton } from "@/features/users/components/ChangeMyPasswordButton";
 import { activeChangeRefusal, passwordResetRefusal, roleControlRefusal } from "@/features/users/service";
-import { initials } from "@/lib/logic";
+import { initials } from "@/lib/format";
 import { parsePageRequest } from "@/lib/pagination";
 import { OpenDialogButton } from "@/components/shared/OpenDialogButton";
 import { TablePagination } from "@/components/shared/TablePagination";

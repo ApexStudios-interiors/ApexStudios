@@ -8,7 +8,7 @@ import { Gantt } from "@/features/schedule/components/Gantt";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/Icon";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import { plural } from "@/lib/plural";
 
 /**

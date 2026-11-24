@@ -1,6 +1,6 @@
 import type { TaskBriefDTO } from "@/features/schedule/queries";
 import { Badge } from "@/components/ui/Badge";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import { daysBetween } from "@/features/projects/portfolio";
 
 /**

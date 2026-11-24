@@ -12,7 +12,7 @@ import { PROJECT_ARCHIVED_COPY } from "@/features/projects/service";
 import { DatePicker } from "@/components/shared/DatePicker";
 import { DialogShell, Field, inputClass } from "@/components/ui/DialogShell";
 import { formatINR } from "@/lib/money";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 
 /** A money or percentage input: text, not type=number, so the value stays the
  *  exact string the schema checks (code-standards §6). */

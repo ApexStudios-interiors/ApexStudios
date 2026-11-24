@@ -1,7 +1,7 @@
 "use server";
 
 import "server-only";
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminAction, authedAction } from "@/lib/safe-action";
 import {
@@ -150,7 +150,6 @@ export const createClientLogin = adminAction
       return { status: "username_taken" as const, username: parsedInput.username };
     }
 
-    updateTag(`project:${parsedInput.projectId}`);
     revalidatePath("/users");
     revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
     return {

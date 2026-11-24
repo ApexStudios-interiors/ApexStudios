@@ -16,12 +16,11 @@ import type { TransitionStockRequestInput } from "./schema";
 
 const h = vi.hoisted(() => ({
   rpc: vi.fn(),
-  updateTag: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("next/cache", () => ({ updateTag: h.updateTag, revalidatePath: h.revalidatePath }));
+vi.mock("next/cache", () => ({ revalidatePath: h.revalidatePath }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ rpc: h.rpc }) }));
 
 const { transitionStockRequestFor } = await import("./transition");
@@ -59,7 +58,6 @@ function rpcRow(status: string, over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   h.rpc.mockReset();
-  h.updateTag.mockClear();
   h.revalidatePath.mockClear();
 });
 
@@ -159,7 +157,6 @@ describe("transitionStockRequestFor", () => {
 
     await transitionStockRequestFor(sessionAs("admin"), { requestId: REQUEST_ID, toStatus: "ordered" });
 
-    expect(h.updateTag).not.toHaveBeenCalled();
     expect(h.revalidatePath).not.toHaveBeenCalled();
   });
 });

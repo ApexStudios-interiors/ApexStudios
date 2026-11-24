@@ -23,13 +23,12 @@ const h = vi.hoisted(() => {
     env: { BILLING_ENABLED: true },
     rpc: vi.fn(),
     enqueue: vi.fn(),
-    updateTag: vi.fn(),
     revalidatePath: vi.fn(),
   };
 });
 
 vi.mock("server-only", () => ({}));
-vi.mock("next/cache", () => ({ revalidatePath: h.revalidatePath, updateTag: h.updateTag }));
+vi.mock("next/cache", () => ({ revalidatePath: h.revalidatePath }));
 vi.mock("@/lib/auth/session", () => ({
   UnauthenticatedError: h.UnauthenticatedError,
   ForbiddenError: h.ForbiddenError,
@@ -70,7 +69,6 @@ beforeEach(() => {
   h.env.BILLING_ENABLED = true;
   h.rpc.mockReset();
   h.enqueue.mockReset();
-  h.updateTag.mockReset();
   h.revalidatePath.mockReset();
 });
 
@@ -86,7 +84,6 @@ describe("certifyBill (web action)", () => {
       p_to_status: "certified",
       p_note: undefined,
     });
-    expect(h.updateTag).toHaveBeenCalledWith(`project:${PROJECT_ID}`);
     expect(h.revalidatePath).toHaveBeenCalledWith(`/projects/${PROJECT_ID}`, "layout");
     expect(h.enqueue).not.toHaveBeenCalled();
   });

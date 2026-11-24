@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Empty } from "@/components/ui/Empty";
 import { TableWrap } from "@/components/ui/TableWrap";
 import { sub, td, th, thNum, tdNum } from "@/components/ui/table";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 
 /**
  * The "Needs my action" list (APX-72, D72). A Server Component: rows arrive

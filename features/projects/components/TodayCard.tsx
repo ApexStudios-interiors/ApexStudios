@@ -4,7 +4,7 @@ import type { DeliveryDueDTO } from "@/features/stock/queries";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { TaskBriefList } from "@/features/schedule/components/TaskBriefList";
-import { dmy } from "@/lib/logic";
+import { dmy } from "@/lib/format";
 import { plural } from "@/lib/plural";
 
 /**

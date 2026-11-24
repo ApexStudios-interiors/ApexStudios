@@ -2,7 +2,7 @@
 
 import "server-only";
 import { z } from "zod";
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminAction, clientAction, siteAction } from "@/lib/safe-action";
 import { requireSession, requireRole, type Session } from "@/lib/auth/session";
@@ -69,7 +69,6 @@ export const createBill = adminAction.inputSchema(createBillSchema).action(async
   if (error) throw new Error(error.message);
   const row = data as { id: string; bill_no: string; project_id: string };
 
-  updateTag(`project:${row.project_id}`);
   revalidatePath(`/projects/${row.project_id}`, "layout");
   return { id: row.id, refNo: row.bill_no };
 });
@@ -109,7 +108,6 @@ async function transitionBillImpl(
   // shared with the mobile API so both write paths behave identically.
   const moved = await transitionBillFor(session, input);
 
-  updateTag(`project:${moved.projectId}`);
   revalidatePath(`/projects/${moved.projectId}`, "layout");
   return { id: moved.id, status: moved.status };
 }
@@ -128,7 +126,6 @@ export const recordPayment = adminAction.inputSchema(recordPaymentSchema).action
   if (error) throw new Error(error.message);
   const row = data as BillRow;
 
-  updateTag(`project:${row.project_id}`);
   revalidatePath(`/projects/${row.project_id}`, "layout");
   return { id: row.id, status: row.status };
 });
@@ -166,7 +163,6 @@ export const uploadBillCopy = siteAction
       throw new Error("NOT_FOUND: one or more files did not upload correctly — please retry them");
     }
 
-    updateTag(`project:${bill.project_id}`);
     revalidatePath(`/projects/${bill.project_id}`, "layout");
     return { id: bill.id };
   });
@@ -296,7 +292,6 @@ export const markPackagePhasesComplete = adminAction
 
     const projectId = phases[0]?.project_id;
     if (projectId) {
-      updateTag(`project:${projectId}`);
       revalidatePath(`/projects/${projectId}`, "layout");
     }
     return { marked, failed, eligible: eligible.length };
@@ -317,7 +312,6 @@ export const markPhaseComplete = adminAction
       .single();
     if (phaseErr) throw new Error(phaseErr.message);
 
-    updateTag(`project:${phase.project_id}`);
     revalidatePath(`/projects/${phase.project_id}`, "layout");
     return { id: parsedInput.phaseId };
   });

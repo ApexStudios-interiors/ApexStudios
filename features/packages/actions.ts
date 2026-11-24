@@ -1,7 +1,7 @@
 "use server";
 
 import "server-only";
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminAction } from "@/lib/safe-action";
 import { requireRole } from "@/lib/auth/session";
@@ -51,7 +51,6 @@ export const createPackage = adminAction
       .single();
     if (error) throw createError(error);
 
-    updateTag(`project:${parsedInput.projectId}`);
     // 'layout' revalidates this whole project subtree in one call — the
     // dashboard AND the packages list both render the same packages table.
     // Found live: adding a package from the dashboard closed the dialog but
@@ -92,7 +91,6 @@ export const updatePackage = adminAction.inputSchema(updatePackageSchema).action
     throw new Error("CONFLICT: package was changed by someone else");
   }
 
-  updateTag(`project:${data.project_id}`);
   revalidatePath(`/projects/${data.project_id}`, "layout");
   return { ok: true as const };
 });
@@ -129,7 +127,6 @@ export const createPhase = adminAction.inputSchema(createPhaseSchema).action(asy
     .single();
   if (error) throw createError(error);
 
-  updateTag(`project:${pkg.project_id}`);
   revalidatePath(`/projects/${pkg.project_id}`, "layout");
   return { id: data.id };
 });
@@ -175,7 +172,6 @@ export const updatePhase = adminAction.inputSchema(updatePhaseSchema).action(asy
   if (error) throw new Error(error.message);
   if (!data) throw new Error("CONFLICT: phase changed since the form loaded");
 
-  updateTag(`project:${data.project_id}`);
   revalidatePath(`/projects/${data.project_id}`, "layout");
   return { status: "saved" as const };
 });

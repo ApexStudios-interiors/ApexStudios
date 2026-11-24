@@ -1,7 +1,7 @@
 "use server";
 
 import "server-only";
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminAction } from "@/lib/safe-action";
 import { requireRole, requireSession } from "@/lib/auth/session";
@@ -68,7 +68,6 @@ export const createProject = adminAction.inputSchema(createProjectSchema).action
   });
   if (error) throw new Error(error.message);
 
-  updateTag(`project:${data}`);
   revalidatePath("/");
   return { id: data as string };
 });
@@ -174,7 +173,6 @@ export const updateProject = adminAction
     if (error) throw new Error(error.message);
     if (data.length === 0) throw new Error("NOT_FOUND: project");
 
-    updateTag(`project:${id}`);
     revalidatePath("/");
     // 'layout': every route under this project (dashboard, packages,
     // package detail) can render fields this action changes.
@@ -199,7 +197,6 @@ export const setProjectStatus = adminAction
     });
     if (error) throw new Error(error.message);
 
-    updateTag(`project:${parsedInput.id}`);
     revalidatePath("/");
     revalidatePath(`/projects/${parsedInput.id}`, "layout");
     return { status: data };
@@ -290,7 +287,6 @@ export const setProjectRateVisibility = adminAction
       .eq("id", parsedInput.id);
     if (error) throw new Error(error.message);
 
-    updateTag(`project:${parsedInput.id}`);
     revalidatePath(`/projects/${parsedInput.id}`, "layout");
     return { ok: true as const };
   });
@@ -366,7 +362,6 @@ export const addProjectMember = adminAction
     });
     if (typeof result === "object") return result;
 
-    updateTag(`project:${parsedInput.projectId}`);
     revalidatePath("/");
     revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
     revalidatePath("/users");
@@ -386,7 +381,6 @@ export const removeProjectMember = adminAction
     const supabase = await createClient();
     const result = await deleteProjectMember(supabase, parsedInput);
     if (result.status === "removed") {
-      updateTag(`project:${parsedInput.projectId}`);
       revalidatePath("/");
       revalidatePath(`/projects/${parsedInput.projectId}`, "layout");
       revalidatePath("/users");
